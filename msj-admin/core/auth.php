@@ -1,0 +1,11 @@
+<?php
+require_once dirname(__DIR__,2).'/msjpay/user/core/db.php';
+define('ADMIN_SESSION','msjpay_admin');
+function admin_session():void{if(session_status()===PHP_SESSION_NONE){session_name(ADMIN_SESSION);session_set_cookie_params(['lifetime'=>0,'path'=>'/msj-admin','secure'=>isset($_SERVER['HTTPS']),'httponly'=>true,'samesite'=>'Strict']);session_start();}}
+function auth_admin():void{admin_session();if(empty($_SESSION['admin_id'])){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Session expired']);exit;}header('Location: /msjpay/msj-admin/login.php');exit;}}
+function get_admin(int $id=0):array{$aid=$id?:(int)($_SESSION['admin_id']??0);if(!$aid)return[];$s=db()->prepare("SELECT * FROM admin WHERE id=? AND is_active=1 LIMIT 1");$s->execute([$aid]);return $s->fetch()?:[];}
+function login_admin(string $email,string $password):array{$email=strtolower(trim($email));if(!filter_var($email,FILTER_VALIDATE_EMAIL))return['success'=>false,'message'=>'Invalid email'];$s=db()->prepare("SELECT * FROM admin WHERE email=? AND is_active=1 LIMIT 1");$s->execute([$email]);$admin=$s->fetch();if(!$admin||!password_verify($password,$admin['password']))return['success'=>false,'message'=>'Invalid credentials'];admin_session();session_regenerate_id(true);$_SESSION['admin_id']=$admin['id'];$_SESSION['admin_role']=$admin['role'];db()->prepare("UPDATE admin SET last_login=NOW(),last_login_ip=? WHERE id=?")->execute([get_ip(),$admin['id']]);log_info('auth','ADMIN_LOGIN',['uid'=>$admin['id'],'email'=>$email]);return['success'=>true,'admin'=>$admin];}
+function logout_admin():void{admin_session();$_SESSION=[];session_destroy();header('Location: /msjpay/msj-admin/login.php');exit;}
+function require_superadmin():void{auth_admin();if(($_SESSION['admin_role']??'')!=='superadmin'){http_response_code(403);die('Access denied — Superadmin only');}};
+function admin_csrf():string{admin_session();if(empty($_SESSION['admin_csrf']))$_SESSION['admin_csrf']=bin2hex(random_bytes(32));return $_SESSION['admin_csrf'];}
+function verify_admin_csrf(string $t):bool{admin_session();return isset($_SESSION['admin_csrf'])&&hash_equals($_SESSION['admin_csrf'],$t);}

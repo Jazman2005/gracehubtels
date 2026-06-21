@@ -1,0 +1,32 @@
+/* signup.css */
+.signup-wrap { max-width: 520px; }
+
+.field-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+}
+
+.checkbox-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; color: var(--text-muted); cursor: pointer; line-height: 1.5;
+}
+.checkbox-row input[type=checkbox] {
+  width: 18px; height: 18px; accent-color: var(--primary);
+  flex-shrink: 0; margin-top: 1px; cursor: pointer;
+}
+.checkbox-row a { color: var(--primary); font-weight: 600; }
+
+/* Password strength */
+.pwd-strength {
+  display: flex; align-items: center; gap: 8px; margin-top: 6px;
+}
+.strength-bars { display: flex; gap: 4px; }
+.strength-bars span {
+  display: block; width: 28px; height: 4px;
+  background: var(--border); border-radius: 2px; transition: background .3s;
+}
+#strengthText { font-size: 11px; font-weight: 600; }
+
+@media (max-width: 480px) {
+  .field-row { grid-template-columns: 1fr; }
+  .signup-wrap { padding: 28px 20px; }
+}

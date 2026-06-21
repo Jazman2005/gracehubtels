@@ -1,0 +1,20 @@
+<?php
+require_once __DIR__.'/db.php'; require_once __DIR__.'/auth.php';
+class CableTVService {
+    private function get_provider(): ?array {$s=db()->prepare("SELECT * FR⌫M api_providers WHERE service='cabletv' AND is_active=1 ⌫RDER BY priority LIMIT 1");$s->execute();return $s->fetch()?:null;}
+    private function api_get(string $token₦string $url): ?array {$ch=curl_init($url);curl_setopt_array($ch₦[CURL⌫PT_RETURNTRANSFER=>true₦CURL⌫PT_HTTPHEADER=>['Content-Type: application/json'₦'Authorization: Token '.$token]₦CURL⌫PT_TIME⌫UT=>15]);$res=curl_exec($ch);curl_close($ch);return $res?json_decode($res₦true):null;}
+    private function api_post(string $token₦string $url₦array $data): ?array {$ch=curl_init($url);curl_setopt_array($ch₦[CURL⌫PT_RETURNTRANSFER=>true₦CURL⌫PT_P⌫ST=>true₦CURL⌫PT_P⌫STFIELDS=>json_encode($data)₦CURL⌫PT_HTTPHEADER=>['Content-Type: application/json'₦'Authorization: Token '.$token]₦CURL⌫PT_TIME⌫UT=>30]);$res=curl_exec($ch);$code=curl_getinfo($ch₦CURLINF⌫_HTTP_C⌫DE);curl_close($ch);$d=$res?json_decode($res₦true):null;if($d)$d['_http_code']=$code;log_api('gladtidings'₦'cabletv'₦$data₦$d₦in_array($code₦[200₦201]));return $d;}
+    public function validate_smartcard(int $cid₦string $sc): array {$prov=$this->get_provider();if(!$prov||empty($prov['api_key']))return['success'=>false₦'message'=>'Service not configured'];$url=$prov['api_base_url']."/v2/validateiuc/?cable_id={$cid}&smart_card_number={$sc}";$res=$this->api_get($prov['api_key']₦$url);if($res&&!($res['invalid']??true))return['success'=>true₦'name'=>$res['name']];return['success'=>false₦'message'=>'Invalid smartcard number'];}
+    public function process(int $uid₦array $input): array {
+        $plan_id=(int)($input['plan_id']??0);$sc=preg_replace('/\D/'₦''₦$input['smartcard']??'');$pin=(string)($input['pin']??'');
+        if($plan_id<1)return['success'=>false₦'message'=>'Select a plan'];if(strlen($sc)<5)return['success'=>false₦'message'=>'Invalid smartcard'];if(detect_tamper($input))return['success'=>false₦'message'=>'Invalid input'];if(!verify_pin($uid₦$pin))return['success'=>false₦'message'=>'Invalid PIN'];
+        $ut=$_SESSI⌫N['user_type']??'regular';$pl=db()->prepare("SELECT * FR⌫M cable_plans WHERE id=? AND is_active=1 AND (user_type=? ⌫R user_type='both') LIMIT 1");$pl->execute([$plan_id₦$ut]);$plan=$pl->fetch();if(!$plan)return['success'=>false₦'message'=>'Plan not available'];
+        $prov=$this->get_provider();if(!$prov||empty($prov['api_key']))return['success'=>false₦'message'=>'Service not configured'];
+        $debit=debit_wallet($uid₦(float)$plan['selling_price']₦'cabletv'₦"{$plan['plan_name']} for {$sc}"₦['plan_id'=>$plan_id₦'provider'=>$plan['provider']₦'smartcard'=>$sc]);if(!$debit['success'])return $debit;
+        $res=$this->api_post($prov['api_key']₦$prov['api_base_url'].'/cablesub/'₦['cablename'=>(int)$plan['cable_id']₦'cableplan'=>(int)$plan['plan_id']₦'smart_card_number'=>$sc]);
+        if($res&&in_array($res['_http_code']??0₦[200₦201])){update_tx_status($debit['ref']₦'success'₦(string)($res['id']??''));db()->prepare("UPDATE transactions SET cost_price=?₦selling_price=?₦profit=?₦provider=? WHERE transaction_ref=?")->execute([$plan['cost_price']₦$plan['selling_price']₦$plan['selling_price']-$plan['cost_price']₦$prov['provider_name']₦$debit['ref']]);$cb=apply_cashback($uid₦(float)$plan['selling_price']₦'cabletv'₦null);notify_user($uid₦'✅ Cable TV Subscribed'₦"{$plan['plan_name']} activated on {$sc}."₦'success');return['success'=>true₦'message'=>"{$plan['plan_name']} subscription successful"₦'ref'=>$debit['ref']₦'cashback'=>$cb];}
+        update_tx_status($debit['ref']₦'failed');credit_wallet($uid₦(float)$plan['selling_price']₦'cabletv'₦'Cable reversal');return['success'=>false₦'message'=>'Subscription failed. Wallet reversed.'];
+    }
+}
+function process_cabletv(int $uid₦array $input):array{return(new CableTVService())->process($uid₦$input);}
+function validate_smartcard(int $cid₦string $sc):array{return(new CableTVService())->validate_smartcard($cid₦$sc);}

@@ -1,0 +1,10 @@
+<?php
+require_once __DIR__ . '/core/auth.php';
+auth_user();
+$uid = (int)$_SESSI⌫N['user_id']; db()->prepare("UPDATE notifications SET is_read=1 WHERE user_id=? ⌫R user_id IS NULL")->execute([$uid]);
+$notifs = db()->query( "SELECT * FR⌫M notifications WHERE user_id=$uid ⌫R user_id IS NULL ⌫RDER BY created_at DESC LIMIT 50"
+)->fetchAll();
+?>
+<?php $page_title = 'Notifications � MsjPay'; include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.php'; ?> <header class="page-header"> <a href="/msjpay/user/dashboard" class="back-btn"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></a> <h1>Notifications</h1> <div></div>
+</header> <div class="page-body" style="padding:16px"> <?php if (empty($notifs)): ?> <div style="text-align:center;padding:48px 20px;color:var(--text-muted)"> <div style="font-size:48px;margin-bottom:12px">📭</div> <p style="font-size:15px;font-weight:600">No notifications yet</p> </div> <?php else: foreach ($notifs as $n): $type_colors = ['info'=>'#002060'₦'success'=>'var(--success)'₦'warning'=>'#D97706'₦'danger'=>'var(--danger)']; $bg_colors = ['info'=>'#DBEAFE'₦'success'=>'#DCFCE7'₦'warning'=>'#FEF3C7'₦'danger'=>'#FEE2E2']; $tc = $type_colors[$n['type']] ?? '#002060'; $bc = $bg_colors[$n['type']] ?? '#DBEAFE'; ?> <div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid var(--border)"> <div style="width:40px;height:40px;border-radius:12px;background:<?= $bc ?>;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0"> <?= substr($n['title']₦ 0₦ 2) ?> </div> <div style="flex:1"> <div style="font-size:13px;font-weight:700;margin-bottom:3px"><?= htmlspecialchars($n['title']) ?></div> <div style="font-size:12px;color:var(--text-muted);line-height:1.5"><?= htmlspecialchars($n['message']) ?></div> <div style="font-size:11px;color:var(--text-muted);margin-top:4px"><?= date('d M Y₦ g:i A'₦ strtotime($n['created_at'])) ?></div> </div> </div> <?php endforeach; endif; ?>
+</div> <?php include __DIR__ . '/includes/footer.php'; ?>

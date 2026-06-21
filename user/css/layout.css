@@ -1,0 +1,259 @@
+/* layout.css - Modern Responsive Dashboard Layout */
+
+:root {
+    --sidebar-bg: #002060;
+    --sidebar-color: #9CA3AF;
+    --sidebar-hover: #ffffff;
+    --sidebar-active-bg: rgba(255, 85, 0, 0.15);
+    --sidebar-active-color: #ff5500; /* Landing page orange */
+}
+
+body {
+    background-color: #f3f4f6; /* light gray background */
+}
+
+/* Dashboard Wrapper */
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+}
+
+/* Sidebar Styling */
+.desktop-sidebar {
+    width: 260px;
+    background: var(--sidebar-bg);
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    overflow-y: auto;
+}
+
+.sidebar-brand {
+    padding: 24px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.sidebar-brand .logo-box {
+    width: 36px;
+    height: 36px;
+    background: #ff5500;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+
+.sidebar-brand .logo-box svg {
+    width: 20px;
+    height: 20px;
+}
+
+.sidebar-brand .brand-name {
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    font-family: 'Sora', sans-serif;
+}
+
+.sidebar-menu {
+    padding: 20px 0;
+    flex: 1;
+}
+
+.menu-label {
+    padding: 0 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #6B7280;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 20px;
+    color: var(--sidebar-color);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.sidebar-link:hover {
+    color: var(--sidebar-hover);
+    background: rgba(255,255,255,0.02);
+}
+
+.sidebar-link.active {
+    color: var(--sidebar-active-color);
+    background: var(--sidebar-active-bg);
+    border-left-color: var(--sidebar-active-color);
+}
+
+.sidebar-link i {
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+}
+
+.sidebar-link.logout {
+    color: #EF4444;
+    margin-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 20px;
+}
+
+/* Main Content Area */
+.dashboard-main {
+    flex: 1;
+    margin-left: 260px; /* offset for sidebar */
+    width: calc(100% - 260px);
+    min-height: 100vh;
+    position: relative;
+    padding: 30px 40px; /* Wider padding for wide view */
+}
+
+/* Hide bottom nav on desktop by default */
+.bottom-nav {
+    display: none !important;
+}
+
+/* Override existing app-shell which was constrained to mobile */
+.dashboard-main .app-shell {
+    max-width: 100% !important; /* Changed from 1100px to full width */
+    width: 100% !important;
+    margin: 0 !important; /* Removed auto centering */
+    background: transparent !important;
+    min-height: auto !important;
+    box-shadow: none !important;
+}
+
+/* Page Header Tweaks for Desktop */
+.page-header {
+    background: transparent !important;
+    color: #111827 !important;
+    padding: 0 0 24px 0 !important;
+    border-radius: 0 !important;
+    display: flex;
+    align-items: center;
+}
+
+.page-header h1 {
+    color: #111827 !important;
+    font-size: 26px !important;
+}
+
+.page-header .back-btn {
+    background: #fff !important;
+    border: 1px solid #E5E7EB;
+    stroke: #111827 !important;
+    margin-right: 16px;
+}
+
+.page-header .bal-chip {
+    background: #fff !important;
+    border: 1px solid #E5E7EB;
+    color: #111827 !important;
+    margin-left: auto; /* Push to right on wide screens */
+    font-size: 16px !important;
+    padding: 8px 16px !important;
+}
+
+/* Adjustments for specific elements to look better on desktop */
+@media (min-width: 1025px) {
+    .features-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)) !important; /* Wider cards */
+        gap: 20px !important;
+    }
+
+    .quick-grid {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important; /* Wider action cards */
+        gap: 20px !important;
+    }
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 1024px) {
+    .desktop-sidebar {
+        display: none;
+    }
+    
+    .bottom-nav {
+        display: flex !important; /* Show only on mobile */
+    }
+
+    .dashboard-main {
+        margin-left: 0;
+        width: 100%;
+        padding: 0;
+    }
+
+    .dashboard-main .app-shell {
+        max-width: 480px !important;
+        margin: 0 auto !important; /* Re-center on mobile */
+        background: #f3f4f6 !important;
+    }
+    
+    /* Revert page header for mobile */
+    .page-header {
+        background: var(--sidebar-bg) !important;
+        color: #fff !important;
+        padding: 24px 16px 20px !important;
+        border-radius: 0 0 24px 24px !important;
+        display: flex;
+    }
+
+    .page-header h1 {
+        color: #fff !important;
+        font-size: 20px !important;
+    }
+
+    .page-header .back-btn {
+        background: rgba(255,255,255,0.2) !important;
+        border: none !important;
+        stroke: #fff !important;
+        margin-right: 12px;
+    }
+
+    .page-header .bal-chip {
+        background: rgba(255,255,255,0.2) !important;
+        border: none !important;
+        color: #fff !important;
+        margin-left: auto;
+        font-size: 13px !important;
+        padding: 4px 12px !important;
+    }
+}
+
+/* Sheet Modal Adjustments */
+.sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.sheet-header h3 {
+    font-size: 18px;
+    font-weight: 800;
+}
+.sheet-close {
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-muted);
+}
