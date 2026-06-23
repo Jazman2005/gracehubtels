@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__.'/core/auth.php';
-require_once dirname(__DIR__).'/msjpay/user/core/airtime_to_cash.php';
+require_once dirname(__DIR__).'/user/core/airtime_to_cash.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);

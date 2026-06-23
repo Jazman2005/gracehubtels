@@ -68,14 +68,50 @@ if ($acct_no && $amount > 0) {
     }
 
     // Find user by virtual account
-    $va = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number=? AND is_active=1 AND provider='palmpay_direct' LIMIT 1");
+    $va = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number=? AND is_active=1 LIMIT 1");
     $va->execute([$acct_no]);
     $va_row = $va->fetch();
 
     if ($va_row) {
         $user_id = (int)$va_row['user_id'];
+    } elseif (str_starts_with($order_id, 'DYN_') || str_starts_with($ext_ref, 'DYN_')) {
+        // Parse user ID from dynamic checkout reference (DYN_time_uid)
+        $ref_parts = explode('_', $ext_ref ?: $order_id);
+        if (count($ref_parts) >= 3) {
+            $user_id = (int)end($ref_parts);
+        }
+    }
+
+    if (isset($user_id) && $user_id > 0) {
         $payer   = $payload['data']['payerName'] ?? 'Unknown';
-        $result  = credit_wallet($user_id, $amount, 'wallet_funding', "Wallet funded via PalmPay - from {$payer}", [
+        
+        // Fee Calculation
+        $fee_type = setting('palmpay_fee_type', 'flat');
+        $fee_val  = (float)setting('palmpay_fee_value', '0');
+        
+        $fee = 0;
+        if ($fee_val > 0) {
+            if ($fee_type === 'percent') {
+                $fee = ($amount * $fee_val) / 100;
+            } else {
+                $fee = $fee_val;
+            }
+        }
+        
+        $credit_amount = max(0, $amount - $fee);
+
+        if ($credit_amount <= 0) {
+            db()->prepare("UPDATE webhook_logs SET error_message='Amount less than or equal to fee' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
+               ->execute([$ext_ref ?? '']);
+            http_response_code(200);
+            echo json_encode(['status'=>'fee_too_high']);
+            exit;
+        }
+
+        $desc = "Wallet funded via PalmPay - from {$payer}";
+        if ($fee > 0) $desc .= " (Fee: ₦".number_format($fee,2).")";
+
+        $result  = credit_wallet($user_id, $credit_amount, 'wallet_funding', $desc, [
             'provider'       => 'palmpay_direct',
             'external_ref'   => $ext_ref,
             'payer'          => $payer,
@@ -90,7 +126,7 @@ if ($acct_no && $amount > 0) {
             db()->prepare("UPDATE webhook_logs SET processed=1 WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
                ->execute([$ext_ref ?? '']);
             db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-               ->execute([$user_id, '💰 Wallet Funded', '₦' . number_format($amount, 2) . ' credited to your wallet via PalmPay.', 'success']);
+               ->execute([$user_id, '💰 Wallet Funded', '₦' . number_format($credit_amount, 2) . ' credited to your wallet via PalmPay.', 'success']);
         }
     }
 }

@@ -2,7 +2,7 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/virtual-account.php';
 auth_user();
-$uid=(int)$_SESSI⌫N['user_id'];
+$uid=(int)$_SESSION['user_id'];
 $user=get_user($uid);
 $va_mgr=new VirtualAccountManager();
 $accounts=$va_mgr->get_user_accounts($uid);
@@ -12,146 +12,265 @@ $manual_account_number = setting('manual_account_number') ?? '';
 $manual_account_name = setting('manual_account_name') ?? '';
 
 $csrf=csrf_token(); 
-if ($_SERVER['REQUEST_METH⌫D'] === 'P⌫ST' && is_ajax()) { 
-    if (!verify_csrf($_P⌫ST['csrf_token'] ?? '')) { 
-        json_response(['success' => false₦ 'message' => 'Invalid token']₦ 403); 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) { 
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) { 
+        json_response(['success' => false, 'message' => 'Invalid token'], 403); 
     } 
-    $action = $_P⌫ST['action'] ?? ''; 
+    $action = $_POST['action'] ?? ''; 
     if ($action === 'create_va') { 
         $result = $va_mgr->create_for_user($uid); 
         json_response($result); 
-    } 
-    json_response(['success' => false₦ 'message' => 'Unknown action']₦ 400);
+    } elseif ($action === 'create_dynamic_va') {
+        if(setting('palmpay_dynamic_enabled') !== '1') {
+            json_response(['success'=>false, 'message'=>'Dynamic checkout disabled']);
+        }
+        $amt = (float)($_POST['amount'] ?? 0);
+        if($amt < 100) json_response(['success'=>false, 'message'=>'Minimum amount is 100 NGN']);
+        
+        require_once __DIR__.'/core/palmpay.php';
+        $api = new PalmPayAPI();
+        if(!$api->is_configured()) json_response(['success'=>false, 'message'=>'PalmPay not configured']);
+        
+        $order_id = 'DYN_' . time() . '_' . $uid;
+        $res = $api->create_dynamic_account($user, $amt, $order_id);
+        
+        if($res && ($res['respCode']??'') === '00000000') {
+            // PalmPay dynamic VA usually returns account details in data
+            $data = $res['data'] ?? [];
+            json_response([
+                'success' => true,
+                'account_number' => $data['virtualAccountNo'] ?? '',
+                'bank_name' => $data['bankName'] ?? 'PalmPay',
+                'account_name' => $data['customerName'] ?? $user['full_name'],
+                'amount' => $amt,
+                'message' => 'Dynamic account generated successfully'
+            ]);
+        }
+        json_response(['success'=>false, 'message'=>'Failed to generate dynamic account: ' . ($res['respMsg'] ?? 'Unknown error')]);
+    } elseif ($action === 'submit_manual_funding') {
+        $amount = (float)($_POST['amount'] ?? 0);
+        $sender_name = sanitize($_POST['sender_name'] ?? '', 255);
+        if ($amount < 100) json_response(['success'=>false, 'message'=>'Minimum amount is 100 NGN']);
+        if (!$sender_name) json_response(['success'=>false, 'message'=>'Sender name is required']);
+        
+        try {
+            db()->prepare("INSERT INTO manual_funding_requests (user_id, amount, sender_name, status) VALUES (?, ?, ?, 'pending')")->execute([$uid, $amount, $sender_name]);
+            json_response(['success'=>true, 'message'=>'Your transfer receipt has been submitted! It will be approved shortly.']);
+        } catch(Exception $e) {
+            json_response(['success'=>false, 'message'=>'An error occurred. Please try again.']);
+        }
+    }
+    json_response(['success' => false, 'message' => 'Unknown action'], 400);
 }
+
+$page_title = 'Fund Wallet'; 
+include __DIR__ . '/includes/header.php'; 
+include __DIR__ . '/includes/sidebar.php'; 
 ?>
-<?php $page_title = 'Fund Wallet - MsjPay'; include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.php'; ?> 
-<style>
-.fund-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 20px;
-    background: var(--surface);
-    padding: 6px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-}
-.fund-tab {
-    flex: 1;
-    text-align: center;
-    padding: 10px 0;
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--text-muted);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.fund-tab.active {
-    background: #ff5500;
-    color: #fff;
-}
-.fund-section {
-    display: none;
-    animation: fadeIn 0.3s ease-out;
-}
-.fund-section.active {
-    display: block;
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-</style>
 
-<header class="page-header">
-    <a href="/msjpay/user/dashboard" class="back-btn"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></a>
-    <h1>Fund Wallet</h1>
-    <div class="bal-chip">₦<?=number_format((float)$user['wallet_balance']₦2)?></div>
-</header> 
-
-<div class="page-body"> 
-    <div style="background:linear-gradient(135deg₦#002060₦#0d2e6c₦#0f3460);border-radius:18px;padding:20px;color:#fff;text-align:center;margin-bottom:16px;">
-        <div style="font-size:11px;color:rgba(255₦255₦255₦.55);text-transform:uppercase;letter-spacing:.5px;font-weight:700">Wallet Balance</div>
-        <div style="font-size:28px;font-weight:900;margin-top:6px">₦<?=number_format((float)$user['wallet_balance']₦2)?></div>
-    </div> 
-
-    <div class="fund-tabs">
-        <div class="fund-tab active" onclick="switchFundTab('auto'₦ this)">Automated Bank</div>
-        <div class="fund-tab" onclick="switchFundTab('dynamic'₦ this)">Dynamic Account</div>
-        <div class="fund-tab" onclick="switchFundTab('manual'₦ this)">Manual Funding</div>
-    </div>
-
-    <!-- AUT⌫MATED BANK TAB -->
-    <div class="fund-section active" id="sec-auto">
-        <div style="font-size:14px;font-weight:800;margin-bottom:12px;color:var(--text)">Your Dedicated Accounts</div> 
-        <?php if (!empty($accounts)): ?>
-            <?php foreach ($accounts as $va): ?>
-                <div style="background:#fff0eb;border:1px solid #FED7AA;border-radius:14px;padding:14px;position:relative;margin-bottom:12px;">
-                    <div style="font-size:11px;color:#B45309;font-weight:700;text-transform:uppercase;margin-bottom:4px"><?=htmlspecialchars($va['bank_name'])?></div>
-                    <div style="font-size:18px;font-weight:800;letter-spacing:1px;color:#92400E"><?=htmlspecialchars($va['account_number'])?></div>
-                    <div style="font-size:12px;color:#B45309;margin-top:2px;font-weight:600"><?=htmlspecialchars($va['account_name'])?></div>
-                    <button onclick="copyAcct('<?=htmlspecialchars($va['account_number'])?>')" style="position:absolute;top:14px;right:14px;background:#ff5500;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;font-family:'Sora'₦sans-serif;cursor:pointer">Copy</button>
-                </div>
-            <?php endforeach; ?>
-        <?php else: ?>
-            <button onclick="createVA()" id="genBtn" style="width:100%;height:52px;background:#ff5500;color:#fff;border:none;border-radius:16px;font-size:14px;font-weight:700;font-family:'Sora'₦sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
-            <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            Generate Account Number
-            </button>
-        <?php endif; ?> 
-        <div style="background:rgba(0₦32₦96₦0.05);border:1px solid rgba(0₦32₦96₦0.15);border-radius:14px;padding:14px;display:flex;gap:10px;margin-top:4px;">
-            <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#002060;fill:none;stroke-width:2;flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+<div class="max-w-2xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-4">
+            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+            </a>
             <div>
-                <div style="font-size:12px;color:#002060;font-weight:600;line-height:1.6">Transfer to any of the account numbers above. Your wallet will be credited automatically.</div>
+                <h1 class="text-2xl font-bold text-slate-800">Fund Wallet</h1>
+                <p class="text-sm text-slate-500">Add money to your MSJPay account</p>
             </div>
         </div>
     </div>
 
-    <!-- DYNAMIC TAB -->
-    <div class="fund-section" id="sec-dynamic">
-        <div style="font-size:14px;font-weight:800;margin-bottom:12px;color:var(--text)">Dynamic PalmPay</div>
-        <div style="background:#fff0eb;border:1px solid rgba(255₦85₦0₦0.3);border-radius:14px;padding:14px;display:flex;align-items:center;gap:10px">
-            <svg viewBox="0 0 24 24" style="width:20px;height:20px;stroke:#ff5500;fill:none;stroke-width:2;flex-shrink:0"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            <div>
-                <div style="font-size:13px;font-weight:700;color:#ff5500">Coming Soon</div>
-                <div style="font-size:11px;color:var(--text-muted)">Dynamic PalmPay accounts will be available soon</div>
+    <!-- Balance Card -->
+    <div class="bg-gradient-to-br from-brand-navy to-brand-navyDark rounded-2xl p-6 text-white card-shadow relative overflow-hidden mb-8">
+        <div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16"></div>
+        <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12"></div>
+        
+        <div class="relative z-10 text-center">
+            <p class="text-blue-100 text-sm font-medium mb-1 uppercase tracking-wider">Current Balance</p>
+            <h3 class="text-4xl font-black font-outfit">
+                ₦<?=number_format((float)$user['wallet_balance'],2)?>
+            </h3>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="bg-slate-100 p-1.5 rounded-2xl flex gap-1 mb-6">
+        <button class="fund-tab flex-1 py-2.5 rounded-xl text-sm font-bold transition-all text-slate-500 hover:text-slate-700 bg-transparent active-tab-class" onclick="switchFundTab('auto', this)" data-tab="auto">
+            Automated Bank
+        </button>
+        <button class="fund-tab flex-1 py-2.5 rounded-xl text-sm font-bold transition-all text-slate-500 hover:text-slate-700 bg-transparent" onclick="switchFundTab('dynamic', this)" data-tab="dynamic">
+            Dynamic Account
+        </button>
+        <button class="fund-tab flex-1 py-2.5 rounded-xl text-sm font-bold transition-all text-slate-500 hover:text-slate-700 bg-transparent" onclick="switchFundTab('manual', this)" data-tab="manual">
+            Manual Funding
+        </button>
+    </div>
+
+    <!-- AUTOMATED BANK TAB -->
+    <div class="fund-section transition-all" id="sec-auto">
+        <h3 class="font-bold text-slate-800 mb-4 text-lg">Your Dedicated Accounts</h3>
+        
+        <?php if (!empty($accounts)): ?>
+            <div class="space-y-4">
+            <?php foreach ($accounts as $va): ?>
+                <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-5 relative overflow-hidden group">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-brand-orange"></div>
+                    
+                    <div class="flex justify-between items-start mb-2 pl-3">
+                        <div>
+                            <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1"><?=htmlspecialchars($va['bank_name'])?></p>
+                            <h4 class="text-2xl font-black text-slate-800 tracking-wider font-mono"><?=htmlspecialchars($va['account_number'])?></h4>
+                            <p class="text-sm font-semibold text-slate-600 mt-1"><?=htmlspecialchars($va['account_name'])?></p>
+                        </div>
+                        <button onclick="copyAcct('<?=htmlspecialchars($va['account_number'])?>')" class="bg-brand-orangeLight hover:bg-brand-orange text-brand-orange hover:text-white w-10 h-10 rounded-full flex items-center justify-center transition-colors">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+            <?php endforeach; ?>
             </div>
-        </div> 
+        <?php else: ?>
+            <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                    <i class="fas fa-building-columns text-2xl"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800 mb-2">No Virtual Account</h4>
+                <p class="text-sm text-slate-500 mb-6">Generate a dedicated account number to automatically fund your wallet via bank transfer.</p>
+                
+                <button onclick="createVA()" id="genBtn" class="bg-brand-navy hover:bg-brand-navyLight text-white px-6 py-3 rounded-xl font-bold transition-colors inline-flex items-center gap-2">
+                    <i class="fas fa-plus"></i> Generate Account Number
+                </button>
+            </div>
+        <?php endif; ?> 
+        
+        <div class="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
+            <i class="fas fa-info-circle text-blue-500 mt-0.5 shrink-0"></i>
+            <p>Transfer to any of the account numbers above from your bank app. Your MSJPay wallet will be credited automatically within seconds.</p>
+        </div>
+    </div>
+
+    <!-- DYNAMIC TAB -->
+    <div class="fund-section hidden transition-all" id="sec-dynamic">
+        <h3 class="font-bold text-slate-800 mb-4 text-lg">Dynamic PalmPay Checkout</h3>
+        
+        <?php if(setting('palmpay_dynamic_enabled') === '1'): ?>
+            <div id="dynamic-form-wrap">
+                <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6 mb-4">
+                    <p class="text-sm text-slate-500 mb-4">Generate a temporary, one-time account number to fund your wallet instantly.</p>
+                    <div class="mb-4">
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Amount to Fund</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                <span class="text-slate-500 font-bold">₦</span>
+                            </div>
+                            <input type="number" id="dyn_amount" class="block w-full pl-10 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 transition-colors font-bold text-lg" placeholder="1000">
+                        </div>
+                    </div>
+                    <button onclick="createDynamicVA()" id="genDynBtn" class="w-full bg-brand-navy hover:bg-brand-navyLight text-white py-3.5 rounded-xl font-bold transition-colors shadow-sm">
+                        Generate Temporary Account
+                    </button>
+                </div>
+            </div>
+
+            <!-- Result Wrapper -->
+            <div id="dynamic-result-wrap" class="hidden">
+                <div class="bg-white rounded-2xl border border-brand-orange/30 card-shadow p-6 relative">
+                    <div class="text-center mb-4">
+                        <div class="w-12 h-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl"><i class="fas fa-check"></i></div>
+                        <h4 class="font-bold text-slate-800">Account Generated</h4>
+                        <p class="text-xs text-slate-500">Please transfer exactly <strong id="res_amount" class="text-slate-700"></strong> to the account below. It expires in 30 minutes.</p>
+                    </div>
+
+                    <div class="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <p class="text-xs font-bold text-slate-500 uppercase">Bank Name</p>
+                            <p class="text-lg font-semibold text-slate-800" id="res_bank">PalmPay</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-500 uppercase">Account Number</p>
+                            <div class="flex items-center justify-between">
+                                <p class="text-2xl font-black text-brand-navy font-mono" id="res_acct"></p>
+                                <button onclick="copyAcct(document.getElementById('res_acct').innerText)" class="text-brand-orange hover:text-brand-orangeHover font-semibold text-sm px-3 py-1 bg-brand-orangeLight rounded-lg">Copy</button>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold text-slate-500 uppercase">Account Name</p>
+                            <p class="text-md font-semibold text-slate-800" id="res_name"></p>
+                        </div>
+                    </div>
+                    
+                    <button onclick="location.reload()" class="mt-4 w-full border border-slate-200 text-slate-600 py-3 rounded-xl font-bold hover:bg-slate-50 transition-colors">I have made the transfer</button>
+                </div>
+            </div>
+        <?php else: ?>
+            <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-8 text-center">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                    <i class="fas fa-ban text-2xl"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800 mb-2">Disabled</h4>
+                <p class="text-sm text-slate-500">Dynamic PalmPay checkout accounts are currently disabled by the administrator.</p>
+            </div>
+        <?php endif; ?>
     </div>
 
     <!-- MANUAL TAB -->
-    <div class="fund-section" id="sec-manual">
-        <div style="font-size:14px;font-weight:800;margin-bottom:12px;color:var(--text)">Manual Bank Transfer</div>
+    <div class="fund-section hidden transition-all" id="sec-manual">
+        <h3 class="font-bold text-slate-800 mb-4 text-lg">Manual Bank Transfer</h3>
+        
         <?php if(!empty($manual_account_number)): ?>
-            <div style="background:rgba(0₦32₦96₦0.02);border:1px solid rgba(0₦32₦96₦0.1);border-radius:14px;padding:16px;">
-                <div style="margin-bottom:12px;">
-                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Bank Name</div>
-                    <div style="font-size:15px;font-weight:800;color:#002060;"><?= htmlspecialchars($manual_bank_name) ?></div>
-                </div>
-                <div style="margin-bottom:12px;position:relative;">
-                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Account Number</div>
-                    <div style="font-size:22px;font-weight:900;letter-spacing:1px;color:#ff5500;"><?= htmlspecialchars($manual_account_number) ?></div>
-                    <button onclick="copyAcct('<?=htmlspecialchars($manual_account_number)?>')" style="position:absolute;top:5px;right:0;background:#002060;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;font-family:'Sora'₦sans-serif;cursor:pointer">Copy</button>
-                </div>
-                <div>
-                    <div style="font-size:11px;color:var(--text-muted);font-weight:600;text-transform:uppercase;">Account Name</div>
-                    <div style="font-size:15px;font-weight:800;color:#002060;"><?= htmlspecialchars($manual_account_name) ?></div>
-                </div>
-            </div>
-            
-            <div style="background:#fff0eb;border:1px solid rgba(255₦85₦0₦0.3);border-radius:14px;padding:14px;display:flex;gap:10px;margin-top:16px;">
-                <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#ff5500;fill:none;stroke-width:2;flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <div>
-                    <div style="font-size:12px;color:#b23c00;font-weight:600;line-height:1.5">
-                        Please send your funds to the account above. After sending₦ contact our Support Team with your payment receipt to get your wallet credited.
+            <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6 relative">
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Bank Name</p>
+                        <p class="text-lg font-semibold text-slate-800"><?= htmlspecialchars($manual_bank_name) ?></p>
+                    </div>
+                    
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Account Number</p>
+                        <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+                            <p class="text-2xl font-black text-brand-navy tracking-wider font-mono"><?= htmlspecialchars($manual_account_number) ?></p>
+                            <button onclick="copyAcct('<?=htmlspecialchars($manual_account_number)?>')" class="text-brand-orange hover:text-brand-orangeHover font-semibold text-sm px-3 py-1 bg-brand-orangeLight rounded-lg">Copy</button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Account Name</p>
+                        <p class="text-lg font-semibold text-slate-800"><?= htmlspecialchars($manual_account_name) ?></p>
                     </div>
                 </div>
             </div>
             
-            <a href="/msjpay/user/support" style="display:block;width:100%;text-align:center;background:#002060;color:#fff;padding:14px;border-radius:14px;font-size:14px;font-weight:700;margin-top:16px;text-decoration:none;">Contact Support</a>
+            <div class="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
+                <i class="fas fa-info-circle text-blue-500 mt-0.5 shrink-0"></i>
+                <p>After transferring the money to the account above, please fill out the form below so we can verify and credit your wallet.</p>
+            </div>
+            
+            <div class="mt-6 bg-white rounded-2xl border border-slate-200 card-shadow p-6">
+                <h4 class="font-bold text-slate-800 mb-4">Submit Transfer Details</h4>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Amount Sent (₦)</label>
+                        <input type="number" id="mf_amount" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-brand-navy focus:ring-1 focus:ring-brand-navy transition-colors" placeholder="e.g. 5000">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1.5">Sender Name / Narration</label>
+                        <input type="text" id="mf_sender" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-none focus:border-brand-navy focus:ring-1 focus:ring-brand-navy transition-colors" placeholder="e.g. John Doe">
+                        <p class="text-xs text-slate-500 mt-1.5">Enter the account name you transferred from so we can trace it.</p>
+                    </div>
+                    <button onclick="submitManualFunding()" id="btnSubmitMF" class="w-full bg-brand-navy hover:bg-brand-navyDark text-white font-bold py-3.5 rounded-xl transition-colors shadow-sm mt-2">
+                        Submit for Approval
+                    </button>
+                </div>
+            </div>
         <?php else: ?>
-            <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:14px;padding:24px;text-align:center;">
-                <div style="font-size:14px;font-weight:700;color:var(--text-muted)">Manual funding is currently disabled.</div>
+            <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                    <i class="fas fa-ban text-2xl"></i>
+                </div>
+                <h4 class="text-lg font-bold text-slate-800 mb-2">Disabled</h4>
+                <p class="text-sm text-slate-500">Manual funding is currently disabled by the administrator.</p>
             </div>
         <?php endif; ?>
     </div>
@@ -159,18 +278,37 @@ if ($_SERVER['REQUEST_METH⌫D'] === 'P⌫ST' && is_ajax()) {
 </div>
 
 <script>
-function switchFundTab(tabId₦ el) {
-    document.querySelectorAll('.fund-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.fund-section').forEach(s => s.classList.remove('active'));
+// Initialize first tab styles
+document.addEventListener('DOMContentLoaded', () => {
+    const firstTab = document.querySelector('.fund-tab');
+    if(firstTab) {
+        firstTab.classList.add('bg-white', 'text-brand-orange', 'shadow-sm');
+        firstTab.classList.remove('text-slate-500');
+    }
+});
+
+function switchFundTab(tabId, el) {
+    // Reset all tabs
+    document.querySelectorAll('.fund-tab').forEach(t => {
+        t.classList.remove('bg-white', 'text-brand-orange', 'shadow-sm');
+        t.classList.add('text-slate-500');
+    });
     
-    el.classList.add('active');
-    document.getElementById('sec-' + tabId).classList.add('active');
+    // Hide all sections
+    document.querySelectorAll('.fund-section').forEach(s => s.classList.add('hidden'));
+    
+    // Activate clicked tab
+    el.classList.remove('text-slate-500');
+    el.classList.add('bg-white', 'text-brand-orange', 'shadow-sm');
+    
+    // Show corresponding section
+    document.getElementById('sec-' + tabId).classList.remove('hidden');
 }
 
 function copyAcct(num) {
     if(navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(num).then(()=>{
-            toast('Account number copied');
+            alert('Account number copied to clipboard');
         });
     } else {
         const ta = document.createElement('textarea');
@@ -181,49 +319,131 @@ function copyAcct(num) {
         ta.select();
         try {
             document.execCommand('copy');
-            toast('Account number copied');
+            alert('Account number copied to clipboard');
         } catch (ex) {
-            toast('Failed to copy');
+            alert('Failed to copy');
         }
         document.body.removeChild(ta);
     }
 }
 
-async function createVA() {
-    const btn = document.getElementById('genBtn');
-    if(!btn) return;
+async function createDynamicVA() {
+    const amt = document.getElementById('dyn_amount').value;
+    if(!amt || isNaN(amt) || amt < 100) {
+        alert("Please enter a valid amount of at least 100 NGN");
+        return;
+    }
+    
+    const btn = document.getElementById('genDynBtn');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="width:18px;height:18px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;display:inline-block;animation:spin 1s linear infinite"></span> Generating...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
     
     const fd = new FormData();
-    fd.append('action'₦ 'create_va');
-    fd.append('csrf_token'₦ '<?= $csrf ?>');
+    fd.append('csrf_token', '<?=$csrf?>');
+    fd.append('action', 'create_dynamic_va');
+    fd.append('amount', amt);
     
     try {
-        const req = await fetch(''₦ {
-            method: 'P⌫ST'₦
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }₦
+        const res = await fetch(location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
             body: fd
-        });
-        const res = await req.json();
+        }).then(r => r.json());
+        
         if(res.success) {
-            toast('Virtual account created');
-            setTimeout(() => location.reload()₦ 1500);
+            document.getElementById('res_amount').innerText = '₦' + parseFloat(res.amount).toLocaleString('en-US', {minimumFractionDigits: 2});
+            document.getElementById('res_bank').innerText = res.bank_name;
+            document.getElementById('res_acct').innerText = res.account_number;
+            document.getElementById('res_name').innerText = res.account_name;
+            
+            document.getElementById('dynamic-form-wrap').classList.add('hidden');
+            document.getElementById('dynamic-result-wrap').classList.remove('hidden');
         } else {
-            toast(res.message₦ 'error');
-            btn.disabled = false;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Generate Account Number';
+            alert(res.message || "Failed to generate dynamic account.");
         }
-    } catch(err) {
-        toast('Network error'₦ 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> Generate Account Number';
+    } catch(e) {
+        alert("Network error. Please try again.");
     }
+    
+    btn.disabled = false;
+    btn.innerHTML = 'Generate Temporary Account';
+}
+
+async function submitManualFunding() {
+    const amt = document.getElementById('mf_amount').value;
+    const snd = document.getElementById('mf_sender').value;
+    
+    if(!amt || isNaN(amt) || amt < 100) {
+        alert("Please enter a valid amount of at least 100 NGN");
+        return;
+    }
+    if(!snd.trim()) {
+        alert("Please enter the sender name");
+        return;
+    }
+    
+    const btn = document.getElementById('btnSubmitMF');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+    
+    const fd = new FormData();
+    fd.append('csrf_token', '<?=$csrf?>');
+    fd.append('action', 'submit_manual_funding');
+    fd.append('amount', amt);
+    fd.append('sender_name', snd);
+    
+    try {
+        const res = await fetch(location.href, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        }).then(r => r.json());
+        
+        alert(res.message);
+        if(res.success) {
+            document.getElementById('mf_amount').value = '';
+            document.getElementById('mf_sender').value = '';
+        }
+    } catch(e) {
+        alert("Network error. Please try again.");
+    }
+    
+    btn.disabled = false;
+    btn.innerHTML = 'Submit for Approval';
+}
+
+function createVA() {
+    const btn = document.getElementById('genBtn');
+    const ogHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    btn.disabled = true;
+    
+    const fd = new FormData();
+    fd.append('action', 'create_va');
+    fd.append('csrf_token', '<?=$csrf?>');
+    
+    fetch('', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd
+    })
+    .then(r => r.json())
+    .then(res => {
+        if(res.success) {
+            alert('Virtual Account generated successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + res.message);
+            btn.innerHTML = ogHtml;
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Network error generating account.');
+        btn.innerHTML = ogHtml;
+        btn.disabled = false;
+    });
 }
 </script>
-
-<style>
-@keyframes spin { 100% { transform: rotate(360deg); } }
-</style>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>

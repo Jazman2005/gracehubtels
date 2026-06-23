@@ -7,3 +7,11 @@
 [2026-06-21 10:30:06] [ERROR] [::1] VA_PAYMENTPOINT_NOT_CONFIGURED
 [2026-06-21 10:30:06] [ERROR] [::1] VA_PAYMENTPOINT_FAILED | {"uid":2,"message":"PaymentPoint not configured"}
 [2026-06-21 10:30:06] [INFO] [::1] VA_CREATE_END | {"uid":2,"success":false,"accounts_created":0}
+[2026-06-21 14:39:56] [INFO] [::1] VA_CREATE_START | {"uid":3}
+[2026-06-21 14:39:56] [ERROR] [::1] VA_PAYMENTPOINT_NOT_CONFIGURED
+[2026-06-21 14:39:56] [ERROR] [::1] VA_PAYMENTPOINT_FAILED | {"uid":3,"message":"PaymentPoint not configured"}
+[2026-06-21 14:39:56] [INFO] [::1] VA_CREATE_END | {"uid":3,"success":false,"accounts_created":0}
+[2026-06-21 15:48:28] [INFO] [::1] VA_CREATE_START | {"uid":4}
+[2026-06-21 15:48:28] [ERROR] [::1] VA_PAYMENTPOINT_NOT_CONFIGURED
+[2026-06-21 15:48:28] [ERROR] [::1] VA_PAYMENTPOINT_FAILED | {"uid":4,"message":"PaymentPoint not configured"}
+[2026-06-21 15:48:28] [INFO] [::1] VA_CREATE_END | {"uid":4,"success":false,"accounts_created":0}

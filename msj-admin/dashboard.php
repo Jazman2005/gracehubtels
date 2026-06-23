@@ -21,6 +21,20 @@ auth_admin();$csrf=admin_csrf();$stats=admin_stats();$admin=get_admin();
   <div class="kpi-card"><div class="kpi-icon pink"><svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div><div class="kpi-info"><span class="kpi-label">Failed Tx (All)</span><span class="kpi-value"><?=number_format($stats['failed_tx'])?></span><span class="kpi-sub">Need attention</span></div></div>
 </div>
 
+<div class="card">
+  <div class="card-header">
+    <h3><svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> Quick Actions</h3>
+  </div>
+  <div>
+    <div class="action-grid">
+      <a href="/msjpay/msj-admin/users-management.php" class="action-tile blue"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Manage Users</a>
+      <a href="/msjpay/msj-admin/dashboard-settings.php" class="action-tile orange"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>App Settings</a>
+      <a href="/msjpay/msj-admin/notifications.php" class="action-tile green"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>Broadcast</a>
+      <a href="/msjpay/msj-admin/settings.php" class="action-tile gray"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>API Config</a>
+    </div>
+  </div>
+</div>
+
 <div class="row-2col">
   <div class="card">
     <div class="card-header"><h3>7-Day Volume & Profit</h3></div>
@@ -48,7 +62,7 @@ auth_admin();$csrf=admin_csrf();$stats=admin_stats();$admin=get_admin();
         <td><code><?=substr($tx['transaction_ref'],0,12)?>…</code></td>
         <td><div class="user-cell"><div class="u-avatar"><?=strtoupper(substr($tx['full_name']??'?',0,1))?></div><div><span class="u-name"><?=htmlspecialchars($tx['full_name']??'—')?></span><span class="u-phone"><?=htmlspecialchars($tx['phone']??'')?></span></div></div></td>
         <td><span class="badge <?= $tx['type'] === 'credit' ? 'badge-success' : 'badge-neutral' ?>"><?= strtoupper($tx['type']) ?></span></td>
-        <td class="<?=$tx['type']==='credit'?'text-success':'text-danger'?>"><?=$tx['type']==='credit'₦'+':'-'?>₦<?=number_format((float)$tx['amount'],2)?></td>
+        <td class="<?=$tx['type']==='credit'?'text-success':'text-danger'?>"><?=$tx['type']==='credit'?'+':'-'?>₦<?=number_format((float)$tx['amount'],2)?></td>
         <td><?=$tx['profit']!==null?'<span class="text-success">₦'.number_format((float)$tx['profit'],2).'</span>':'<span style="color:#9CA3AF">—</span>'?></td>
         <td style="font-size:12px"><?=ucwords(str_replace('_',' ',$tx['category']))?></td>
         <td><span class="badge <?=$scls?>"><?=ucfirst($tx['status'])?></span></td>

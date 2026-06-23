@@ -1,68 +1,95 @@
-<?php
-$current_page = basename($_SERVER['PHP_SELF']);
-?>
-        <nav class="bottom-nav">
-            <a href="/msjpay/user/dashboard" class="nav-item <?= $current_page == 'dashboard.php' ? 'active' : '' ?>">
-                <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                <span>Home</span>
-            </a>
-            <a href="/msjpay/user/virtual-card" class="nav-item <?= $current_page == 'virtual-card.php' ? 'active' : '' ?>">
-                <svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-                <span>Card</span>
-            </a>
-            <a href="/msjpay/user/support" class="nav-item <?= $current_page == 'support.php' ? 'active' : '' ?>">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <span>Support</span>
-            </a>
-            <a href="/msjpay/user/transactions" class="nav-item <?= $current_page == 'transactions.php' ? 'active' : '' ?>">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span>Activity</span>
-            </a>
-            <a href="/msjpay/user/profile" class="nav-item <?= $current_page == 'profile.php' ? 'active' : '' ?>">
-                <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <span>Profile</span>
-            </a>
-        </nav>
-    </div> <!-- end .app-shell -->
-</main> <!-- end .dashboard-main -->
-</div> <!-- end .dashboard-layout -->
+    </main>
+</div> <!-- End Main content wrapper -->
+
+<!-- Mobile Bottom Navigation -->
+<?php $current_page = basename($_SERVER['PHP_SELF']); ?>
+<nav class="md:hidden fixed bottom-0 w-full bg-white border-t border-slate-200 z-50 px-2 py-2 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+    <a href="/msjpay/user/dashboard" class="flex flex-col items-center justify-center w-1/5 <?= $current_page == 'dashboard.php' ? 'text-brand-orange' : 'text-slate-500 hover:text-slate-800' ?>">
+        <i class="fa-solid fa-house text-lg mb-1"></i>
+        <span class="text-[10px] font-medium">Home</span>
+    </a>
+    <a href="/msjpay/user/transactions" class="flex flex-col items-center justify-center w-1/5 <?= $current_page == 'transactions.php' ? 'text-brand-orange' : 'text-slate-500 hover:text-slate-800' ?>">
+        <i class="fa-solid fa-clock-rotate-left text-lg mb-1"></i>
+        <span class="text-[10px] font-medium">History</span>
+    </a>
+    <a href="/msjpay/user/support" class="flex flex-col items-center justify-center w-1/5 <?= $current_page == 'support.php' ? 'text-brand-orange' : 'text-slate-500 hover:text-slate-800' ?>">
+        <i class="fa-solid fa-headset text-lg mb-1"></i>
+        <span class="text-[10px] font-medium">Support</span>
+    </a>
+    <a href="/msjpay/user/profile" class="flex flex-col items-center justify-center w-1/5 <?= $current_page == 'profile.php' ? 'text-brand-orange' : 'text-slate-500 hover:text-slate-800' ?>">
+        <i class="fa-solid fa-user text-lg mb-1"></i>
+        <span class="text-[10px] font-medium">Profile</span>
+    </a>
+    <a href="/msjpay/user/settings" class="flex flex-col items-center justify-center w-1/5 <?= $current_page == 'settings.php' ? 'text-brand-orange' : 'text-slate-500 hover:text-slate-800' ?>">
+        <i class="fa-solid fa-gear text-lg mb-1"></i>
+        <span class="text-[10px] font-medium">Settings</span>
+    </a>
+</nav>
+
+</div> <!-- End flex h-screen -->
+
 <script>
-    var userHasPin = <?= !empty($user['transaction_pin']) ? 'true' : 'false' ?>;
+    // Copy to clipboard utility
+    function copyText(text, event) {
+        if(event) {
+            event.stopPropagation();
+        }
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = event ? event.currentTarget : null;
+            if(btn) {
+                const originalHtml = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check text-green-500"></i> Copied!';
+                setTimeout(() => {
+                    btn.innerHTML = originalHtml;
+                }, 2000);
+            } else {
+                alert('Copied: ' + text);
+            }
+        });
+    }
+
+    // Balance visibility toggle
+    function toggleBalance() {
+        const balElements = document.querySelectorAll('.bal-amt');
+        const eyeIcon = document.getElementById('bal-eye-icon');
+        const isHidden = eyeIcon.classList.contains('fa-eye-slash');
+        
+        balElements.forEach(el => {
+            if (isHidden) {
+                el.innerText = el.getAttribute('data-val');
+            } else {
+                el.innerText = '****';
+            }
+        });
+        
+        if (isHidden) {
+            eyeIcon.classList.remove('fa-eye-slash');
+            eyeIcon.classList.add('fa-eye');
+            localStorage.setItem('hideBal', 'false');
+        } else {
+            eyeIcon.classList.remove('fa-eye');
+            eyeIcon.classList.add('fa-eye-slash');
+            localStorage.setItem('hideBal', 'true');
+        }
+    }
+
+    // Initialize balance visibility on load
+    document.addEventListener('DOMContentLoaded', () => {
+        if (localStorage.getItem('hideBal') === 'true') {
+            const eyeIcon = document.getElementById('bal-eye-icon');
+            if(eyeIcon) {
+                // Trigger hiding without saving to localstorage again
+                const balElements = document.querySelectorAll('.bal-amt');
+                balElements.forEach(el => el.innerText = '****');
+                eyeIcon.classList.remove('fa-eye');
+                eyeIcon.classList.add('fa-eye-slash');
+            }
+        }
+    });
 </script>
-<script src="/msjpay/assets/js/app.js?v=<?=time()?>"></script>
-<div class="sheet-overlay" id="setupPinModal">
-    <div class="sheet"><div class="sheet-handle"></div>
-        <div class="sheet-header">
-            <h3>Setup Transaction PIN</h3>
-            <div class="sheet-close" onclick="closeSection('setupPinModal')">&times;</div>
-        </div>
-        <form id="setupPinForm" onsubmit="submitSetupPin(event)">
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">You must set up a 4-digit PIN before you can complete transactions.</p>
-            <div class="field-group">
-                <label>Account Password</label>
-                <div class="input-wrap">
-                    <input type="password" name="current_password" required>
-                </div>
-            </div>
-            <div class="field-row">
-                <div class="field-group">
-                    <label>New PIN</label>
-                    <div class="input-wrap">
-                        <input type="password" name="pin" maxlength="4" required inputmode="numeric">
-                    </div>
-                </div>
-                <div class="field-group">
-                    <label>Confirm PIN</label>
-                    <div class="input-wrap">
-                        <input type="password" name="confirm_pin" maxlength="4" required inputmode="numeric">
-                    </div>
-                </div>
-            </div>
-            <input type="hidden" name="action" value="set_pin">
-            <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-            <button type="submit" class="btn-primary" style="margin-top:16px">Save PIN & Continue</button>
-        </form>
-    </div>
-</div>
+
+<?php if(file_exists(__DIR__ . '/../js/app.js')): ?>
+<script src="/msjpay/user/js/app.js"></script>
+<?php endif; ?>
 </body>
 </html>

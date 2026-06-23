@@ -56,7 +56,7 @@ if ($dup->fetch()) {
 }
 
 // Find user by account number
-$va = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number=? AND is_active=1 LIMIT 1");
+$va = db()->prepare("SELECT user_id, bank_name FROM virtual_accounts WHERE account_number=? AND is_active=1 LIMIT 1");
 $va->execute([$acct_no]);
 $va_row = $va->fetch();
 
@@ -68,11 +68,45 @@ if (!$va_row) {
     exit;
 }
 
-$user_id = (int)$va_row['user_id'];
-$sender  = $payload['sender']['name'] ?? 'Unknown';
-$desc    = "Wallet funded via PaymentPoint - from {$sender}";
+$user_id   = (int)$va_row['user_id'];
+$bank_name = strtolower($va_row['bank_name'] ?? '');
+$sender    = $payload['sender']['name'] ?? 'Unknown';
 
-$result  = credit_wallet($user_id, $amount, 'wallet_funding', $desc, [
+// Fee Calculation
+$fee_type = 'flat';
+$fee_val  = 0;
+
+if (str_contains($bank_name, 'palmpay')) {
+    $fee_type = setting('paymentpoint_palmpay_fee_type', 'flat');
+    $fee_val  = (float)setting('paymentpoint_palmpay_fee_value', '0');
+} elseif (str_contains($bank_name, 'opay') || str_contains($bank_name, 'paycom')) {
+    $fee_type = setting('paymentpoint_opay_fee_type', 'flat');
+    $fee_val  = (float)setting('paymentpoint_opay_fee_value', '0');
+}
+
+$fee = 0;
+if ($fee_val > 0) {
+    if ($fee_type === 'percent') {
+        $fee = ($amount * $fee_val) / 100;
+    } else {
+        $fee = $fee_val;
+    }
+}
+
+$credit_amount = max(0, $amount - $fee);
+
+if ($credit_amount <= 0) {
+    db()->prepare("UPDATE webhook_logs SET error_message='Amount less than or equal to fee' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
+       ->execute([$tx_ref]);
+    http_response_code(200);
+    echo json_encode(['status'=>'fee_too_high']);
+    exit;
+}
+
+$desc = "Wallet funded via PaymentPoint ({$va_row['bank_name']}) - from {$sender}";
+if ($fee > 0) $desc .= " (Fee: ₦".number_format($fee,2).")";
+
+$result  = credit_wallet($user_id, $credit_amount, 'wallet_funding', $desc, [
     'provider'       =>'paymentpoint',
     'external_ref'   =>$tx_ref,
     'sender'         =>$sender,
@@ -88,7 +122,7 @@ if ($result['success']) {
 
     // Notify user
     db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-       ->execute([$user_id,'💰 Wallet Funded',"₦".number_format($amount,2)." credited to your wallet.",'success']);
+       ->execute([$user_id,'💰 Wallet Funded',"₦".number_format($credit_amount,2)." credited to your wallet.",'success']);
 }
 
 http_response_code(200);

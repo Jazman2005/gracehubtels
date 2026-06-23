@@ -1,5 +1,5 @@
 <?php
-require_once dirname(__DIR__,2).'/msjpay/user/core/db.php';
+require_once dirname(__DIR__,2).'/user/core/db.php';
 function admin_stats():array{
     $db=db();
     $users=(int)$db->query("SELECT COUNT(*) FROM users WHERE is_active=1")->fetchColumn();
@@ -42,7 +42,7 @@ function get_transactions_list(int $page=1,int $per=25,array $filters=[]):array{
     if(!empty($filters['date_to'])){$where.=" AND DATE(t.created_at)<=?";$params[]=$filters['date_to'];}
     $cs=$db->prepare("SELECT COUNT(*) FROM transactions t $where");$cs->execute($params);$total=(int)$cs->fetchColumn();
     $p2=$params;$p2[]=$per;$p2[]=$offset;
-    $st=$db->prepare("SELECT t.*,u.full_name,u.phone FROM transactions t LEFT JOIN users u ON t.user_id=u.id $where ORDER BY t.created_at DESC LIMIT ? OFFSET ?");$st->execute($p2);
+    $st=$db->prepare("SELECT t.*,u.full_name,u.phone,u.email FROM transactions t LEFT JOIN users u ON t.user_id=u.id $where ORDER BY t.created_at DESC LIMIT ? OFFSET ?");$st->execute($p2);
     return['data'=>$st->fetchAll(),'total'=>$total,'pages'=>(int)ceil($total/$per),'page'=>$page];
 }
 function get_profit_analysis():array{

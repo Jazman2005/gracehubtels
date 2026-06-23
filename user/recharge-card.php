@@ -2,10 +2,242 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/recharge_card.php';
 auth_user();
-$uid = (int)$_SESSI⌫N['user_id'];
-$user = get_user($uid); if ($_SERVER['REQUEST_METH⌫D'] === 'P⌫ST' && is_ajax()) { if (!verify_csrf($_P⌫ST['csrf_token'] ?? '')) json_response(['success' => false₦ 'message' => 'Invalid token']₦ 403); if (!rate_limit('rcard_'.$uid₦ 3₦ 60)) json_response(['success' => false₦ 'message' => 'Too many requests.']₦ 429); json_response(process_recharge_card($uid₦ $_P⌫ST));
-} $csrf = csrf_token();
-$nets = [ 1 => ['MTN'₦ '#FFCC00'₦ '#111'₦ '/msjpay/assets/logos/mtn.png']₦ 2 => ['GL⌫'₦ '#008000'₦ '#fff'₦ '/msjpay/assets/logos/gl✅png']₦ 3 => ['AIRTEL'₦ '#FF0000'₦ '#fff'₦ '/msjpay/assets/logos/airtel.png']₦ 4 => ['9M⌫BILE'₦ '#006600'₦ '#fff'₦ '/msjpay/assets/logos/9mobile.png']
+$uid = (int)$_SESSION['user_id'];
+$user = get_user($uid); 
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) { 
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) json_response(['success' => false, 'message' => 'Invalid token'], 403); 
+    if (!rate_limit('rcard_'.$uid, 3, 60)) json_response(['success' => false, 'message' => 'Too many requests.'], 429); 
+    json_response(process_recharge_card($uid, $_POST));
+} 
+
+$csrf = csrf_token();
+$nets = [ 
+    1 => ['name' => 'MTN', 'bg' => 'bg-yellow-400', 'color' => 'text-slate-900', 'logo' => '/msjpay/assets/logos/mtn.png'], 
+    2 => ['name' => 'GLO', 'bg' => 'bg-green-600', 'color' => 'text-white', 'logo' => '/msjpay/assets/logos/glo.png'], 
+    3 => ['name' => 'AIRTEL', 'bg' => 'bg-red-600', 'color' => 'text-white', 'logo' => '/msjpay/assets/logos/airtel.png'], 
+    4 => ['name' => '9MOBILE', 'bg' => 'bg-emerald-800', 'color' => 'text-white', 'logo' => '/msjpay/assets/logos/9mobile.png']
 ];
+
+$page_title = 'Recharge Card'; 
+include __DIR__ . '/includes/header.php'; 
+include __DIR__ . '/includes/sidebar.php'; 
 ?>
-<?php $page_title = 'Recharge Card � MsjPay'; include __DIR__ . '/includes/header.php'; include __DIR__ . '/includes/sidebar.php'; ?> <header class="page-header"> <a href="/msjpay/user/dashboard" class="back-btn"> <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></a> <h1>🃏 Recharge Card</h1> <div class="bal-chip">₦<?=number_format((float)$user['wallet_balance']₦ 2)?></div> </header> <div class="page-body"> <div class="field-group"> <label>Select Network</label> <div class="network-grid"> <?php foreach ($nets as $id => [$name₦ $bg₦ $color₦ $logo]): ?> <button type="button" class="net-btn" onclick="selNet(this₦ <?=$id?>₦ '<?=$name?>')" data-id="<?=$id?>"> <span class="net-circle" style="background:<?=$bg?>"> <img src="<?=$logo?>" alt="<?=$name?>" style="width:38px;height:38px;border-radius:50%;object-fit:cover" onerror="this.style.display='none';this.parentNode.innerHTML='<?=substr($name₦ 0₦ 1)?>'"> </span> <span><?=$name?></span> </button> <?php endforeach; ?> </div> </div> <div class="field-group"> <label>Denomination</label> <div class="amt-quick"> <?php foreach ([100₦ 200₦ 500₦ 1000] as $d): ?> <button type="button" class="amt-chip" onclick="selDenom(<?=$d?>₦ this)">₦<?=$d?></button> <?php endforeach; ?> </div> </div> <div class="field-group"> <label>Quantity (1�5)</label> <div style="display:flex;align-items:center;gap:16px"> <button type="button" onclick="chgQty(-1)" style="width:48px;height:48px;border-radius:50%;border:2px solid #E5E7EB;background:#fff;font-size:22px;font-weight:700;cursor:pointer">-</button> <div id="qtyD" style="font-size:32px;font-weight:900;min-width:48px;text-align:center">1</div> <button type="button" onclick="chgQty(1)" style="width:48px;height:48px;border-radius:50%;border:2px solid #E5E7EB;background:#fff;font-size:22px;font-weight:700;cursor:pointer">+</button> </div> <div id="totalD" style="font-size:14px;font-weight:700;color:#ff5500;margin-top:8px"></div> </div> <div class="field-group"> <label>Name on Card <span>⌫ptional</span></label> <div class="input-wrap"> <svg class="input-icon" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg> <input type="text" id="nameF" placeholder="Your business/name" maxlength="30"> </div> </div> <input type="hidden" id="netId" value=""> <input type="hidden" id="denom" value="0"> <input type="hidden" id="qty" value="1"> <input type="hidden" id="csrfF" value="<?=$csrf?>"> <button type="button" class="btn-primary" onclick="openConf()">Print Recharge Cards</button> <p class="tx-note">⚡ PINs printed instantly as digital codes.</p> </div> <div class="confirm-modal-overlay" id="confirm⌫vl"> <div class="confirm-modal"> <div class="confirm-modal-icon">💳</div> <h3>Confirm ⌫rder</h3> <div class="confirm-detail" id="cd"></div> <div class="confirm-actions"> <button class="btn-cancel" onclick="document.getElementById('confirm⌫vl').classList.remove('open')">Cancel</button> <button class="btn-primary" onclick="openPinMod()">Enter PIN</button> </div> </div> </div> <div class="pin-modal-overlay" id="pin⌫vl"> <div class="pin-modal"> <div class="pin-modal-handle"></div> <div class="pin-close" onclick="closePinMod()"> <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> </div> <h3>Transaction PIN</h3> <p id="pinSum">Confirm recharge card purchase</p> <div class="pin-dots"> <div class="pin-dot" id="pd0"></div> <div class="pin-dot" id="pd1"></div> <div class="pin-dot" id="pd2"></div> <div class="pin-dot" id="pd3"></div> </div> <div class="pin-keypad"> <?php foreach ([1₦ 2₦ 3₦ 4₦ 5₦ 6₦ 7₦ 8₦ 9₦ ''₦ '0'₦ '⌫'] as $k): if ($k === ''): ?> <button class="key-btn empty" disabled></button> <?php elseif ($k === '⌫'): ?> <button class="key-btn del" onclick="pd('del')">⌫</button> <?php else: ?> <button class="key-btn" onclick="pd(<?=$k?>)"><?=$k?></button> <?php endif; endforeach; ?> </div> <div id="pinErr" class="pin-err" style="display:none"></div> </div> </div> <div class="success-overlay" id="succ⌫vl" style="display:none"> <div class="success-modal"> <div class="success-icon">✅</div> <h3>Cards Ready!</h3> <div id="pc" style="background:#F9FAFB;border-radius:14px;padding:14px;margin:12px 0;max-height:240px;overflow-y:auto;text-align:left"></div> <div class="success-actions"> <button onclick="location.href='/msjpay/user/dashboard'" class="btn-primary">Home</button> <button onclick="location.reload()" class="btn-outline">Buy More</button> </div> </div> </div> <?php include __DIR__ . '/includes/footer.php'; ?>
+
+<div class="max-w-2xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-4">
+            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Recharge Card</h1>
+                <p class="text-sm text-slate-500">Generate e-pins for printing</p>
+            </div>
+        </div>
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
+            ₦<?=number_format((float)$user['wallet_balance'],2)?>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6 mb-6">
+        
+        <!-- Network Selection -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-700 mb-3">Select Network</label>
+            <div class="grid grid-cols-4 gap-3">
+                <?php foreach($nets as $id => $n):?>
+                <button type="button" class="net-btn flex flex-col items-center justify-center p-3 rounded-xl border-2 border-slate-100 bg-slate-50 hover:border-brand-orange/50 transition-all relative overflow-hidden text-center group" data-id="<?=$id?>" data-name="<?=$n['name']?>" onclick="selNet(this, <?=$id?>, '<?=$n['name']?>')">
+                    <div class="w-12 h-12 rounded-full mb-2 overflow-hidden bg-white shadow-sm flex items-center justify-center <?=$n['bg']?> <?=$n['color']?> font-bold">
+                        <img src="<?=$n['logo']?>" alt="<?=$n['name']?>" class="w-full h-full object-cover" onerror="this.parentNode.style.color='<?=$n['color']?>';this.parentNode.textContent='<?=substr($n['name'],0,1)?>'">
+                    </div>
+                    <span class="text-xs font-semibold text-slate-700"><?=$n['name']?></span>
+                    <div class="absolute top-2 right-2 text-brand-orange opacity-0 check-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </button>
+                <?php endforeach;?>
+            </div>
+        </div>
+
+        <!-- Denomination -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-700 mb-3">Denomination (₦)</label>
+            <div class="grid grid-cols-4 gap-2">
+                <?php foreach([100, 200, 500, 1000] as $d):?>
+                <button type="button" class="amt-chip py-3 bg-slate-50 border-2 border-slate-100 hover:border-brand-orange hover:bg-brand-orangeLight hover:text-brand-orange rounded-xl text-sm font-bold text-slate-700 transition-all" onclick="selDenom(<?=$d?>,this)">₦<?=$d?></button>
+                <?php endforeach;?>
+            </div>
+        </div>
+
+        <!-- Quantity Selection -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-700 mb-3">Quantity (1-5)</label>
+            <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-2">
+                <button type="button" onclick="chgQty(-1)" class="w-12 h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-colors shadow-sm">
+                    <i class="fas fa-minus"></i>
+                </button>
+                
+                <div class="flex-1 text-center">
+                    <div id="qtyD" class="text-3xl font-black text-brand-navy">1</div>
+                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">PIN(s)</div>
+                </div>
+                
+                <button type="button" onclick="chgQty(1)" class="w-12 h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-colors shadow-sm">
+                    <i class="fas fa-plus"></i>
+                </button>
+            </div>
+            
+            <div id="totalBox" class="hidden mt-4 p-4 bg-brand-orangeLight border border-brand-orange/30 rounded-xl flex justify-between items-center">
+                <div>
+                    <span class="block text-xs text-brand-orange/80 uppercase tracking-wider mb-0.5">Total Amount</span>
+                    <span class="text-sm font-semibold text-brand-orangeHover"><span id="summaryQty">1</span>x <span id="summaryNet"></span> (₦<span id="summaryDenom">0</span>)</span>
+                </div>
+                <div class="text-right">
+                    <span class="text-2xl font-black text-brand-orangeHover" id="totalD"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Name on Card -->
+        <div class="mb-6">
+            <label class="block text-sm font-semibold text-slate-700 mb-2">Name on Card <span class="text-slate-400 font-normal text-xs ml-1">Optional</span></label>
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <i class="fas fa-id-badge text-slate-400"></i>
+                </div>
+                <input type="text" id="nameF" class="block w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-colors font-medium" placeholder="E.g. Your Business Name" maxlength="30">
+            </div>
+        </div>
+
+        <input type="hidden" id="netId" value="">
+        <input type="hidden" id="denom" value="0">
+        <input type="hidden" id="qty" value="1">
+        <input type="hidden" id="csrfF" value="<?=$csrf?>">
+        
+        <button type="button" onclick="openConf()" class="w-full bg-gradient-to-r from-brand-orange to-brand-orangeHover hover:from-brand-orangeHover hover:to-orange-600 text-white font-bold text-lg py-4 rounded-xl shadow-lg shadow-orange-500/30 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2">
+            Print Recharge Cards <i class="fas fa-print"></i>
+        </button>
+        
+        <p class="text-center text-xs text-slate-500 mt-4 flex items-center justify-center gap-1">
+            <i class="fas fa-bolt text-yellow-500"></i> PINs printed instantly as digital codes
+        </p>
+    </div>
+</div>
+
+<script>
+let selNetworkName = '';
+
+function selNet(btn, id, name) {
+    document.querySelectorAll('.net-btn').forEach(b => {
+        b.classList.remove('border-brand-orange', 'bg-brand-orangeLight');
+        b.classList.add('border-slate-100', 'bg-slate-50');
+        b.querySelector('.check-icon').classList.remove('!opacity-100');
+    });
+    btn.classList.remove('border-slate-100', 'bg-slate-50');
+    btn.classList.add('border-brand-orange', 'bg-brand-orangeLight');
+    btn.querySelector('.check-icon').classList.add('!opacity-100');
+    
+    document.getElementById('netId').value = id;
+    selNetworkName = name;
+    document.getElementById('summaryNet').innerText = name;
+    updTot();
+}
+
+function selDenom(d, btn) {
+    document.getElementById('denom').value = d;
+    document.querySelectorAll('.amt-chip').forEach(b => {
+        b.classList.remove('!border-brand-orange', '!bg-brand-orangeLight', '!text-brand-orange');
+    });
+    btn.classList.add('!border-brand-orange', '!bg-brand-orangeLight', '!text-brand-orange');
+    document.getElementById('summaryDenom').innerText = d;
+    updTot();
+}
+
+function chgQty(dir) {
+    let q = parseInt(document.getElementById('qty').value) + dir;
+    if(q < 1) q = 1;
+    if(q > 5) q = 5;
+    document.getElementById('qty').value = q;
+    document.getElementById('qtyD').innerText = q;
+    document.getElementById('summaryQty').innerText = q;
+    updTot();
+}
+
+function updTot() {
+    const d = parseFloat(document.getElementById('denom').value) || 0;
+    const q = parseInt(document.getElementById('qty').value) || 1;
+    const box = document.getElementById('totalBox');
+    
+    if(d > 0 && document.getElementById('netId').value) {
+        document.getElementById('totalD').innerText = '₦' + (d * q).toLocaleString();
+        box.classList.remove('hidden');
+    } else {
+        box.classList.add('hidden');
+    }
+}
+
+function openConf() {
+    const nid = document.getElementById('netId').value;
+    const d = parseFloat(document.getElementById('denom').value);
+    const q = parseInt(document.getElementById('qty').value);
+    
+    if(!nid) return alert('Select network');
+    if(!d || d <= 0) return alert('Select denomination');
+    
+    const tot = d * q;
+    const pin = prompt(`Confirm Recharge Card Purchase:\n\nNetwork: ${selNetworkName}\nDenomination: ₦${d}\nQuantity: ${q}\nTotal: ₦${tot}\n\nEnter your 4-digit PIN:`);
+    
+    if(pin && pin.length >= 4) {
+        proc(nid, d, q, pin);
+    }
+}
+
+function proc(nid, d, q, pin) {
+    const btn = document.querySelector('button[onclick="openConf()"]');
+    const ogHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    btn.disabled = true;
+    
+    const nameStr = document.getElementById('nameF').value;
+    
+    const fd = new FormData();
+    fd.append('csrf_token', document.getElementById('csrfF').value);
+    fd.append('network_id', nid);
+    fd.append('denomination', d);
+    fd.append('quantity', q);
+    fd.append('business_name', nameStr);
+    fd.append('pin', pin);
+    
+    fetch('', {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd
+    })
+    .then(r => r.json())
+    .then(res => {
+        if(res.success) {
+            let phtml = '';
+            if(res.data && res.data.pins) {
+                res.data.pins.forEach((p, i) => {
+                    phtml += `PIN ${i+1}: ${p}\n`;
+                });
+            }
+            alert(`Success! Cards Generated.\n\n${res.message}\n\n${phtml}`);
+            location.reload();
+        } else {
+            alert(`Error: ${res.message}`);
+            btn.innerHTML = ogHtml;
+            btn.disabled = false;
+        }
+    })
+    .catch(err => {
+        alert('Network error occurred.');
+        btn.innerHTML = ogHtml;
+        btn.disabled = false;
+    });
+}
+</script>
+
+<?php include __DIR__ . '/includes/footer.php'; ?>

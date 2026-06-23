@@ -4,7 +4,7 @@ auth_admin();
 function k(string $key):string{return htmlspecialchars(setting($key));}
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
-    $allowed=['paymentpoint_bearer','paymentpoint_api_key','paymentpoint_webhook_secret','palmpay_bearer','palmpay_secret','palmpay_sandbox','palmpay_enabled','easeid_bearer','easeid_secret','autopilot_api_key','autopilot_mtn_number','autopilot_glo_number','autopilot_airtel_number','autopilot_9mobile_number','cashwyre_api_key','cashwyre_secret_key','cashwyre_base_url','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_name','smtp_from_email'];
+    $allowed=['vendor_upgrade_fee','paymentpoint_bearer','paymentpoint_api_key','paymentpoint_webhook_secret','palmpay_bearer','palmpay_secret','palmpay_merchant_id','palmpay_sandbox','palmpay_enabled','palmpay_dynamic_enabled','palmpay_payout_enabled','easeid_bearer','easeid_secret','autopilot_api_key','autopilot_mtn_number','autopilot_glo_number','autopilot_airtel_number','autopilot_9mobile_number','cashwyre_api_key','cashwyre_secret_key','cashwyre_base_url','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_name','smtp_from_email'];
     foreach($_POST as $key=>$val){if(in_array($key,$allowed)){setting_set($key,trim((string)$val));}}
     json_response(['success'=>true,'message'=>'Settings saved successfully']);
 }
@@ -21,6 +21,14 @@ $csrf=admin_csrf();
 <div class="page-head"><div><h2>API Settings</h2><p>Global API credentials for payment & verification providers</p></div></div>
 
 <div class="row-2col">
+  <!-- GENERAL SYSTEM SETTINGS -->
+  <div class="card"><div class="card-header"><h3>⚙️ General Settings</h3></div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group"><label>Vendor Upgrade Fee (₦)</label><input type="number" step="0.01" class="form-control" id="vendor_upgrade_fee" value="<?=k('vendor_upgrade_fee')?>" placeholder="e.g. 1000.00"></div>
+      <button class="btn-primary" onclick="saveMultiple(['vendor_upgrade_fee'])">Save</button>
+    </div>
+  </div>
+
   <!-- PAYMENTPOINT -->
   <div class="card"><div class="card-header"><h3>💰 PaymentPoint (Virtual Accounts)</h3></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
@@ -31,16 +39,6 @@ $csrf=admin_csrf();
     </div>
   </div>
 
-  <!-- PALMPAY -->
-  <div class="card"><div class="card-header"><h3>🌴 PalmPay (Transfers + Backup VA)</h3></div>
-    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
-      <div class="form-group"><label>Bearer Token</label><div class="api-input-wrap"><input type="password" class="form-control" id="palmpay_bearer" value="<?=k('palmpay_bearer')?>"><button type="button" class="eye-toggle" onclick="toggleVis('palmpay_bearer')">👁</button></div></div>
-      <div class="form-group"><label>Secret Key (webhook signature)</label><div class="api-input-wrap"><input type="password" class="form-control" id="palmpay_secret" value="<?=k('palmpay_secret')?>"><button type="button" class="eye-toggle" onclick="toggleVis('palmpay_secret')">👁</button></div></div>
-      <div class="setting-row"><label style="font-size:13px;font-weight:600">Sandbox Mode</label><label class="toggle"><input type="checkbox" id="palmpay_sandbox" <?=k('palmpay_sandbox')==='1'?'checked':''?>><span class="slider"></span></label></div>
-      <div class="setting-row"><label style="font-size:13px;font-weight:600">Enable Backup VA</label><label class="toggle"><input type="checkbox" id="palmpay_enabled" <?=k('palmpay_enabled')==='1'?'checked':''?>><span class="slider"></span></label></div>
-      <button class="btn-primary" onclick="savePalmPay()">Save</button>
-    </div>
-  </div>
 
   <!-- EASEID -->
   <div class="card"><div class="card-header"><h3>🪪 EaseID (NIN/BVN KYC)</h3></div>
@@ -94,7 +92,7 @@ const CSRF='<?=$csrf?>';
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');}
 function toggleVis(id){const e=document.getElementById(id);e.type=e.type==='password'?'text':'password';}
 async function saveMultiple(ids){const fd=new FormData();fd.append('csrf',CSRF);ids.forEach(id=>fd.append(id,document.getElementById(id).value));const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);}
-async function savePalmPay(){const fd=new FormData();fd.append('csrf',CSRF);['palmpay_bearer','palmpay_secret'].forEach(k=>fd.append(k,document.getElementById(k).value));fd.append('palmpay_sandbox',document.getElementById('palmpay_sandbox').checked?'1':'0');fd.append('palmpay_enabled',document.getElementById('palmpay_enabled').checked?'1':'0');const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);}
+
 function showToast(msg,ok){const t=document.getElementById('toast');t.textContent=msg;t.className='save-toast show '+(ok?'ok':'err');setTimeout(()=>t.classList.remove('show'),2500);}
 </script>
 </body></html>

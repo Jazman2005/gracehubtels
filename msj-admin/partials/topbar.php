@@ -12,3 +12,16 @@ $title=$page_titles[basename($_SERVER['PHP_SELF'])]??'Admin Panel';
     <div class="admin-avatar"><?=strtoupper(substr($admin['username']??'A',0,1))?></div>
   </div>
 </header>
+<script>
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const main = document.querySelector('.main-wrap');
+  if(sb) sb.classList.toggle('collapsed');
+  if(main) main.classList.toggle('expanded');
+}
+// For mobile responsive toggle
+function toggleMobileSidebar() {
+  const sb = document.getElementById('sidebar');
+  if(sb) sb.classList.toggle('open');
+}
+</script>
