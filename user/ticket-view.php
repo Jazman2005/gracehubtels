@@ -8,12 +8,14 @@ $name = explode(' ', $user['full_name'])[0];
 $ticket_id = (int)($_GET['id']??0);
 if(!$ticket_id) { header("Location: support.php"); exit; }
 
+$csrf = csrf_token();
 $ticket = db()->prepare("SELECT * FROM tickets WHERE id=? AND user_id=?");
 $ticket->execute([$ticket_id, $uid]);
 $ticket = $ticket->fetch();
 if(!$ticket) { header("Location: support.php"); exit; }
 
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
+    if(!verify_csrf($_POST['csrf']??'')){echo json_encode(['success'=>false,'message'=>'Invalid token']);exit;}
     $action = $_POST['action']??'';
     if($action==='reply'){
         $message = trim($_POST['message']??'');
@@ -65,7 +67,7 @@ $badgeColor = $ticket['status'] === 'open' ? 'bg-red-100 text-red-600' : ($ticke
         <div class="flex <?= $is_user ? 'justify-end' : 'justify-start' ?>">
             <div class="max-w-[85%] sm:max-w-[70%]">
                 <div class="text-[11px] text-slate-400 mb-1 <?= $is_user ? 'text-right mr-1' : 'ml-1' ?>">
-                    <?= $is_user ? 'You' : 'Support Admin' ?> • <?= date('h:i A', strtotime($m['created_at'])) ?>
+                    <?= $is_user ? 'You' : 'Support Admin' ?> &bull; <?= date('h:i A', strtotime($m['created_at'])) ?>
                 </div>
                 <div class="<?= $is_user ? 'bg-brand-navy text-white rounded-2xl rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-sm card-shadow-sm' ?> px-4 py-3 text-sm leading-relaxed shadow-sm">
                     <?= nl2br(htmlspecialchars($m['message'])) ?>
@@ -92,13 +94,14 @@ $badgeColor = $ticket['status'] === 'open' ? 'bg-red-100 text-red-600' : ($ticke
 </div>
 
 <script>
+const CSRF='<?=$csrf?>';
 const chat = document.getElementById('chatWindow');
 if(chat) chat.scrollTop = chat.scrollHeight;
 
 async function sendReply() {
     const m = document.getElementById('replyMsg').value;
     if(!m.trim()) return;
-    const fd = new FormData(); fd.append('action','reply'); fd.append('message',m);
+    const fd = new FormData(); fd.append('csrf',CSRF); fd.append('action','reply'); fd.append('message',m);
     const r = await fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
     if(r.success) location.reload();
 }
@@ -117,3 +120,4 @@ function OnInput() {
 </script>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>
+

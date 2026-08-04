@@ -1,132 +1,112 @@
 <?php
-// webhook/moniepoint/index.php
-// Handles Monnify webhooks (used for Moniepoint virtual accounts)
 require_once __DIR__ . '/../../user/core/db.php';
-require_once __DIR__ . '/../../user/core/dashboard.php';
 
-header('Content-Type: application/json');
+$payload = file_get_contents('php://input');
+log_write('webhook_moniepoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['message' => 'Method not allowed']);
-    exit;
-}
-
-$raw = file_get_contents('php://input');
-$signature = $_SERVER['HTTP_MONNIFY_SIGNATURE'] ?? '';
-$ip_address = get_ip(); 
 $secret = setting('gw_moniepoint_secret');
+$signature = $_SERVER['HTTP_X_MONIEPOINT_SIGNATURE'] ?? '';
 
-$valid = false;
-if (!empty($secret) && !empty($signature)) {
-    $hashkey = hash_hmac('sha512', $raw, $secret);
-    $valid = hash_equals($hashkey, $signature);
+if (empty($secret)) {
+    log_write('webhook_moniepoint', 'ERROR', 'Webhook secret not configured — rejecting');
+    http_response_code(500);
+    exit('Webhook secret not configured');
 }
-
-$payload = json_decode($raw, true);
-
-$event_type = $payload['eventType'] ?? '';
-if ($event_type !== 'SUCCESSFUL_TRANSACTION') {
-    // Only process successful transactions
-    http_response_code(200);
-    echo json_encode(['message' => 'ignored event type']);
-    exit;
-}
-
-$event_data = $payload['eventData'] ?? [];
-$amount = isset($event_data['settlementAmount']) ? floatval($event_data['settlementAmount']) : (isset($event_data['amountPaid']) ? floatval($event_data['amountPaid']) : 0);
-$reference = $event_data['transactionReference'] ?? '';
-$account_ref = $event_data['product']['reference'] ?? ''; 
-$sender = $event_data['customer']['name'] ?? 'Unknown';
-
-// Log the incoming webhook
-db()->prepare(
-    "INSERT INTO webhook_logs (provider,event_type,transaction_ref,account_number,amount,payload,signature_valid,ip_address)
-     VALUES ('moniepoint',?,?,?,?,?,?,?)"
-)->execute([$event_type, $reference, $account_ref, $amount, $raw, (int)$valid, $ip_address]);
-
-
-if (!$valid) {
+if (empty($payload) || empty($signature)) {
     http_response_code(400);
-    echo json_encode(['message' => 'Permission denied, invalid signature.']);
-    exit;
+    exit('Missing payload or signature');
 }
 
-if (!$payload || $amount <= 0 || empty($reference) || empty($account_ref)) {
+$hash = hash_hmac('sha512', $payload, $secret);
+if (!hash_equals($hash, $signature)) {
+    log_write('webhook_moniepoint', 'ERROR', 'Invalid signature', ['expected' => $hash, 'got' => $signature]);
     http_response_code(400);
-    echo json_encode(['message' => 'Invalid JSON or parameters']);
-    exit;
+    exit('Invalid signature');
 }
 
-// Duplicate check
-$dup = db()->prepare("SELECT id FROM transactions WHERE external_ref=? LIMIT 1");
-$dup->execute([$reference]);
-if ($dup->fetch()) {
-    http_response_code(200);
-    echo json_encode(['message' => 'transaction already exist']);
-    exit;
+$data = json_decode($payload, true);
+if (!$data || !isset($data['eventType'])) {
+    http_response_code(400);
+    exit('Invalid payload');
 }
 
-// Find user by account reference (product reference)
-$va = db()->prepare("SELECT user_id, account_number FROM virtual_accounts WHERE account_reference=? AND is_active=1 LIMIT 1");
-$va->execute([$account_ref]);
-$va = $va->fetch();
+if ($data['eventType'] === 'SUCCESSFUL_TRANSACTION') {
+    $eventData = $data['eventData'];
+    $ref = $eventData['transactionReference'] ?? '';
+    $settled = (float)($eventData['settlementAmount'] ?? 0);
+    $amount = (float)($eventData['amountPaid'] ?? 0);
+    $accountReference = $eventData['product']['reference'] ?? null;
 
-if (!$va) {
-    db()->prepare("UPDATE webhook_logs SET error_message='No user found for account reference' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-       ->execute([$reference]);
-    http_response_code(200);
-    echo json_encode(['message' => 'success']); // return 200 so they stop retrying
-    exit;
-}
-
-$user_id = (int)$va['user_id'];
-$acct_no = $va['account_number'];
-
-// Fee Calculation
-$fee_type = setting('gw_moniepoint_fee_type', 'flat');
-$fee_val  = (float)setting('gw_moniepoint_fee_value', '0');
-
-$fee = 0;
-if ($fee_val > 0) {
-    if ($fee_type === 'percent') {
-        $fee = ($amount * $fee_val) / 100;
-    } else {
-        $fee = $fee_val;
+    if ($ref === '') {
+        http_response_code(400);
+        exit('Missing transactionReference');
     }
-}
 
-$credit_amount = max(0, $amount - $fee);
+    // Check if transaction already processed. credit_wallet() always mints its own
+    // MSJ... ref for transaction_ref, so that column never equals Moniepoint's
+    // $ref — checking it here was a no-op. idempotency_key is what credit_wallet()
+    // actually stores this under, and is also the atomic guard below against a
+    // concurrent replay of the same webhook.
+    $idem_key = 'moniepoint:' . $ref;
+    $stmt = db()->prepare("SELECT id FROM transactions WHERE idempotency_key = ? LIMIT 1");
+    $stmt->execute([$idem_key]);
+    if ($stmt->fetch()) {
+        http_response_code(200);
+        exit('Already processed');
+    }
 
-if ($credit_amount <= 0) {
-    db()->prepare("UPDATE webhook_logs SET error_message='Amount less than or equal to fee' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-       ->execute([$reference]);
+    // Find user by account reference
+    $stmt = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_reference = ? AND provider = 'moniepoint' LIMIT 1");
+    $stmt->execute([$accountReference]);
+    $acc = $stmt->fetch();
+
+    if (!$acc) {
+        // Fallback to checking by account number if accountReference is not reliable
+        $accountNumber = $eventData['destinationAccountInformation']['accountNumber'] ?? null;
+        if ($accountNumber) {
+            $stmt = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number = ? AND provider = 'moniepoint' LIMIT 1");
+            $stmt->execute([$accountNumber]);
+            $acc = $stmt->fetch();
+        }
+    }
+
+    if (!$acc) {
+        log_write('webhook_moniepoint', 'ERROR', 'Account not found', ['ref' => $accountReference]);
+        http_response_code(404);
+        exit('Account not found');
+    }
+
+    $user_id = $acc['user_id'];
+
+    // Charge fee if applicable
+    $fee_type = setting('gw_moniepoint_fee_type', 'percent');
+    $fee_value = (float)setting('gw_moniepoint_fee_value', '1');
+    if ($fee_type === 'flat') {
+        $fee = min($fee_value, $settled * 0.5);
+    } else {
+        $fee = ($settled * $fee_value) / 100;
+    }
+    $credit_amount = $settled - $fee;
+    if ($credit_amount <= 0) {
+        http_response_code(200);
+        exit('Amount too low after fees');
+    }
+
+    $res = credit_wallet($user_id, $credit_amount, 'wallet_funding', 'Moniepoint Funding - ' . $ref, ['ref' => $ref], $idem_key);
+
+    if ($res['success']) {
+        notify_user($user_id, 'Wallet Funded', "Your wallet has been funded with ₦" . number_format($credit_amount, 2) . " via Moniepoint", 'info', null, $res['balance_before'], $res['balance_after']);
+        http_response_code(200);
+        exit('Success');
+    } elseif (!empty($res['duplicate'])) {
+        http_response_code(200);
+        exit('Already processed');
+    } else {
+        log_write('webhook_moniepoint', 'ERROR', 'Failed to credit', ['res' => $res]);
+        http_response_code(500);
+        exit('Failed to credit');
+    }
+} else {
     http_response_code(200);
-    echo json_encode(['message' => 'fee too high']);
-    exit;
+    exit('Unhandled event type');
 }
-
-$desc_msg = "Wallet funded via Moniepoint - from {$sender}";
-if ($fee > 0) $desc_msg .= " (Fee: ₦".number_format($fee,2).")";
-
-$result  = credit_wallet($user_id, $credit_amount, 'wallet_funding', $desc_msg, [
-    'provider'       => 'moniepoint',
-    'external_ref'   => $reference,
-    'sender'         => $sender,
-    'account_number' => $acct_no,
-]);
-
-if ($result['success']) {
-    // Tag with external ref
-    db()->prepare("UPDATE transactions SET external_ref=?, provider='moniepoint' WHERE transaction_ref=? LIMIT 1")
-       ->execute([$reference, $result['ref']]);
-    db()->prepare("UPDATE webhook_logs SET processed=1 WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-       ->execute([$reference]);
-
-    // Notify user
-    db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-       ->execute([$user_id, '💰 Wallet Funded', "₦".number_format($credit_amount,2)." credited to your wallet via Moniepoint.", 'success']);
-}
-
-http_response_code(200);
-echo json_encode(['message' => 'success']);

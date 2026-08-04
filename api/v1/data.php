@@ -21,12 +21,17 @@ if (empty($input['network']) || empty($input['phone']) || empty($input['plan_id'
 $res = process_data((int)$user['id'], $input);
 
 if ($res['success']) {
+    $u_bal = db()->prepare("SELECT wallet_balance FROM users WHERE id=?");
+    $u_bal->execute([$user['id']]);
+    $updated = $u_bal->fetch();
     echo json_encode([
         'status' => 'success',
         'message' => $res['message'],
         'data' => [
             'reference' => $res['ref'] ?? null,
-            'cashback_earned' => $res['cashback'] ?? 0
+            'cashback_earned' => $res['cashback'] ?? 0,
+            'balance_before' => (float)$user['wallet_balance'],
+            'balance_after' => (float)($updated['wallet_balance'] ?? 0)
         ]
     ]);
 } else {

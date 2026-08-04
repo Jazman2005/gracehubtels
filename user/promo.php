@@ -34,14 +34,19 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
             db()->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=?")->execute([$promo['id']]);
             
             // Credit wallet
-            credit_wallet($uid, $promo['amount'], 'promo_claim', "Claimed Promo Code: $code");
+            $credit = credit_wallet($uid, $promo['amount'], 'promo_claim', "Claimed Promo Code: $code");
+            if (!$credit['success']) {
+                throw new Exception($credit['message']);
+            }
             
             db()->commit();
             echo json_encode(['success'=>true,'message'=>"Promo code claimed! ₦".number_format($promo['amount'],2)." has been added to your wallet."]);
             exit;
         } catch(Exception $e) {
-            db()->rollBack();
-            echo json_encode(['success'=>false,'message'=>'An error occurred while claiming.']);
+            if(db()->inTransaction()) {
+                db()->rollBack();
+            }
+            echo json_encode(['success'=>false,'message'=>'An error occurred while claiming: '.$e->getMessage()]);
             exit;
         }
     }
@@ -56,10 +61,22 @@ include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php'; 
 ?>
 
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-800">Claim Promo Code</h2>
-    <p class="text-slate-500 mt-1">Have a voucher or promo code? Enter it below to claim your bonus.</p>
-</div>
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-4">
+            <a href="/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Claim Promo Code</h1>
+                <p class="text-sm text-slate-500">Have a voucher or promo code? Enter it below to claim your bonus.</p>
+            </div>
+        </div>
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
+            ₦<?=number_format((float)$user['wallet_balance'],2)?>
+        </div>
+    </div>
 
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -107,15 +124,16 @@ include __DIR__ . '/includes/sidebar.php';
     </div>
 
 </div>
+</div>
 
 <script>
 async function claimPromo(){
   const c=document.getElementById('promo_code').value;
-  if(!c)return alert('Please enter a code');
+  if(!c)return Swal.fire('Notice', 'Please enter a code', 'info');
   const fd=new FormData();fd.append('action','claim_promo');fd.append('code',c);
   const r=await fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
-  if(r.success) { alert(r.message); location.reload(); }
-  else alert(r.message);
+  if(r.success) { showAlert(r.message, 'Success', 'check-circle', 'text-emerald-500'); location.reload(); }
+  else showAlert(r.message, 'Error', 'exclamation-circle', 'text-red-500');
 }
 </script>
 

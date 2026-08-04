@@ -1,0 +1,5 @@
+# Deny access to PHP error log
+<FilesMatch "^error_log$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>

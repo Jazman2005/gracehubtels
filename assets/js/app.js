@@ -1,4 +1,4 @@
-// MsjPay Global Application Logic
+// Gracehubtels Global Application Logic
 document.addEventListener("DOMContentLoaded", () => {
     // UI Helpers
     window.toggleBal = function() {
@@ -104,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
         fd.append('csrf_token', document.getElementById('csrfF')?.value || '');
 
         try {
-            const url = location.pathname.includes('dashboard') ? '/msjpay/user/profile.php' : '';
+            const url = location.pathname.includes('dashboard') ? '/user/profile.php' : '';
             const res = await fetch(url, { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd });
             const data = await res.json();
             if(data.success) {
@@ -332,7 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const fd = new FormData(form);
         try {
-            const res = await fetch('/msjpay/user/profile.php', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd });
+            const res = await fetch('/user/profile.php', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd });
             const data = await res.json();
             if(data.success) {
                 userHasPin = true;

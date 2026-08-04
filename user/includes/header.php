@@ -6,8 +6,8 @@ $page_title = $page_title ?? 'Dashboard';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($page_title) ?> - MsjPay</title>
-    <link rel="icon" type="image/png" href="/msjpay/assets/images/msjpay-favicon.png">
+    <title><?= htmlspecialchars($page_title) ?> - Gracehubtels</title>
+    <link rel="icon" type="image/png" href="/gracehubtels/assets/images/gracehubtels-favicon.png">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>

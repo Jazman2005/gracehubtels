@@ -12,7 +12,7 @@ $ip = get_ip();
 $sig = $_SERVER['HTTP_X_AUTOPILOT_SIGNATURE'] ?? $_SERVER['HTTP_X_SIGNATURE'] ?? '';
 $secret = setting('autopilot_api_key');
 
-$valid = true; // Default allow if no secret configured (early integration / sandbox)
+$valid = false;
 if (!empty($secret) && !empty($sig)) {
     $expected = hash_hmac('sha256', $raw, $secret);
     $valid = hash_equals($expected, $sig);
@@ -20,7 +20,7 @@ if (!empty($secret) && !empty($sig)) {
 
 $payload = json_decode($raw, true);
 $event = $payload['event'] ?? $payload['status'] ?? '';
-$tx_ref = $payload['reference'] ?? $payload['transaction_ref'] ?? $payload['customerReference'] ?? '';
+$tx_ref = $payload['reference'] ?? $payload['transaction_ref'] ?? $payload['ref'] ?? $payload['request_ref'] ?? $payload['customerReference'] ?? $payload['tx_ref'] ?? '';
 $amount = (float)($payload['amount'] ?? $payload['cashAmount'] ?? 0);
 
 db()->prepare(
@@ -54,10 +54,17 @@ $req->execute([$tx_ref]);
 $row = $req->fetch();
 
 if (!$row) {
-    db()->prepare("UPDATE webhook_logs SET error_message='No matching pending A2C request' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-        ->execute([$tx_ref]);
+    // Try to find by api_ref stored in provider_response
+    $fallback = db()->prepare("SELECT * FROM airtime_to_cash WHERE provider_response LIKE ? AND status IN ('pending','processing') LIMIT 1");
+    $fallback->execute(['%' . $tx_ref . '%']);
+    $row = $fallback->fetch();
+}
+if (!$row) {
+    $err = 'No matching pending A2C request. ref=' . $tx_ref;
+    db()->prepare("UPDATE webhook_logs SET error_message=? WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
+        ->execute([$err, $tx_ref]);
     http_response_code(200);
-    echo json_encode(['status' => 'not_found']);
+    echo json_encode(['status' => 'not_found', 'ref' => $tx_ref]);
     exit;
 }
 

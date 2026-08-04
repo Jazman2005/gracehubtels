@@ -15,3 +15,135 @@
 [2026-06-21 15:48:28] [ERROR] [::1] VA_PAYMENTPOINT_NOT_CONFIGURED
 [2026-06-21 15:48:28] [ERROR] [::1] VA_PAYMENTPOINT_FAILED | {"uid":4,"message":"PaymentPoint not configured"}
 [2026-06-21 15:48:28] [INFO] [::1] VA_CREATE_END | {"uid":4,"success":false,"accounts_created":0}
+[2026-06-23 18:24:24] [INFO] [::1] VA_CREATE_START | {"uid":5}
+[2026-06-23 18:24:24] [INFO] [::1] VA_CREATE_END | {"uid":5,"success":false,"accounts_created":0}
+[2026-06-23 23:28:25] [INFO] [::1] VA_CREATE_START | {"uid":5}
+[2026-06-23 23:28:25] [INFO] [::1] VA_CREATE_END | {"uid":5,"success":false,"accounts_created":0}
+[2026-06-27 11:06:25] [INFO] [102.89.32.130] VA_CREATE_START | {"uid":15}
+[2026-06-27 11:06:25] [INFO] [102.89.32.130] VA_PAYMENTPOINT_REQUEST | {"uid":"15","email":"ibadiaran@gmail.com","bankCode":["20946","20897"]}
+[2026-06-27 11:06:33] [INFO] [102.89.32.130] VA_PAYMENTPOINT_RESPONSE | {"uid":"15","http_code":201,"status":"success","keys":["status","message","customer","business","bankAccounts","errors"],"errors":["Failed to create reserved account for bank code 20897."],"bank_count":1,"sample_acct_keys":["bankCode","accountNumber","accountName","bankName","Reserved_Account_Id"],"customer_keys":["customer_id","customer_name","customer_email","customer_phone_number"]}
+[2026-06-27 11:06:33] [ERROR] [102.89.32.130] VA_PAYMENTPOINT_BANK_ERRORS | {"uid":"15","errors":["Failed to create reserved account for bank code 20897."]}
+[2026-06-27 11:06:33] [INFO] [102.89.32.130] VA_ACCOUNT_SAVED | {"uid":15,"provider":"paymentpoint","account":"6622679237"}
+[2026-06-27 11:06:33] [INFO] [102.89.32.130] VA_PAYMENTPOINT_SUCCESS | {"uid":"15","accounts_count":1}
+[2026-06-27 11:06:33] [INFO] [102.89.32.130] VA_PAYVESSEL_REQUEST | {"uid":"15","email":"ibadiaran@gmail.com"}
+[2026-06-27 11:06:34] [INFO] [102.89.32.130] VA_PAYVESSEL_RESPONSE | {"uid":"15","http_code":200,"status":true}
+[2026-06-27 11:06:34] [INFO] [102.89.32.130] VA_ACCOUNT_SAVED | {"uid":15,"provider":"payvessel","account":"6608242367"}
+[2026-06-27 11:06:34] [INFO] [102.89.32.130] VA_ACCOUNT_SAVED | {"uid":15,"provider":"payvessel","account":"6616475098"}
+[2026-06-27 11:06:34] [INFO] [102.89.32.130] VA_PAYVESSEL_SUCCESS | {"uid":"15","accounts_created":2}
+[2026-06-27 11:06:34] [INFO] [102.89.32.130] VA_CREATE_END | {"uid":15,"success":true,"accounts_created":2}
+[2026-06-27 11:07:37] [INFO] [102.89.32.130] VA_PAYMENTPOINT_SINGLE | {"uid":15,"bankCode":"20946"}
+[2026-06-27 11:07:42] [INFO] [102.89.32.130] VA_ACCOUNT_EXISTS | {"uid":15,"account":"6622679237"}
+[2026-06-27 11:07:42] [INFO] [102.89.32.130] VA_PAYMENTPOINT_SINGLE_SUCCESS | {"uid":15,"bank":"20946"}
+[2026-06-27 20:44:38] [INFO] [151.254.9.154] VA_CREATE_START | {"uid":16}
+[2026-06-27 20:44:38] [INFO] [151.254.9.154] VA_PAYMENTPOINT_REQUEST | {"uid":"16","email":"ask4all1@gmail.com","bankCode":["20946","20897"]}
+[2026-06-27 20:44:46] [INFO] [151.254.9.154] VA_PAYMENTPOINT_RESPONSE | {"uid":"16","http_code":201,"status":"success","keys":["status","message","customer","business","bankAccounts","errors"],"errors":["Failed to create reserved account for bank code 20897."],"bank_count":1,"sample_acct_keys":["bankCode","accountNumber","accountName","bankName","Reserved_Account_Id"],"customer_keys":["customer_id","customer_name","customer_email","customer_phone_number"]}
+[2026-06-27 20:44:46] [ERROR] [151.254.9.154] VA_PAYMENTPOINT_BANK_ERRORS | {"uid":"16","errors":["Failed to create reserved account for bank code 20897."]}
+[2026-06-27 20:44:46] [INFO] [151.254.9.154] VA_ACCOUNT_SAVED | {"uid":16,"provider":"paymentpoint","account":"6657604866"}
+[2026-06-27 20:44:46] [INFO] [151.254.9.154] VA_PAYMENTPOINT_SUCCESS | {"uid":"16","accounts_count":1}
+[2026-06-27 20:44:46] [INFO] [151.254.9.154] VA_PAYVESSEL_REQUEST | {"uid":"16","email":"ask4all1@gmail.com"}
+[2026-06-27 20:44:48] [INFO] [151.254.9.154] VA_PAYVESSEL_RESPONSE | {"uid":"16","http_code":200,"status":true}
+[2026-06-27 20:44:48] [INFO] [151.254.9.154] VA_ACCOUNT_SAVED | {"uid":16,"provider":"payvessel","account":"6689389403"}
+[2026-06-27 20:44:48] [INFO] [151.254.9.154] VA_ACCOUNT_SAVED | {"uid":16,"provider":"payvessel","account":"6616493407"}
+[2026-06-27 20:44:48] [INFO] [151.254.9.154] VA_PAYVESSEL_SUCCESS | {"uid":"16","accounts_created":2}
+[2026-06-27 20:44:48] [INFO] [151.254.9.154] VA_CREATE_END | {"uid":16,"success":true,"accounts_created":2}
+[2026-06-29 08:00:27] [INFO] [197.210.71.162] VA_PAYVESSEL_SINGLE | {"uid":10,"bankCode":"120001"}
+[2026-06-29 08:00:28] [INFO] [197.210.71.162] VA_ACCOUNT_SAVED | {"uid":10,"provider":"payvessel","account":"5289458096"}
+[2026-06-29 08:00:28] [INFO] [197.210.71.162] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":10,"bank":"120001"}
+[2026-06-29 11:56:04] [INFO] [102.88.115.186] VA_CREATE_START | {"uid":17}
+[2026-06-29 11:56:04] [INFO] [102.88.115.186] VA_PAYMENTPOINT_REQUEST | {"uid":"17","email":"testaaccurate234@gmail.com","bankCode":["20946","20897"]}
+[2026-06-29 11:56:11] [INFO] [102.88.115.186] VA_PAYMENTPOINT_RESPONSE | {"uid":"17","http_code":201,"status":"success","keys":["status","message","customer","business","bankAccounts","errors"],"errors":["Failed to create reserved account for bank code 20897."],"bank_count":1,"sample_acct_keys":["bankCode","accountNumber","accountName","bankName","Reserved_Account_Id"],"customer_keys":["customer_id","customer_name","customer_email","customer_phone_number"]}
+[2026-06-29 11:56:11] [ERROR] [102.88.115.186] VA_PAYMENTPOINT_BANK_ERRORS | {"uid":"17","errors":["Failed to create reserved account for bank code 20897."]}
+[2026-06-29 11:56:11] [INFO] [102.88.115.186] VA_ACCOUNT_SAVED | {"uid":17,"provider":"paymentpoint","account":"6645460151"}
+[2026-06-29 11:56:11] [INFO] [102.88.115.186] VA_PAYMENTPOINT_SUCCESS | {"uid":"17","accounts_count":1}
+[2026-06-29 11:56:11] [INFO] [102.88.115.186] VA_PAYVESSEL_REQUEST | {"uid":"17","email":"testaaccurate234@gmail.com"}
+[2026-06-29 11:56:12] [INFO] [102.88.115.186] VA_PAYVESSEL_RESPONSE | {"uid":"17","http_code":200,"status":true}
+[2026-06-29 11:56:12] [INFO] [102.88.115.186] VA_ACCOUNT_SAVED | {"uid":17,"provider":"payvessel","account":"6667525659"}
+[2026-06-29 11:56:12] [INFO] [102.88.115.186] VA_ACCOUNT_SAVED | {"uid":17,"provider":"payvessel","account":"6616556283"}
+[2026-06-29 11:56:12] [INFO] [102.88.115.186] VA_PAYVESSEL_SUCCESS | {"uid":"17","accounts_created":2}
+[2026-06-29 11:56:12] [INFO] [102.88.115.186] VA_CREATE_END | {"uid":17,"success":true,"accounts_created":2}
+[2026-06-29 15:09:05] [INFO] [197.210.71.133] VA_PAYVESSEL_SINGLE | {"uid":10,"bankCode":"999991"}
+[2026-06-29 15:09:06] [INFO] [197.210.71.133] VA_ACCOUNT_SAVED | {"uid":10,"provider":"payvessel","account":"6686188518"}
+[2026-06-29 15:09:06] [INFO] [197.210.71.133] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":10,"bank":"999991"}
+[2026-06-29 15:41:44] [INFO] [197.210.71.133] VA_PAYMENTPOINT_SINGLE | {"uid":10,"bankCode":"20897"}
+[2026-06-29 15:41:50] [ERROR] [197.210.71.133] VA_PAYMENTPOINT_SINGLE_BANK_ERR | {"uid":10,"http_code":201,"errors":["Failed to create reserved account for bank code 20897."]}
+[2026-06-29 15:41:55] [INFO] [197.210.71.133] VA_PAYVESSEL_SINGLE | {"uid":10,"bankCode":"090175"}
+[2026-06-29 15:41:56] [ERROR] [197.210.71.133] VA_PAYVESSEL_SINGLE_FAIL | {"uid":10,"message":"Bank(s) Rubies MFB does not support static virtual account","response":{"success":false,"message":"Bank(s) Rubies MFB does not support static virtual account","details":[{"code":"invalid","detail":"Bank(s) Rubies MFB does not support static virtual account","attr":null}]}}
+[2026-06-29 15:46:20] [INFO] [197.210.71.133] VA_PAYVESSEL_SINGLE | {"uid":10,"bankCode":"090175"}
+[2026-06-29 15:46:22] [ERROR] [197.210.71.133] VA_PAYVESSEL_SINGLE_FAIL | {"uid":10,"message":"PayVessel API error","response":{"status":false,"service":"CREATE_VIRTUAL_ACCOUNT","business":"469E6D5C5F0B44A9B0A27DFB60501CDD","banks":[],"errors":[{"Rubies":"Insufficient funds."}]}}
+[2026-06-30 08:17:44] [INFO] [102.91.4.161] VA_PAYMENTPOINT_SINGLE | {"uid":9,"bankCode":"20897"}
+[2026-06-30 08:17:50] [ERROR] [102.91.4.161] VA_PAYMENTPOINT_SINGLE_BANK_ERR | {"uid":9,"http_code":201,"errors":["Failed to create reserved account for bank code 20897."]}
+[2026-06-30 08:17:56] [INFO] [102.91.4.161] VA_PAYVESSEL_SINGLE | {"uid":9,"bankCode":"999991"}
+[2026-06-30 08:17:57] [INFO] [102.91.4.161] VA_ACCOUNT_SAVED | {"uid":9,"provider":"payvessel","account":"6634367300"}
+[2026-06-30 08:17:57] [INFO] [102.91.4.161] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":9,"bank":"999991"}
+[2026-06-30 08:18:08] [INFO] [102.91.4.161] VA_PAYVESSEL_SINGLE | {"uid":9,"bankCode":"120001"}
+[2026-06-30 08:18:11] [INFO] [102.91.4.161] VA_ACCOUNT_SAVED | {"uid":9,"provider":"payvessel","account":"6616607738"}
+[2026-06-30 08:18:11] [INFO] [102.91.4.161] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":9,"bank":"120001"}
+[2026-06-30 08:18:24] [INFO] [102.91.4.161] VA_PAYVESSEL_SINGLE | {"uid":9,"bankCode":"090175"}
+[2026-06-30 08:18:26] [ERROR] [102.91.4.161] VA_PAYVESSEL_SINGLE_FAIL | {"uid":9,"message":"PayVessel API error","response":{"status":false,"service":"CREATE_VIRTUAL_ACCOUNT","business":"469E6D5C5F0B44A9B0A27DFB60501CDD","banks":[],"errors":[{"Rubies":"Insufficient funds."}]}}
+[2026-06-30 08:34:49] [INFO] [102.91.78.161] VA_PAYVESSEL_SINGLE | {"uid":10,"bankCode":"090175"}
+[2026-06-30 08:34:51] [ERROR] [102.91.78.161] VA_PAYVESSEL_SINGLE_FAIL | {"uid":10,"message":"PayVessel API error","response":{"status":false,"service":"CREATE_VIRTUAL_ACCOUNT","business":"469E6D5C5F0B44A9B0A27DFB60501CDD","banks":[],"errors":[{"Rubies":"Insufficient funds."}]}}
+[2026-06-30 08:36:28] [INFO] [105.113.58.131] VA_PAYVESSEL_SINGLE | {"uid":13,"bankCode":"090175"}
+[2026-06-30 08:36:29] [ERROR] [105.113.58.131] VA_PAYVESSEL_SINGLE_FAIL | {"uid":13,"message":"PayVessel API error","response":{"status":false,"service":"CREATE_VIRTUAL_ACCOUNT","business":"469E6D5C5F0B44A9B0A27DFB60501CDD","banks":[],"errors":[{"Rubies":"Insufficient funds."}]}}
+[2026-06-30 08:37:19] [INFO] [105.113.58.131] VA_PAYVESSEL_SINGLE | {"uid":13,"bankCode":"090175"}
+[2026-06-30 08:37:21] [ERROR] [105.113.58.131] VA_PAYVESSEL_SINGLE_FAIL | {"uid":13,"message":"PayVessel API error","response":{"status":false,"service":"CREATE_VIRTUAL_ACCOUNT","business":"469E6D5C5F0B44A9B0A27DFB60501CDD","banks":[],"errors":[{"Rubies":"Insufficient funds."}]}}
+[2026-06-30 08:37:23] [INFO] [105.113.58.131] VA_PAYVESSEL_SINGLE | {"uid":13,"bankCode":"999991"}
+[2026-06-30 08:37:24] [INFO] [105.113.58.131] VA_ACCOUNT_SAVED | {"uid":13,"provider":"payvessel","account":"6698587867"}
+[2026-06-30 08:37:24] [INFO] [105.113.58.131] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":13,"bank":"999991"}
+[2026-06-30 15:35:22] [INFO] [102.91.78.161] VA_CREATE_START | {"uid":18}
+[2026-06-30 15:35:22] [INFO] [102.91.78.161] VA_PAYMENTPOINT_REQUEST | {"uid":"18","email":"testuser2026@gracehubtels.com","bankCode":"20946"}
+[2026-06-30 15:35:23] [INFO] [102.91.78.161] VA_PAYMENTPOINT_RESPONSE | {"uid":"18","http_code":403,"status":"fail","keys":["status","message"],"errors":null,"bank_count":0,"sample_acct_keys":null,"customer_keys":null}
+[2026-06-30 15:35:23] [ERROR] [102.91.78.161] VA_PAYMENTPOINT_API_ERROR | {"uid":"18","message":"The bank code field must be an array.","response":{"status":"fail","message":"The bank code field must be an array."}}
+[2026-06-30 15:35:23] [ERROR] [102.91.78.161] VA_PAYMENTPOINT_FAILED | {"uid":18,"message":"The bank code field must be an array."}
+[2026-06-30 15:35:23] [INFO] [102.91.78.161] VA_PAYVESSEL_REQUEST | {"uid":"18","email":"testuser2026@gracehubtels.com"}
+[2026-06-30 15:35:25] [INFO] [102.91.78.161] VA_PAYVESSEL_RESPONSE | {"uid":"18","http_code":200,"status":true}
+[2026-06-30 15:35:25] [INFO] [102.91.78.161] VA_ACCOUNT_SAVED | {"uid":18,"provider":"payvessel","account":"6646816139"}
+[2026-06-30 15:35:25] [INFO] [102.91.78.161] VA_ACCOUNT_SAVED | {"uid":18,"provider":"payvessel","account":"6616626986"}
+[2026-06-30 15:35:25] [INFO] [102.91.78.161] VA_PAYVESSEL_SUCCESS | {"uid":"18","accounts_created":2}
+[2026-06-30 15:35:25] [INFO] [102.91.78.161] VA_CREATE_END | {"uid":18,"success":true,"accounts_created":1}
+[2026-06-30 18:55:49] [INFO] [102.88.113.183] VA_CREATE_START | {"uid":19}
+[2026-06-30 18:55:49] [INFO] [102.88.113.183] VA_PAYMENTPOINT_REQUEST | {"uid":"19","email":"ibrobk@gmail.com","bankCode":"20946"}
+[2026-06-30 18:55:49] [INFO] [102.88.113.183] VA_PAYMENTPOINT_RESPONSE | {"uid":"19","http_code":403,"status":"fail","keys":["status","message"],"errors":null,"bank_count":0,"sample_acct_keys":null,"customer_keys":null}
+[2026-06-30 18:55:49] [ERROR] [102.88.113.183] VA_PAYMENTPOINT_API_ERROR | {"uid":"19","message":"The bank code field must be an array.","response":{"status":"fail","message":"The bank code field must be an array."}}
+[2026-06-30 18:55:49] [ERROR] [102.88.113.183] VA_PAYMENTPOINT_FAILED | {"uid":19,"message":"The bank code field must be an array."}
+[2026-06-30 18:55:49] [INFO] [102.88.113.183] VA_PAYVESSEL_REQUEST | {"uid":"19","email":"ibrobk@gmail.com"}
+[2026-06-30 18:55:51] [INFO] [102.88.113.183] VA_PAYVESSEL_RESPONSE | {"uid":"19","http_code":200,"status":true}
+[2026-06-30 18:55:51] [INFO] [102.88.113.183] VA_ACCOUNT_SAVED | {"uid":19,"provider":"payvessel","account":"6610486016"}
+[2026-06-30 18:55:51] [INFO] [102.88.113.183] VA_ACCOUNT_SAVED | {"uid":19,"provider":"payvessel","account":"6616636488"}
+[2026-06-30 18:55:51] [INFO] [102.88.113.183] VA_PAYVESSEL_SUCCESS | {"uid":"19","accounts_created":2}
+[2026-06-30 18:55:51] [INFO] [102.88.113.183] VA_CREATE_END | {"uid":19,"success":true,"accounts_created":1}
+[2026-07-01 16:05:16] [INFO] [105.112.183.120] VA_CREATE_START | {"uid":20}
+[2026-07-01 16:05:16] [INFO] [105.112.183.120] VA_PAYVESSEL_REQUEST | {"uid":"20","email":"charlesclicks@gmail.com"}
+[2026-07-01 16:05:17] [INFO] [105.112.183.120] VA_PAYVESSEL_RESPONSE | {"uid":"20","http_code":200,"status":true}
+[2026-07-01 16:05:17] [INFO] [105.112.183.120] VA_ACCOUNT_SAVED | {"uid":20,"provider":"payvessel","account":"6696780692"}
+[2026-07-01 16:05:17] [INFO] [105.112.183.120] VA_ACCOUNT_SAVED | {"uid":20,"provider":"payvessel","account":"6616684953"}
+[2026-07-01 16:05:17] [INFO] [105.112.183.120] VA_PAYVESSEL_SUCCESS | {"uid":"20","accounts_created":2}
+[2026-07-01 16:05:17] [ERROR] [105.112.183.120] VA_MONNIFY_NOT_CONFIGURED
+[2026-07-01 16:05:17] [ERROR] [105.112.183.120] VA_MONNIFY_FAILED | {"uid":20,"message":"Monnify not configured completely"}
+[2026-07-01 16:05:17] [INFO] [105.112.183.120] VA_CREATE_END | {"uid":20,"success":true,"accounts_created":1}
+[2026-07-02 11:10:11] [INFO] [102.91.105.28] VA_CREATE_START | {"uid":21}
+[2026-07-02 11:10:11] [INFO] [102.91.105.28] VA_PAYVESSEL_REQUEST | {"uid":"21","email":"alhassansunusigaladima@gmail.com"}
+[2026-07-02 11:10:14] [INFO] [102.91.105.28] VA_PAYVESSEL_RESPONSE | {"uid":"21","http_code":200,"status":true}
+[2026-07-02 11:10:14] [INFO] [102.91.105.28] VA_ACCOUNT_SAVED | {"uid":21,"provider":"payvessel","account":"6675251419"}
+[2026-07-02 11:10:14] [INFO] [102.91.105.28] VA_ACCOUNT_SAVED | {"uid":21,"provider":"payvessel","account":"6616727388"}
+[2026-07-02 11:10:14] [INFO] [102.91.105.28] VA_PAYVESSEL_SUCCESS | {"uid":"21","accounts_created":2}
+[2026-07-02 11:10:14] [ERROR] [102.91.105.28] VA_MONNIFY_NOT_CONFIGURED
+[2026-07-02 11:10:14] [ERROR] [102.91.105.28] VA_MONNIFY_FAILED | {"uid":21,"message":"Monnify not configured completely"}
+[2026-07-02 11:10:14] [INFO] [102.91.105.28] VA_CREATE_END | {"uid":21,"success":true,"accounts_created":1}
+[2026-07-03 11:21:08] [INFO] [102.91.102.231] VA_PAYMENTPOINT_SINGLE | {"uid":23,"bankCode":"20946"}
+[2026-07-03 11:21:14] [INFO] [102.91.102.231] VA_ACCOUNT_SAVED | {"uid":23,"provider":"paymentpoint","account":"6643326618"}
+[2026-07-03 11:21:14] [INFO] [102.91.102.231] VA_PAYMENTPOINT_SINGLE_SUCCESS | {"uid":23,"bank":"20946"}
+[2026-07-03 11:21:23] [INFO] [102.91.102.231] VA_PAYVESSEL_SINGLE | {"uid":23,"bankCode":"999991"}
+[2026-07-03 11:21:24] [INFO] [102.91.102.231] VA_ACCOUNT_SAVED | {"uid":23,"provider":"payvessel","account":"6661904689"}
+[2026-07-03 11:21:24] [INFO] [102.91.102.231] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":23,"bank":"999991"}
+[2026-07-03 11:21:32] [INFO] [102.91.102.231] VA_PAYVESSEL_SINGLE | {"uid":23,"bankCode":"120001"}
+[2026-07-03 11:21:33] [INFO] [102.91.102.231] VA_ACCOUNT_SAVED | {"uid":23,"provider":"payvessel","account":"6616777462"}
+[2026-07-03 11:21:33] [INFO] [102.91.102.231] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":23,"bank":"120001"}
+[2026-07-03 17:33:10] [INFO] [102.91.103.250] VA_PAYMENTPOINT_SINGLE | {"uid":24,"bankCode":"20946"}
+[2026-07-03 17:33:14] [INFO] [102.91.103.250] VA_ACCOUNT_SAVED | {"uid":24,"provider":"paymentpoint","account":"6626166894"}
+[2026-07-03 17:33:14] [INFO] [102.91.103.250] VA_PAYMENTPOINT_SINGLE_SUCCESS | {"uid":24,"bank":"20946"}
+[2026-07-03 17:33:17] [INFO] [102.91.103.250] VA_PAYVESSEL_SINGLE | {"uid":24,"bankCode":"999991"}
+[2026-07-03 17:33:18] [INFO] [102.91.103.250] VA_ACCOUNT_SAVED | {"uid":24,"provider":"payvessel","account":"6686188518"}
+[2026-07-03 17:33:18] [INFO] [102.91.103.250] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":24,"bank":"999991"}
+[2026-07-03 17:33:21] [INFO] [102.91.103.250] VA_PAYVESSEL_SINGLE | {"uid":24,"bankCode":"120001"}
+[2026-07-03 17:33:23] [INFO] [102.91.103.250] VA_ACCOUNT_SAVED | {"uid":24,"provider":"payvessel","account":"6616791763"}
+[2026-07-03 17:33:23] [INFO] [102.91.103.250] VA_PAYVESSEL_SINGLE_SUCCESS | {"uid":24,"bank":"120001"}

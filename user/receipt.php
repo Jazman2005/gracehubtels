@@ -4,12 +4,11 @@ auth_user();
 $uid=(int)$_SESSION['user_id'];
 $ref=trim($_GET['ref']??'');
 
-if(!$ref){header('Location: /msjpay/user/transactions');exit;}
-// Server-side: only allow user to see their own transactions
+if(!$ref){header('Location: /user/transactions');exit;}
 $tx=db()->prepare("SELECT * FROM transactions WHERE transaction_ref=? AND user_id=? LIMIT 1");
 $tx->execute([$ref,$uid]);
 $tx=$tx->fetch();
-if(!$tx){header('Location: /msjpay/user/transactions');exit;}
+if(!$tx){header('Location: /user/transactions');exit;}
 
 $user=get_user($uid);
 
@@ -24,6 +23,8 @@ $cat_icons=[
     'recharge_card'=>['icon'=>'fas fa-print', 'color'=>'text-rose-500', 'bg'=>'bg-rose-100'],
     'data_card'=>['icon'=>'fas fa-ticket-alt', 'color'=>'text-cyan-500', 'bg'=>'bg-cyan-100'],
     'bank_transfer'=>['icon'=>'fas fa-university', 'color'=>'text-slate-700', 'bg'=>'bg-slate-200'],
+    'wallet_transfer'=>['icon'=>'fas fa-users', 'color'=>'text-blue-600', 'bg'=>'bg-blue-100'],
+    'withdrawal'=>['icon'=>'fas fa-money-bill-wave', 'color'=>'text-red-500', 'bg'=>'bg-red-100'],
     'cashback'=>['icon'=>'fas fa-gift', 'color'=>'text-pink-500', 'bg'=>'bg-pink-100'],
     'admin_credit'=>['icon'=>'fas fa-arrow-down', 'color'=>'text-green-500', 'bg'=>'bg-green-100'],
     'admin_debit'=>['icon'=>'fas fa-arrow-up', 'color'=>'text-red-500', 'bg'=>'bg-red-100']
@@ -32,222 +33,351 @@ $cat_icons=[
 $is_cr=$tx['type']==='credit';
 $catConf = $cat_icons[$tx['category']] ?? ['icon'=>'fas fa-circle', 'color'=>'text-slate-500', 'bg'=>'bg-slate-100'];
 
-$scls = '';
-$stxt = ucfirst($tx['status']);
-switch($tx['status']) {
-    case 'success': $scls = 'text-emerald-600 bg-emerald-100 border-emerald-200'; break;
-    case 'pending': $scls = 'text-amber-600 bg-amber-100 border-amber-200'; break;
-    case 'failed': 
-    case 'reversed': $scls = 'text-rose-600 bg-rose-100 border-rose-200'; break;
-    default: $scls = 'text-slate-600 bg-slate-100 border-slate-200';
+$meta=json_decode($tx['meta']??'{}',true);
+$is_pending_approval = !empty($meta['pending_approval']) && $tx['status']==='pending';
+
+// Build a rich description from available data
+$cat=$tx['category'];
+$rich_desc = $tx['description'] ?? '';
+
+if ($cat === 'data') {
+    $plan_name = $meta['plan_name'] ?? '';
+    $plan_id_fallback = 0;
+    if (!$plan_name && !empty($meta['plan_id'])) {
+        $plan_id_fallback = (int)$meta['plan_id'];
+        $pn = db()->prepare("SELECT plan_name, data_size, validity FROM data_plans WHERE id=? LIMIT 1");
+        $pn->execute([$plan_id_fallback]);
+        $plan_row = $pn->fetch();
+        if ($plan_row) {
+            $plan_name = $plan_row['plan_name'] ?: '';
+            $meta['data_size'] = $plan_row['data_size'] ?: ($meta['data_size'] ?? '');
+            $meta['validity'] = $plan_row['validity'];
+        }
+    }
+    $dsize = $meta['data_size'] ?? '';
+    $valid = $meta['validity'] ?? '';
+    $parts = [$plan_name];
+    if ($dsize && stripos($plan_name, $dsize) === false) $parts[] = $dsize;
+    if ($valid) $parts[] = $valid;
+    $phone = $meta['phone'] ?? '';
+    $rich_desc = implode(' - ', $parts) . ($phone ? " for {$phone}" : '');
+} elseif ($cat === 'airtime') {
+    $net = $meta['network'] ?? '';
+    $phone = $meta['phone'] ?? '';
+    if ($net) $rich_desc = $net . ($phone ? " - {$phone}" : '');
+} elseif ($cat === 'cabletv') {
+    $sc = $meta['smartcard'] ?? '';
+    $prov = $meta['provider'] ?? '';
+    $plan_name = $meta['plan_name'] ?? $tx['description'] ?? '';
+    $rich_desc = $plan_name . ($sc ? " for {$sc}" : '');
+    if ($prov) $rich_desc .= " ({$prov})";
+} elseif ($cat === 'electricity') {
+    $meter = $meta['meter'] ?? '';
+    $disco = $meta['disco'] ?? '';
+    $mtype = $meta['type'] ?? '';
+    $rich_desc = ($disco ? "{$disco} " : '') . ($meter ? "Meter: {$meter}" : '');
+    if ($mtype) $rich_desc .= " ({$mtype})";
+    if (!empty($meta['token'])) $rich_desc .= '. Token: ' . $meta['token'];
+} elseif ($cat === 'bank_transfer') {
+    $payee = $meta['payee_name'] ?? '';
+    $acct = $meta['account_number'] ?? '';
+    $rich_desc = $payee ? "Transfer to {$payee}" : ($tx['description'] ?? '');
+    if ($acct) $rich_desc .= " ({$acct})";
+} elseif ($cat === 'wallet_transfer') {
+    $payee = $meta['payee_name'] ?? '';
+    $rich_desc = $payee ? "Transfer to {$payee}" : ($tx['description'] ?? 'Wallet Transfer');
+} elseif ($cat === 'withdrawal') {
+    // keep description as-is
+} elseif ($cat === 'exam_pin') {
+    $token = $meta['token'] ?? '';
+    if ($token) $rich_desc .= ' - PIN: ' . $token;
+} elseif ($cat === 'recharge_card') {
+}
+// Provider Ref is now explicitly handled in $details_map
+
+// Ensure tables exist and migrate old column names
+try { db()->exec("CREATE TABLE IF NOT EXISTS recharge_cards (id INT AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,transaction_ref VARCHAR(60) NOT NULL,network VARCHAR(20) NOT NULL,denomination DECIMAL(10,2) NOT NULL,quantity TINYINT(2) NOT NULL DEFAULT 1,amount DECIMAL(15,2) NOT NULL DEFAULT 0,name_on_card VARCHAR(100) DEFAULT NULL,pins_data TEXT DEFAULT NULL,status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,KEY transaction_ref (transaction_ref))"); } catch (\Throwable $e) {}
+try { db()->exec("CREATE TABLE IF NOT EXISTS data_cards (id INT AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,transaction_ref VARCHAR(60) NOT NULL,network VARCHAR(20) NOT NULL,plan_name VARCHAR(100) DEFAULT NULL,amount DECIMAL(15,2) NOT NULL DEFAULT 0,pins TEXT DEFAULT NULL,status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,KEY transaction_ref (transaction_ref))"); } catch (\Throwable $e) {}
+try { db()->exec("ALTER TABLE recharge_cards CHANGE COLUMN business_name name_on_card VARCHAR(100) DEFAULT NULL"); } catch (\Throwable $e) {}
+try { db()->exec("ALTER TABLE recharge_cards CHANGE COLUMN pins pins_data TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
+
+// Look up service-specific tables for extra details (pins for exam/recharge)
+$service_details = [];
+if ($cat === 'exam_pin') {
+    $ep = db()->prepare("SELECT pins_data FROM exam_pins WHERE transaction_ref=? LIMIT 1");
+    $ep->execute([$tx['transaction_ref']]);
+    $ep_row = $ep->fetch();
+    if ($ep_row) {
+        $pins = json_decode($ep_row['pins_data'], true);
+        if (is_array($pins)) $service_details['pins_list'] = $pins;
+    }
+}
+if ($cat === 'recharge_card') {
+    $rc = db()->prepare("SELECT pins_data FROM recharge_cards WHERE transaction_ref=? LIMIT 1");
+    $rc->execute([$tx['transaction_ref']]);
+    $rc_row = $rc->fetch();
+    if ($rc_row) {
+        $pins = json_decode($rc_row['pins_data'], true);
+        if (is_array($pins)) $service_details['pins_list'] = $pins;
+    }
+}
+if ($cat === 'data_card') {
+    $dc = db()->prepare("SELECT pins FROM data_cards WHERE transaction_ref=? LIMIT 1");
+    $dc->execute([$tx['transaction_ref']]);
+    $dc_row = $dc->fetch();
+    if ($dc_row) {
+        $pins = json_decode($dc_row['pins'], true);
+        if (is_array($pins)) $service_details['pins_list'] = $pins;
+    }
 }
 
-$meta=json_decode($tx['meta']??'{}',true);
+// Price breakdown for transparency
+$price_breakdown = [];
+if ($tx['type'] === 'debit' && $cat === 'data' && !empty($meta['plan_id'])) {
+    $pb = db()->prepare("SELECT selling_price, agent_price, vendor_price, cost_price FROM data_plans WHERE id=? LIMIT 1");
+    $pb->execute([(int)$meta['plan_id']]);
+    $plan_prices = $pb->fetch();
+    if ($plan_prices) {
+        $ut = $user['user_type'] ?? 'regular';
+        $price_breakdown['plan_selling'] = (float)$plan_prices['selling_price'];
+        $price_breakdown['user_type'] = $ut;
+        if ($ut === 'agent') $price_breakdown['tier_price'] = (float)$plan_prices['agent_price'];
+        elseif ($ut === 'vendor') $price_breakdown['tier_price'] = (float)$plan_prices['vendor_price'];
+        else $price_breakdown['tier_price'] = (float)$plan_prices['selling_price'];
+        $price_breakdown['charged'] = (float)$tx['amount'];
+    }
+}
 
-$page_title = 'Receipt'; 
-include __DIR__ . '/includes/header.php'; 
-include __DIR__ . '/includes/sidebar.php'; 
+$status_config = [
+    'success' => ['label' => 'Successful', 'icon' => 'fas fa-check-circle', 'color' => 'text-emerald-600', 'bg' => 'bg-emerald-50', 'border' => 'border-emerald-200', 'badge' => 'bg-emerald-500'],
+    'pending' => ['label' => $is_pending_approval ? 'Pending Approval' : 'Pending', 'icon' => 'fas fa-clock', 'color' => 'text-amber-600', 'bg' => 'bg-amber-50', 'border' => 'border-amber-200', 'badge' => 'bg-amber-500'],
+    'failed'  => ['label' => 'Failed', 'icon' => 'fas fa-times-circle', 'color' => 'text-rose-600', 'bg' => 'bg-rose-50', 'border' => 'border-rose-200', 'badge' => 'bg-rose-500'],
+    'reversed'=> ['label' => 'Reversed', 'icon' => 'fas fa-undo', 'color' => 'text-slate-600', 'bg' => 'bg-slate-50', 'border' => 'border-slate-200', 'badge' => 'bg-slate-500'],
+];
+$sc = $status_config[$tx['status']] ?? $status_config['pending'];
+
+$page_title = 'Receipt';
+include __DIR__ . '/includes/header.php';
+include __DIR__ . '/includes/sidebar.php';
 ?>
-
-<div class="max-w-xl mx-auto pb-10">
-    <!-- Header (Hidden on print) -->
-    <div class="flex items-center justify-between mb-6 print-hide">
-        <div class="flex items-center gap-4">
-            <a href="/msjpay/user/transactions" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
-                <i class="fas fa-arrow-left"></i>
-            </a>
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Receipt</h1>
-                <p class="text-sm text-slate-500">Transaction details</p>
-            </div>
-        </div>
+<div class="max-w-md mx-auto pb-12 pt-4">
+    <!-- Back Button -->
+    <div class="flex items-center justify-between mb-6 print-hide px-4">
+        <a href="/user/transactions" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-brand-orange transition-colors">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Receipt</span>
+        <button onclick="window.print()" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-brand-orange transition-colors">
+            <i class="fas fa-print"></i> Print
+        </button>
     </div>
 
     <!-- Receipt Card -->
-    <div class="bg-white rounded-3xl card-shadow overflow-hidden relative" id="receiptCard">
-        <!-- Top decorative edge -->
-        <div class="h-2 w-full bg-brand-navy"></div>
-        
-        <div class="p-8 pb-4 text-center border-b border-dashed border-slate-200 relative">
-            <!-- Cutout circles for receipt effect -->
-            <div class="absolute -left-3 -bottom-3 w-6 h-6 rounded-full bg-slate-50 border-r border-t border-slate-200 transform rotate-45"></div>
-            <div class="absolute -right-3 -bottom-3 w-6 h-6 rounded-full bg-slate-50 border-l border-t border-slate-200 transform -rotate-45"></div>
-            
-            <div class="w-20 h-20 rounded-2xl <?=$catConf['bg']?> <?=$catConf['color']?> flex items-center justify-center text-3xl mx-auto mb-4 border-4 border-white shadow-sm">
-                <i class="<?=$catConf['icon']?>"></i>
-            </div>
-            
-            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider mb-2"><?=ucwords(str_replace('_',' ',$tx['category']))?></h3>
-            <div class="text-4xl font-black <?= $is_cr ? 'text-emerald-600' : 'text-slate-800' ?> mb-3">
-                <?=$is_cr?'+':'-'?>₦<?=number_format((float)$tx['amount'],2)?>
-            </div>
-            <div class="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border <?=$scls?>">
-                <?=$stxt?>
-            </div>
-        </div>
-        
-        <div class="p-8 pt-4">
-            <div class="space-y-4">
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Description</span>
-                    <span class="text-sm font-bold text-slate-800 text-right max-w-[60%]"><?=htmlspecialchars($tx['description']??'')?></span>
-                </div>
-                
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Amount</span>
-                    <span class="text-sm font-bold text-slate-800">₦<?=number_format((float)$tx['amount'],2)?></span>
-                </div>
-                
-                <?php if((float)$tx['charge']>0):?>
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Charge</span>
-                    <span class="text-sm font-bold text-rose-600">₦<?=number_format((float)$tx['charge'],2)?></span>
-                </div>
-                <?php endif;?>
-                
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Balance Before</span>
-                    <span class="text-sm font-bold text-slate-800">₦<?=number_format((float)$tx['balance_before'],2)?></span>
-                </div>
-                
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Balance After</span>
-                    <span class="text-sm font-bold text-slate-800">₦<?=number_format((float)$tx['balance_after'],2)?></span>
-                </div>
-                
-                <?php if($tx['phone']):?>
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Phone</span>
-                    <span class="text-sm font-bold text-slate-800"><?=htmlspecialchars($tx['phone'])?></span>
-                </div>
-                <?php endif;?>
-                
-                <?php if($tx['network']):?>
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Network</span>
-                    <span class="text-sm font-bold text-slate-800"><?=htmlspecialchars($tx['network'])?><?=$tx['network_type']?' ('.$tx['network_type'].')':''?></span>
-                </div>
-                <?php endif;?>
-                
-                <?php if(!empty($meta['token'])):?>
-                <div class="flex flex-col gap-2 py-3 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Token</span>
-                    <div class="bg-amber-50 border border-amber-200 p-3 rounded-lg text-center">
-                        <span class="text-lg font-black text-brand-orange font-mono tracking-wider"><?=htmlspecialchars($meta['token'])?></span>
+    <div class="mx-4" id="receiptContainer">
+        <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden" id="receiptCard">
+            <!-- Status Stripe -->
+            <div class="h-2 w-full <?=$sc['bg']?>"></div>
+
+            <div class="p-6">
+                <!-- Header -->
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-brand-navy flex items-center justify-center text-white font-black text-xs">G</div>
+                        <div>
+                            <p class="text-sm font-bold text-slate-800">Gracehubtels</p>
+                            <p class="text-[10px] text-slate-400">Receipt</p>
+                        </div>
+                    </div>
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border <?=$sc['border']?> <?=$sc['color']?> <?=$sc['bg']?>">
+                        <i class="fas fa-circle text-[5px]"></i> <?=$sc['label']?>
                     </div>
                 </div>
-                <?php endif;?>
-                
-                <?php if($tx['provider_ref']):?>
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Provider Ref</span>
-                    <span class="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded"><?=htmlspecialchars(substr($tx['provider_ref'],0,20))?>...</span>
+
+                <!-- Details List -->
+                <div class="space-y-0 divide-y divide-slate-100">
+                    <!-- Ref No -->
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Ref No</span>
+                        <span class="text-xs font-mono font-bold text-slate-700"><?=htmlspecialchars($tx['transaction_ref'])?></span>
+                    </div>
+
+                    <!-- Date -->
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Date</span>
+                        <span class="text-xs font-bold text-slate-700"><?=fmt_tx_time($tx['created_at'])?></span>
+                    </div>
+
+                    <!-- Service -->
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Service</span>
+                        <div class="flex items-center gap-1.5">
+                            <i class="<?=$catConf['icon']?> <?=$catConf['color']?> text-xs"></i>
+                            <span class="text-xs font-bold text-slate-700"><?=ucwords(str_replace('_',' ',$tx['category']))?></span>
+                        </div>
+                    </div>
+
+                    <!-- Dynamic Details -->
+                    <?php 
+                    $details_map = [];
+                    if (!empty($rich_desc) || !empty($tx['description'])) {
+                        $details_map['Description'] = $rich_desc ?: ($tx['description'] ?? '');
+                    }
+                    if (!empty($meta['phone'])) $details_map['Phone Number'] = $meta['phone'];
+                    if (!empty($meta['network'])) $details_map['Network'] = $meta['network'];
+                    if (!empty($meta['data_size'])) $details_map['Data Size'] = $meta['data_size'];
+                    if (!empty($meta['validity'])) $details_map['Validity'] = $meta['validity'];
+                    if (!empty($meta['smartcard'])) $details_map['Smartcard No'] = $meta['smartcard'];
+                    if (!empty($meta['meter'])) $details_map['Meter No'] = $meta['meter'];
+                    if (!empty($meta['disco'])) $details_map['Disco'] = $meta['disco'];
+                    if (!empty($meta['type'])) $details_map['Meter Type'] = $meta['type'];
+                    if (!empty($meta['token'])) $details_map['Token/PIN'] = $meta['token'];
+                    if (!empty($tx['provider_ref'])) $details_map['Provider Ref'] = $tx['provider_ref'];
+                    if (!empty($meta['response'])) $details_map['API Response'] = $meta['response'];
+
+                    foreach($details_map as $label => $val): 
+                    ?>
+                    <div class="py-2.5">
+                        <span class="text-xs font-semibold text-slate-400 block mb-1"><?=htmlspecialchars($label)?></span>
+                        <span class="text-sm font-semibold text-slate-800 leading-relaxed"><?=htmlspecialchars(is_array($val) ? json_encode($val, JSON_UNESCAPED_SLASHES) : (string)$val)?></span>
+                    </div>
+                    <?php endforeach; ?>
+
+                    <!-- Amount -->
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Amount</span>
+                        <span class="text-sm font-black <?=$is_cr ? 'text-emerald-600' : 'text-slate-800'?>"><?=$is_cr?'+':'-'?>₦<?=number_format((float)$tx['amount'], 2)?></span>
+                    </div>
+
+                    <!-- Price Breakdown (data transactions) -->
+                    <?php if(!empty($price_breakdown) && $price_breakdown['tier_price'] != $price_breakdown['charged']): ?>
+                    <div class="py-2.5">
+                        <div class="text-xs font-semibold text-slate-400 mb-1">Price Breakdown</div>
+                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1">
+                            <div class="flex justify-between text-xs"><span class="text-slate-500">Plan price</span><span class="font-bold text-slate-700">₦<?=number_format($price_breakdown['plan_selling'],2)?></span></div>
+                            <div class="flex justify-between text-xs"><span class="text-slate-500 capitalize"><?=$price_breakdown['user_type']?> tier</span><span class="font-bold text-slate-700">₦<?=number_format($price_breakdown['tier_price'],2)?></span></div>
+                            <div class="flex justify-between text-xs border-t border-amber-200 pt-1"><span class="text-slate-600 font-semibold">Charged</span><span class="font-bold text-slate-800">₦<?=number_format($price_breakdown['charged'],2)?></span></div>
+                        </div>
+                    </div>
+                    <?php elseif(!empty($price_breakdown) && $price_breakdown['tier_price'] != $price_breakdown['plan_selling']): ?>
+                    <div class="py-2.5">
+                        <div class="text-xs font-semibold text-slate-400 mb-1">Price Breakdown</div>
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                            <div class="flex justify-between text-xs"><span class="text-slate-500">Plan price</span><span class="font-bold text-slate-700">₦<?=number_format($price_breakdown['plan_selling'],2)?></span></div>
+                            <div class="flex justify-between text-xs"><span class="text-slate-500 capitalize"><?=$price_breakdown['user_type']?> tier</span><span class="font-bold text-slate-700">₦<?=number_format($price_breakdown['tier_price'],2)?></span></div>
+                            <div class="flex justify-between text-xs border-t border-slate-200 pt-1"><span class="text-slate-600 font-semibold">Charged</span><span class="font-bold text-slate-800">₦<?=number_format($price_breakdown['charged'],2)?></span></div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Charge -->
+                    <?php if((float)$tx['charge'] > 0): ?>
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Fee</span>
+                        <span class="text-xs font-bold text-rose-500">-₦<?=number_format((float)$tx['charge'], 2)?></span>
+                    </div>
+                    <?php endif; ?>
+
+                    <!-- Old Balance -->
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">Old Balance</span>
+                        <span class="text-xs font-bold text-slate-700">₦<?=number_format((float)$tx['balance_before'], 2)?></span>
+                    </div>
+
+                    <!-- New Balance -->
+                    <div class="flex items-center justify-between py-2.5">
+                        <span class="text-xs font-semibold text-slate-400">New Balance</span>
+                        <span class="text-xs font-bold text-slate-800">₦<?=number_format((float)$tx['balance_after'], 2)?></span>
+                    </div>
                 </div>
-                <?php endif;?>
-                
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Transaction ID</span>
-                    <span class="text-xs font-mono font-bold text-slate-600 bg-slate-100 px-2 py-1 rounded"><?=htmlspecialchars(substr($tx['transaction_ref'],0,20))?>...</span>
+
+                <!-- Pending Approval Notice -->
+                <?php if($is_pending_approval): ?>
+                <div class="mt-5 p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-2.5 text-xs text-amber-800">
+                    <i class="fas fa-clock text-amber-500 mt-0.5 shrink-0"></i>
+                    <p>Your withdrawal is awaiting admin approval.</p>
                 </div>
-                
-                <div class="flex justify-between items-center py-2 border-b border-slate-50">
-                    <span class="text-sm font-semibold text-slate-500">Date & Time</span>
-                    <span class="text-sm font-bold text-slate-800"><?=date('d M Y, g:i A',strtotime($tx['created_at']))?></span>
+                <?php endif; ?>
+
+                <!-- Token / Pins -->
+                <?php if(!empty($meta['token'])): ?>
+                <div class="mt-5 p-4 bg-slate-50 border border-slate-200 rounded-xl text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Token PIN</p>
+                    <p class="text-lg font-black text-brand-orange font-mono tracking-widest"><?=htmlspecialchars($meta['token'])?></p>
                 </div>
-                
-                <?php if((float)($tx['cashback_earned']??0)>0):?>
-                <div class="flex justify-between items-center p-3 bg-brand-orangeLight border border-brand-orange/30 rounded-xl mt-4">
-                    <span class="text-sm font-bold text-brand-orange flex items-center gap-2"><i class="fas fa-gift"></i> Cashback Earned</span>
-                    <span class="text-sm font-black text-brand-orangeHover">+₦<?=number_format((float)$tx['cashback_earned'],2)?></span>
+                <?php endif; ?>
+                <?php if(!empty($service_details['pins_list'])): ?>
+                <div class="mt-5 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2.5 text-center">Pins Delivered</p>
+                    <div class="space-y-1.5">
+                        <?php foreach($service_details['pins_list'] as $pi): $pin_val = is_array($pi) ? ($pi['pin']??$pi['serial']??json_encode($pi)) : $pi; $memo = is_array($pi) ? ($pi['memo']??'') : ''; ?>
+                        <div class="bg-white rounded-lg px-3 py-2 border border-slate-100">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="text-xs font-mono font-bold text-slate-800 tracking-wider"><?=htmlspecialchars($pin_val)?></span>
+                                <button onclick="navigator.clipboard.writeText('<?=addslashes(htmlspecialchars($pin_val))?>')" class="text-brand-orange hover:text-brand-orangeHover text-xs shrink-0" title="Copy"><i class="fas fa-copy"></i></button>
+                            </div>
+                            <?php if ($memo): ?>
+                            <p class="text-[10px] text-slate-500 mt-1"><?=htmlspecialchars($memo)?></p>
+                            <?php endif; ?>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
-                <?php endif;?>
-            </div>
-            
-            <div class="mt-8 text-center print-only hidden">
-                <img src="/msjpay/assets/images/msjpay-logo.png" alt="MsjPay" class="h-8 mx-auto mb-2 opacity-50 grayscale">
-                <p class="text-xs text-slate-400">Generated securely by MsjPay</p>
+                <?php endif; ?>
             </div>
         </div>
     </div>
-    
-    <!-- Action Buttons -->
-    <div class="mt-6 print-hide">
-        <div class="grid grid-cols-4 gap-3 mb-6">
-            <button onclick="shareWA()" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 hover:border-green-500 hover:text-green-500 text-slate-600 transition-colors shadow-sm group">
-                <div class="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center text-lg mb-2 group-hover:scale-110 transition-transform">
-                    <i class="fab fa-whatsapp"></i>
-                </div>
-                <span class="text-xs font-bold">WhatsApp</span>
+
+    <!-- Actions -->
+    <div class="mt-8 px-4 print-hide">
+        <div class="flex flex-col gap-3">
+            <button onclick="shareReceipt()" class="w-full flex items-center justify-center gap-3 p-4 bg-brand-orange hover:bg-brand-orangeHover text-white rounded-xl font-bold transition-all shadow-lg shadow-orange-500/25 active:scale-[0.98]">
+                <i class="fas fa-share-nodes text-lg"></i> Share Receipt
             </button>
-            
-            <button onclick="shareEmail()" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 hover:border-blue-500 hover:text-blue-500 text-slate-600 transition-colors shadow-sm group">
-                <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-lg mb-2 group-hover:scale-110 transition-transform">
-                    <i class="fas fa-envelope"></i>
-                </div>
-                <span class="text-xs font-bold">Email</span>
-            </button>
-            
-            <button onclick="downloadPDF()" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 hover:border-rose-500 hover:text-rose-500 text-slate-600 transition-colors shadow-sm group">
-                <div class="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-lg mb-2 group-hover:scale-110 transition-transform">
-                    <i class="fas fa-file-pdf"></i>
-                </div>
-                <span class="text-xs font-bold">PDF</span>
-            </button>
-            
-            <button onclick="shareFB()" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-200 hover:border-indigo-500 hover:text-indigo-500 text-slate-600 transition-colors shadow-sm group">
-                <div class="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-lg mb-2 group-hover:scale-110 transition-transform">
-                    <i class="fab fa-facebook-f"></i>
-                </div>
-                <span class="text-xs font-bold">Facebook</span>
+            <button onclick="downloadReceipt()" class="w-full flex items-center justify-center gap-3 p-4 bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl font-bold transition-all active:scale-[0.98]">
+                <i class="fas fa-download text-lg"></i> Download PDF
             </button>
         </div>
-        
-        <a href="/msjpay/user/transactions" class="block w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-center py-4 rounded-xl shadow-sm transition-colors border border-slate-200">
-            Back to Transactions
-        </a>
     </div>
 </div>
 
 <style>
 @media print {
-    body { background: white !important; }
+    body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .print-hide { display: none !important; }
-    .print-only { display: block !important; }
-    #receiptCard { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
-    .page-wrapper { margin: 0 !important; padding: 0 !important; }
-    nav, header, footer { display: none !important; }
+    #receiptCard { box-shadow: none !important; border: 2px solid #e2e8f0 !important; border-radius: 24px !important; margin-top: 20px; }
+    .page-wrapper, .main-wrap { margin: 0 !important; padding: 0 !important; }
+    nav, header, footer, aside, .sidebar { display: none !important; }
+    @page { margin: 0.5in; size: auto; }
+    .max-w-md { max-width: 100% !important; }
 }
 </style>
 
 <script>
-const txData = { 
-    amount: '<?=number_format((float)$tx['amount'],2)?>', 
-    description: '<?=addslashes(htmlspecialchars($tx['description']??''))?>', 
-    status: '<?=ucfirst($tx['status'])?>', 
-    date: '<?=date('d M Y g:i A',strtotime($tx['created_at']))?>', 
-    ref: '<?=htmlspecialchars(substr($tx['transaction_ref'],0,20))?>...'
-}; 
+const txData = {
+    amount: '₦<?=number_format((float)$tx['amount'],2)?>',
+    description: '<?=addslashes(htmlspecialchars($rich_desc ?: ($tx['description']??'')))?>',
+    status: '<?=$sc['label']?>',
+    date: '<?=fmt_tx_time($tx['created_at'], 'd M Y g:i A')?>',
+    ref: '<?=htmlspecialchars($tx['transaction_ref'])?>',
+    url: window.location.href
+};
 
-function makeMsg() { 
-    return `*MsjPay Receipt*\n\n💰 Amount: ₦${txData.amount}\n📝 ${txData.description}\n📌 Status: ${txData.status}\n📅 ${txData.date}\n🔖 Ref: ${txData.ref}\n\n_Powered by MsjPay_`;
-} 
-
-function shareWA() { 
-    window.open('https://wa.me/?text=' + encodeURIComponent(makeMsg()), '_blank');
+function makeMsg() {
+    return `Gracehubtels Receipt\n\nAmount: ${txData.amount}\n${txData.description}\nStatus: ${txData.status}\n${txData.date}\nRef: ${txData.ref}\n\nPowered by Gracehubtels`;
 }
 
-function shareFB() { 
-    window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(location.href), '_blank');
+function shareReceipt() {
+    if (navigator.share) {
+        navigator.share({ title: 'Gracehubtels Receipt', text: makeMsg(), url: txData.url }).catch(() => {});
+    } else {
+        const sub = encodeURIComponent('Gracehubtels Transaction Receipt');
+        const body = encodeURIComponent(makeMsg().replace(/\*/g,'').replace(/_/g,''));
+        window.open('mailto:?subject=' + sub + '&body=' + body);
+    }
 }
 
-function shareEmail() { 
-    const sub = encodeURIComponent('MsjPay Transaction Receipt'); 
-    const body = encodeURIComponent(makeMsg().replace(/\*/g,'').replace(/_/g,'')); 
-    window.open('mailto:?subject=' + sub + '&body=' + body);
-}
-
-function downloadPDF() { 
-    window.print(); 
+function downloadReceipt() {
+    window.print();
 }
 </script>
 

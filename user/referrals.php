@@ -4,25 +4,26 @@ auth_user();
 $uid = (int)$_SESSION['user_id'];
 $user = get_user($uid);
 
-$base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'];
-$ref_link = $base_url . "/msjpay/user/signup?ref=" . htmlspecialchars($user['referral_code']);
+$base_url = 'https://www.gracehubtels.com';
+$ref_code = $user['referral_code'] ?: $user['phone'];
+$ref_link = $base_url . "/user/signup?ref=" . urlencode($ref_code);
 
 // Fetch stats
-$total_referred = db()->query("SELECT COUNT(*) FROM users WHERE referred_by = $uid")->fetchColumn() ?: 0;
-$total_earned = db()->query("SELECT SUM(reward_amount) FROM referral_rewards WHERE referrer_id = $uid AND status = 'paid'")->fetchColumn() ?: 0;
-$pending_earned = db()->query("SELECT SUM(reward_amount) FROM referral_rewards WHERE referrer_id = $uid AND status = 'pending'")->fetchColumn() ?: 0;
+$tr = db()->prepare("SELECT COUNT(*) FROM users WHERE referred_by = ?"); $tr->execute([$uid]); $total_referred = $tr->fetchColumn() ?: 0;
+$te = db()->prepare("SELECT SUM(reward_amount) FROM referral_rewards WHERE referrer_id = ? AND status = 'paid'"); $te->execute([$uid]); $total_earned = $te->fetchColumn() ?: 0;
+$pe = db()->prepare("SELECT SUM(reward_amount) FROM referral_rewards WHERE referrer_id = ? AND status = 'pending'"); $pe->execute([$uid]); $pending_earned = $pe->fetchColumn() ?: 0;
 
 $bonus_amt = (float)setting('referral_bonus', '0');
 
 // Fetch referred users list
-$referred_users = db()->query("
+$ru = db()->prepare("
     SELECT u.full_name, u.created_at, 
-           (SELECT status FROM referral_rewards WHERE referred_id = u.id AND referrer_id = $uid LIMIT 1) as bonus_status
+           (SELECT status FROM referral_rewards WHERE referred_id = u.id AND referrer_id = ? LIMIT 1) as bonus_status
     FROM users u 
-    WHERE u.referred_by = $uid 
+    WHERE u.referred_by = ? 
     ORDER BY u.id DESC 
     LIMIT 50
-")->fetchAll();
+"); $ru->execute([$uid, $uid]); $referred_users = $ru->fetchAll();
 
 $page_title = 'Referrals & Earnings'; 
 include __DIR__ . '/includes/header.php'; 
@@ -33,13 +34,16 @@ include __DIR__ . '/includes/sidebar.php';
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+            <a href="/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
                 <i class="fas fa-arrow-left"></i>
             </a>
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Refer & Earn</h1>
                 <p class="text-sm text-slate-500">Invite friends and earn bonuses</p>
             </div>
+        </div>
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
+            ₦<?=number_format((float)$user['wallet_balance'],2)?>
         </div>
     </div>
 
@@ -49,7 +53,7 @@ include __DIR__ . '/includes/sidebar.php';
         <div class="relative z-10">
             <div class="flex flex-col md:flex-row gap-6 items-center justify-between">
                 <div>
-                    <h2 class="text-2xl font-bold mb-2">Share the MsjPay Experience</h2>
+                    <h2 class="text-2xl font-bold mb-2">Share the Gracehubtels Experience</h2>
                     <p class="text-blue-100 max-w-md">
                         Earn <span class="font-bold text-white bg-white/20 px-2 py-0.5 rounded">₦<?=number_format($bonus_amt, 2)?></span> for every friend who signs up with your link and funds their wallet.
                     </p>
@@ -57,7 +61,7 @@ include __DIR__ . '/includes/sidebar.php';
                 <div class="w-full md:w-auto flex flex-col gap-2">
                     <label class="text-xs text-blue-200 font-semibold uppercase tracking-wider">Your Referral Link</label>
                     <div class="flex bg-white/10 rounded-xl overflow-hidden border border-white/20 backdrop-blur-md max-w-full">
-                        <input type="text" id="refLink" value="<?=$ref_link?>" class="bg-transparent text-white px-4 py-3 outline-none w-full md:w-64 text-sm font-medium" readonly>
+                        <input type="text" id="refLink" value="<?=htmlspecialchars($ref_link, ENT_QUOTES)?>" class="bg-transparent text-white px-4 py-3 outline-none w-full md:w-64 text-sm font-medium" readonly>
                         <button onclick="copyRefLink()" class="bg-brand-orange hover:bg-brand-orangeHover px-5 py-3 font-bold transition-colors flex items-center gap-2">
                             <i class="fas fa-copy"></i> Copy
                         </button>
@@ -158,7 +162,7 @@ function copyRefLink() {
     document.execCommand("copy");
     
     // Optional: show a quick toast or alert
-    alert("Referral link copied to clipboard!");
+    Swal.fire('Notice', "Referral link copied to clipboard!", 'info');
 }
 </script>
 

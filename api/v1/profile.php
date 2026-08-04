@@ -17,6 +17,7 @@ echo json_encode([
         'email' => $user['email'],
         'phone' => $user['phone'],
         'user_type' => $user['user_type'],
-        'webhook_url' => $user['api_webhook_url']
+        'webhook_url' => $user['api_webhook_url'],
+        'has_pin' => !empty($user['transaction_pin'])
     ]
 ]);

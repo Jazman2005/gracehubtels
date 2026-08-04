@@ -1,5 +1,5 @@
 -- ============================================================
--- MsjPay v2.1 Migration — Schema Updates
+-- Gracehubtels v2.1 Migration — Schema Updates
 -- Run this file once via phpMyAdmin or mysql CLI
 -- ============================================================
 

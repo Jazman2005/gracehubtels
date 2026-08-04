@@ -1,96 +1,144 @@
-[19-Jun-2026 13:48:01 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/msjpay.ng/user/core/db.php:40) in /home/msjdkjef/msjpay.ng/user/core/dashboard.php on line 72
-[19-Jun-2026 13:48:03 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/msjpay.ng/user/core/db.php:40) in /home/msjdkjef/msjpay.ng/user/core/dashboard.php on line 72
-[19-Jun-2026 13:48:05 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/msjpay.ng/user/core/db.php:40) in /home/msjdkjef/msjpay.ng/user/core/dashboard.php on line 72
-[19-Jun-2026 14:06:47 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/core/auth.php:13
+[19-Jun-2026 13:48:01 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/gracehubtels.com/user/core/db.php:40) in /home/msjdkjef/gracehubtels.com/user/core/dashboard.php on line 72
+[19-Jun-2026 13:48:03 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/gracehubtels.com/user/core/db.php:40) in /home/msjdkjef/gracehubtels.com/user/core/dashboard.php on line 72
+[19-Jun-2026 13:48:05 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/gracehubtels.com/user/core/db.php:40) in /home/msjdkjef/gracehubtels.com/user/core/dashboard.php on line 72
+[19-Jun-2026 14:06:47 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/core/auth.php:13
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/core/auth.php(13): PDO->prepare()
-#1 /home/msjdkjef/msjpay.ng/user/signup.php(11): login_user()
+#0 /home/msjdkjef/gracehubtels.com/user/core/auth.php(13): PDO->prepare()
+#1 /home/msjdkjef/gracehubtels.com/user/signup.php(11): login_user()
 #2 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/core/auth.php on line 13
-[19-Jun-2026 14:07:15 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/core/auth.php:13
+  thrown in /home/msjdkjef/gracehubtels.com/user/core/auth.php on line 13
+[19-Jun-2026 14:07:15 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/core/auth.php:13
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/core/auth.php(13): PDO->prepare()
-#1 /home/msjdkjef/msjpay.ng/user/login.php(9): login_user()
+#0 /home/msjdkjef/gracehubtels.com/user/core/auth.php(13): PDO->prepare()
+#1 /home/msjdkjef/gracehubtels.com/user/login.php(9): login_user()
 #2 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/core/auth.php on line 13
-[19-Jun-2026 14:07:47 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/core/auth.php:13
+  thrown in /home/msjdkjef/gracehubtels.com/user/core/auth.php on line 13
+[19-Jun-2026 14:07:47 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/core/auth.php:13
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/core/auth.php(13): PDO->prepare()
-#1 /home/msjdkjef/msjpay.ng/user/login.php(9): login_user()
+#0 /home/msjdkjef/gracehubtels.com/user/core/auth.php(13): PDO->prepare()
+#1 /home/msjdkjef/gracehubtels.com/user/login.php(9): login_user()
 #2 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/core/auth.php on line 13
-[19-Jun-2026 14:10:57 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/core/auth.php:13
+  thrown in /home/msjdkjef/gracehubtels.com/user/core/auth.php on line 13
+[19-Jun-2026 14:10:57 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/core/auth.php:13
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/core/auth.php(13): PDO->prepare()
-#1 /home/msjdkjef/msjpay.ng/user/login.php(9): login_user()
+#0 /home/msjdkjef/gracehubtels.com/user/core/auth.php(13): PDO->prepare()
+#1 /home/msjdkjef/gracehubtels.com/user/login.php(9): login_user()
 #2 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/core/auth.php on line 13
-[19-Jun-2026 14:12:04 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/core/auth.php:13
+  thrown in /home/msjdkjef/gracehubtels.com/user/core/auth.php on line 13
+[19-Jun-2026 14:12:04 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'attempted_at' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/core/auth.php:13
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/core/auth.php(13): PDO->prepare()
-#1 /home/msjdkjef/msjpay.ng/user/login.php(9): login_user()
+#0 /home/msjdkjef/gracehubtels.com/user/core/auth.php(13): PDO->prepare()
+#1 /home/msjdkjef/gracehubtels.com/user/login.php(9): login_user()
 #2 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/core/auth.php on line 13
-[19-Jun-2026 14:13:11 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/msjpay.ng/user/core/db.php:335) in /home/msjdkjef/msjpay.ng/user/core/dashboard.php on line 72
-[19-Jun-2026 14:16:58 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'last_used' in 'ORDER BY' in /home/msjdkjef/msjpay.ng/user/core/beneficiaries.php:3
+  thrown in /home/msjdkjef/gracehubtels.com/user/core/auth.php on line 13
+[19-Jun-2026 14:13:11 UTC] PHP Fatal error:  Cannot redeclare debit_wallet() (previously declared in /home/msjdkjef/gracehubtels.com/user/core/db.php:335) in /home/msjdkjef/gracehubtels.com/user/core/dashboard.php on line 72
+[19-Jun-2026 14:16:58 UTC] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'last_used' in 'ORDER BY' in /home/msjdkjef/gracehubtels.com/user/core/beneficiaries.php:3
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/core/beneficiaries.php(3): PDO->prepare()
-#1 /home/msjdkjef/msjpay.ng/user/dashboard.php(10): get_beneficiaries()
+#0 /home/msjdkjef/gracehubtels.com/user/core/beneficiaries.php(3): PDO->prepare()
+#1 /home/msjdkjef/gracehubtels.com/user/dashboard.php(10): get_beneficiaries()
 #2 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/core/beneficiaries.php on line 3
-[19-Jun-2026 14:22:24 UTC] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/msjpay.ng/user/profile.php on line 46
-[19-Jun-2026 14:22:24 UTC] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/msjpay.ng/user/profile.php:46
+  thrown in /home/msjdkjef/gracehubtels.com/user/core/beneficiaries.php on line 3
+[19-Jun-2026 14:22:24 UTC] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/gracehubtels.com/user/profile.php on line 46
+[19-Jun-2026 14:22:24 UTC] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/gracehubtels.com/user/profile.php:46
 Stack trace:
 #0 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/profile.php on line 46
-[20-Jun-2026 16:53:48 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 16:53:48 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/msjpay.ng/user/profile.php:6
+  thrown in /home/msjdkjef/gracehubtels.com/user/profile.php on line 46
+[20-Jun-2026 16:53:48 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 16:53:48 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/gracehubtels.com/user/profile.php:6
 Stack trace:
 #0 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 16:55:04 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/electricity.php:9
+  thrown in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 16:55:04 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/electricity.php:9
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/electricity.php(9): PDO->prepare()
+#0 /home/msjdkjef/gracehubtels.com/user/electricity.php(9): PDO->prepare()
 #1 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/electricity.php on line 9
-[20-Jun-2026 16:55:11 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/electricity.php:9
+  thrown in /home/msjdkjef/gracehubtels.com/user/electricity.php on line 9
+[20-Jun-2026 16:55:11 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/electricity.php:9
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/electricity.php(9): PDO->prepare()
+#0 /home/msjdkjef/gracehubtels.com/user/electricity.php(9): PDO->prepare()
 #1 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/electricity.php on line 9
-[20-Jun-2026 16:57:04 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 16:57:04 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/msjpay.ng/user/profile.php:6
+  thrown in /home/msjdkjef/gracehubtels.com/user/electricity.php on line 9
+[20-Jun-2026 16:57:04 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 16:57:04 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/gracehubtels.com/user/profile.php:6
 Stack trace:
 #0 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 17:03:32 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 17:03:32 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/msjpay.ng/user/profile.php:6
+  thrown in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 17:03:32 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 17:03:32 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/gracehubtels.com/user/profile.php:6
 Stack trace:
 #0 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 17:05:37 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 17:05:37 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/msjpay.ng/user/profile.php:6
+  thrown in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 17:05:37 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 17:05:37 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/gracehubtels.com/user/profile.php:6
 Stack trace:
 #0 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 21:15:02 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 21:15:02 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/msjpay.ng/user/profile.php:6
+  thrown in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 21:15:02 Africa/Lagos] PHP Warning:  Undefined variable $va_mgr in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 21:15:02 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function create_for_user() on null in /home/msjdkjef/gracehubtels.com/user/profile.php:6
 Stack trace:
 #0 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/profile.php on line 6
-[20-Jun-2026 21:15:11 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/cabletv.php:10
+  thrown in /home/msjdkjef/gracehubtels.com/user/profile.php on line 6
+[20-Jun-2026 21:15:11 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/cabletv.php:10
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/cabletv.php(10): PDO->prepare()
+#0 /home/msjdkjef/gracehubtels.com/user/cabletv.php(10): PDO->prepare()
 #1 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/cabletv.php on line 10
-[20-Jun-2026 21:15:17 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/cabletv.php:10
+  thrown in /home/msjdkjef/gracehubtels.com/user/cabletv.php on line 10
+[20-Jun-2026 21:15:17 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/cabletv.php:10
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/cabletv.php(10): PDO->prepare()
+#0 /home/msjdkjef/gracehubtels.com/user/cabletv.php(10): PDO->prepare()
 #1 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/cabletv.php on line 10
-[20-Jun-2026 21:16:37 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/msjpay.ng/user/electricity.php:9
+  thrown in /home/msjdkjef/gracehubtels.com/user/cabletv.php on line 10
+[20-Jun-2026 21:16:37 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'user_type' in 'WHERE' in /home/msjdkjef/gracehubtels.com/user/electricity.php:9
 Stack trace:
-#0 /home/msjdkjef/msjpay.ng/user/electricity.php(9): PDO->prepare()
+#0 /home/msjdkjef/gracehubtels.com/user/electricity.php(9): PDO->prepare()
 #1 {main}
-  thrown in /home/msjdkjef/msjpay.ng/user/electricity.php on line 9
-[20-Jun-2026 21:19:58 UTC] PHP Parse error:  Unclosed '{' on line 11 in /home/msjdkjef/msjpay.ng/user/forget-password.php on line 28
+  thrown in /home/msjdkjef/gracehubtels.com/user/electricity.php on line 9
+[20-Jun-2026 21:19:58 UTC] PHP Parse error:  Unclosed '{' on line 11 in /home/msjdkjef/gracehubtels.com/user/forget-password.php on line 28
+[28-Jun-2026 18:29:15 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function fetchAll() on bool in /home/msjdkjef/gracehubtels.com/user/notifications.php:6
+Stack trace:
+#0 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 6
+[29-Jun-2026 21:53:11 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function fetchAll() on bool in /home/msjdkjef/gracehubtels.com/user/notifications.php:6
+Stack trace:
+#0 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 6
+[29-Jun-2026 21:53:14 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function fetchAll() on bool in /home/msjdkjef/gracehubtels.com/user/notifications.php:6
+Stack trace:
+#0 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 6
+[29-Jun-2026 23:35:44 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function fetchAll() on bool in /home/msjdkjef/gracehubtels.com/user/notifications.php:6
+Stack trace:
+#0 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 6
+[29-Jun-2026 23:36:00 Africa/Lagos] PHP Fatal error:  Uncaught Error: Call to a member function fetchAll() on bool in /home/msjdkjef/gracehubtels.com/user/notifications.php:6
+Stack trace:
+#0 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 6
+[29-Jun-2026 23:37:37 Africa/Lagos] PHP Warning:  Undefined variable $user in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 28
+[29-Jun-2026 23:37:37 Africa/Lagos] PHP Warning:  Trying to access array offset on value of type null in /home/msjdkjef/gracehubtels.com/user/notifications.php on line 28
+[03-Jul-2026 12:30:39 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'pins_data' in 'SELECT' in /home/msjdkjef/gracehubtels.com/user/receipt.php:127
+Stack trace:
+#0 /home/msjdkjef/gracehubtels.com/user/receipt.php(127): PDO->prepare()
+#1 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/receipt.php on line 127
+[03-Jul-2026 12:39:57 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'pins_data' in 'SELECT' in /home/msjdkjef/gracehubtels.com/user/receipt.php:127
+Stack trace:
+#0 /home/msjdkjef/gracehubtels.com/user/receipt.php(127): PDO->prepare()
+#1 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/receipt.php on line 127
+[03-Jul-2026 12:40:01 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'pins_data' in 'SELECT' in /home/msjdkjef/gracehubtels.com/user/receipt.php:127
+Stack trace:
+#0 /home/msjdkjef/gracehubtels.com/user/receipt.php(127): PDO->prepare()
+#1 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/receipt.php on line 127
+[03-Jul-2026 12:49:33 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'pins_data' in 'SELECT' in /home/msjdkjef/gracehubtels.com/user/receipt.php:127
+Stack trace:
+#0 /home/msjdkjef/gracehubtels.com/user/receipt.php(127): PDO->prepare()
+#1 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/receipt.php on line 127
+[03-Jul-2026 13:01:27 Africa/Lagos] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'pins_data' in 'SELECT' in /home/msjdkjef/gracehubtels.com/user/receipt.php:127
+Stack trace:
+#0 /home/msjdkjef/gracehubtels.com/user/receipt.php(127): PDO->prepare()
+#1 {main}
+  thrown in /home/msjdkjef/gracehubtels.com/user/receipt.php on line 127
+[03-Jul-2026 18:42:21 Africa/Lagos] PHP Warning:  Undefined array key "pins_data" in /home/msjdkjef/gracehubtels.com/user/receipt.php on line 131

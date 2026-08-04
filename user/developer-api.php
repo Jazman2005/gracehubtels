@@ -4,8 +4,28 @@ auth_user();
 $uid = $_SESSION['user_id'];
 $user = get_user($uid);
 $name = explode(' ', $user['full_name'])[0];
+if (($user['user_type'] ?? '') !== 'vendor') {
+    $page_title = 'Developer API';
+    include __DIR__ . '/includes/header.php';
+    include __DIR__ . '/includes/sidebar.php';
+    ?>
+    <div class="max-w-xl mx-auto mt-16 text-center">
+        <div class="w-20 h-20 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-6">
+            <i class="fas fa-lock text-3xl text-amber-600"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-800 mb-3">Vendor Feature</h2>
+        <p class="text-slate-500 mb-6">The Developer API is only available for vendors. Please contact the admin to upgrade your account to a vendor account.</p>
+        <a href="/user/support" class="inline-flex items-center gap-2 bg-brand-navy text-white px-6 py-3 rounded-xl font-semibold hover:bg-brand-navyDark transition-colors">
+            <i class="fas fa-envelope"></i> Contact Support
+        </a>
+    </div>
+    <?php
+    include __DIR__ . '/includes/footer.php';
+    exit;
+}
 
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
+    if(!verify_csrf($_POST['csrf']??'')){echo json_encode(['success'=>false,'message'=>'Invalid token']);exit;}
     $action = $_POST['action']??'';
     if($action==='generate_keys'){
         $token = 'msj_live_' . bin2hex(random_bytes(24));
@@ -25,15 +45,28 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     }
 }
 
+$csrf = csrf_token();
 $page_title = 'Developer API'; 
 include __DIR__ . '/includes/header.php'; 
 include __DIR__ . '/includes/sidebar.php'; 
 ?>
 
-<div class="mb-8">
-    <h2 class="text-2xl font-bold text-slate-800">Developer API</h2>
-    <p class="text-slate-500 mt-1">Integrate MsjPay into your own applications seamlessly.</p>
-</div>
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-4">
+            <a href="/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Developer API</h1>
+                <p class="text-sm text-slate-500">Integrate Gracehubtels into your own applications seamlessly.</p>
+            </div>
+        </div>
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
+            ₦<?=number_format((float)$user['wallet_balance'],2)?>
+        </div>
+    </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -99,7 +132,7 @@ include __DIR__ . '/includes/sidebar.php';
     <div class="bg-white rounded-2xl border border-slate-200 p-6 card-shadow h-fit">
         <h3 class="text-lg font-bold text-slate-800 mb-4">Quick Start</h3>
         <div class="prose prose-sm text-slate-600">
-            <p><strong>Base URL:</strong><br><code class="bg-slate-100 text-brand-navy px-1.5 py-0.5 rounded text-xs">https://msjpay.com/api/v1</code></p>
+            <p><strong>Base URL:</strong><br><code class="bg-slate-100 text-brand-navy px-1.5 py-0.5 rounded text-xs">https://gracehubtels.com/api/v1</code></p>
             
             <p class="mt-4"><strong>Authentication:</strong><br>Include your API key in the Authorization header of all requests:</p>
             <div class="bg-slate-800 text-green-400 p-3 rounded-lg text-xs font-mono overflow-x-auto mt-2">
@@ -108,16 +141,35 @@ include __DIR__ . '/includes/sidebar.php';
             
             <div class="mt-6">
                 <strong class="text-slate-800">Available Endpoints:</strong>
-                <ul class="list-disc pl-4 mt-2 space-y-1">
+                <ul class="list-disc pl-4 mt-2 space-y-1 text-xs">
+                    <li><code>POST /login.php</code></li>
+                    <li><code>POST /register.php</code></li>
                     <li><code>GET /balance.php</code></li>
                     <li><code>GET /profile.php</code></li>
-                    <li><code>POST /data/purchase.php</code> (Coming Soon)</li>
-                    <li><code>POST /airtime/purchase.php</code> (Coming Soon)</li>
+                    <li><code>GET /catalog.php</code></li>
+                    <li><code>GET /dashboard.php</code></li>
+                    <li><code>GET /transactions.php</code></li>
+                    <li><code>POST /airtime.php</code></li>
+                    <li><code>POST /data.php</code></li>
+                    <li><code>POST /electricity.php</code></li>
+                    <li><code>POST /cabletv.php</code></li>
+                    <li><code>POST /exam_pin.php</code></li>
+                    <li><code>POST /a2c.php</code></li>
+                    <li><code>POST /bulk_sms.php</code></li>
+                    <li><code>POST /recharge_card.php</code></li>
+                    <li><code>POST /data_card.php</code></li>
+                    <li><code>POST /bank_transfer.php</code></li>
+                    <li><code>POST /internal_transfer.php</code></li>
+                    <li><code>POST /validate_meter.php</code></li>
+                    <li><code>POST /validate_cable.php</code></li>
+                    <li><code>GET+POST /virtual_accounts.php</code></li>
+                    <li><code>GET+POST /virtual_cards.php</code></li>
+                    <li><code>GET+POST /beneficiaries.php</code></li>
                 </ul>
             </div>
             
             <div class="mt-8 pt-6 border-t border-slate-200">
-                <a href="#" class="text-brand-orange hover:text-brand-orangeHover font-medium flex items-center gap-1">
+                <a href="/user/api-docs" class="text-brand-orange hover:text-brand-orangeHover font-medium flex items-center gap-1">
                     Read Full API Docs <i class="fa-solid fa-arrow-right text-xs"></i>
                 </a>
             </div>
@@ -125,27 +177,29 @@ include __DIR__ . '/includes/sidebar.php';
     </div>
 
 </div>
+</div>
 
 <script>
+const CSRF='<?=$csrf?>';
 async function generateKey(){
-  if(!confirm("Generate a new API key? This will immediately invalidate your old key!")) return;
-  const fd=new FormData();fd.append('action','generate_keys');
+  if(!await showConfirm("Generate a new API key? This will immediately invalidate your old key!", "Confirm")) return;
+  const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','generate_keys');
   const r=await fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
-  if(r.success) location.reload();
-  else alert(r.message);
+  if(r.success) { showAlert('New API key generated!', 'Success', 'check-circle', 'text-emerald-500'); location.reload(); }
+  else showAlert(r.message, 'Error', 'exclamation-circle', 'text-red-500');
 }
 
 async function saveWebhook(){
   const w=document.getElementById('webhook_url').value;
-  const fd=new FormData();fd.append('action','save_webhook'); fd.append('webhook_url',w);
+  const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_webhook'); fd.append('webhook_url',w);
   const r=await fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
-  if(r.success) { alert(r.message); location.reload(); }
-  else alert(r.message);
+  if(r.success) { showAlert(r.message, 'Success', 'check-circle', 'text-emerald-500'); location.reload(); }
+  else showAlert(r.message, 'Error', 'exclamation-circle', 'text-red-500');
 }
 
 function copyToClipboard(id) {
   const el = document.getElementById(id);
-  navigator.clipboard.writeText(el.innerText).then(() => alert("Copied to clipboard!"));
+  navigator.clipboard.writeText(el.innerText).then(() => showAlert("Copied to clipboard!", 'Copied'));
 }
 </script>
 

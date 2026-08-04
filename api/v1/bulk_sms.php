@@ -10,6 +10,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+
+if (!rate_limit('api_bulk_sms_' . $user['id'], 20, 3600)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'message' => 'Too many requests. Please try again later.']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 if (empty($input['sender_id']) || empty($input['message']) || empty($input['recipients'])) {
@@ -17,6 +24,9 @@ if (empty($input['sender_id']) || empty($input['message']) || empty($input['reci
     echo json_encode(['status' => 'error', 'message' => 'Missing required fields: sender_id, message, recipients']);
     exit;
 }
+
+// Map sender_id to sender for core service compatibility
+$input['sender'] = $input['sender_id'];
 
 $service = new BulkSMSService();
 $res = $service->process((int)$user['id'], $input);

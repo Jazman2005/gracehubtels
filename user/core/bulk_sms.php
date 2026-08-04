@@ -1,14 +1,9 @@
 <?php
 require_once __DIR__.'/db.php'; 
 require_once __DIR__.'/auth.php';
+require_once __DIR__.'/api_router.php';
 
 class BulkSMSService {
-    private function get_provider(): ?array {
-        $s = db()->prepare("SELECT * FROM api_providers WHERE service='bulk_sms' AND is_active=1 ORDER BY priority LIMIT 1");
-        $s->execute();
-        return $s->fetch() ?: null;
-    }
-
     private function api_call(array $prov, array $payload): ?array {
         if (empty($prov['api_base_url'])) return ['success' => true, 'mocked' => true, '_http_code' => 200]; // Mock if no URL
         
@@ -30,7 +25,8 @@ class BulkSMSService {
             CURLOPT_POSTFIELDS => json_encode($payload),
             CURLOPT_HTTPHEADER => $headers,
             CURLOPT_TIMEOUT => 30,
-            CURLOPT_SSL_VERIFYPEER => true
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2
         ]);
         
         $res = curl_exec($ch);
@@ -40,32 +36,27 @@ class BulkSMSService {
         $d = $res ? json_decode($res, true) : null;
         if ($d) $d['_http_code'] = $code;
         
-        log_api($prov['provider_name'] ?? 'bulk_sms', 'send', $payload, $d, in_array($code, [200, 201]));
+        log_api($prov['provider_name'] ?? 'bulk_sms', 'send', $payload, $d, in_array($code, [200, 201]) && !is_api_response_failure($d));
         return $d;
     }
 
     public function process(int $uid, array $input): array {
-        $sender = sanitize($input['sender_id'] ?? '', 11);
-        $message = trim($input['message'] ?? '');
-        $recipients_raw = trim($input['recipients'] ?? '');
+        $sender = sanitize(trim($input['sender'] ?? $input['sender_id'] ?? ''), 11);
+        $message = sanitize(trim($input['message'] ?? ''), 1000);
+        $recipients = trim($input['recipients'] ?? '');
         $pin = (string)($input['pin'] ?? '');
 
-        // Validation
-        if (empty($sender) || strlen($sender) > 11) return ['success' => false, 'message' => 'Sender ID must be 1-11 characters'];
-        if (empty($message)) return ['success' => false, 'message' => 'Message cannot be empty'];
-        if (empty($recipients_raw)) return ['success' => false, 'message' => 'Please provide at least one recipient'];
-        
-        if (detect_tamper($input)) return ['success' => false, 'message' => 'Invalid input detected'];
+        if (empty($sender)) return ['success' => false, 'message' => 'Sender ID is required (Max 11 chars)'];
+        if (empty($message)) return ['success' => false, 'message' => 'Message body is empty'];
+        if (empty($recipients)) return ['success' => false, 'message' => 'Recipients are required'];
         if (!verify_pin($uid, $pin)) return ['success' => false, 'message' => 'Invalid transaction PIN'];
 
-        // Process recipients (split by comma or newline, remove empty and non-numeric)
-        $recipients_array = preg_split('/[\s,]+/', $recipients_raw, -1, PREG_SPLIT_NO_EMPTY);
+        // Clean recipients
+        $recs = explode(',', str_replace(["\r", "\n", " "], ",", $recipients));
         $valid_recipients = [];
-        foreach ($recipients_array as $num) {
-            $clean = preg_replace('/[^0-9\+]/', '', $num);
-            if (strlen($clean) >= 10 && strlen($clean) <= 15) {
-                $valid_recipients[] = $clean;
-            }
+        foreach ($recs as $r) {
+            $r = sanitize_phone($r);
+            if (validate_phone($r)) $valid_recipients[] = $r;
         }
         $valid_recipients = array_unique($valid_recipients);
         $rec_count = count($valid_recipients);
@@ -80,7 +71,6 @@ class BulkSMSService {
         }
 
         // Pricing
-        $prov = $this->get_provider();
         $pr = db()->prepare("SELECT * FROM service_pricing WHERE service='bulk_sms' AND is_active=1 LIMIT 1");
         $pr->execute();
         $p = $pr->fetch();
@@ -100,12 +90,11 @@ class BulkSMSService {
 
         $total_amount = $price_per_page * $pages * $rec_count;
         $total_cost = $cost_per_page * $pages * $rec_count;
+        
+        $limit_err = check_daily_limit($uid, $total_amount, 'bulk_sms');
+        if($limit_err) return['success'=>false,'message'=>$limit_err];
 
-        if ($total_amount < 1) return ['success' => false, 'message' => 'Total amount is too low'];
-
-        // Debit Wallet
-        $desc = "Bulk SMS: {$pages} pages to {$rec_count} recipients (Sender: {$sender})";
-        $debit = debit_wallet($uid, $total_amount, 'bulk_sms', $desc, [
+        $debit = debit_wallet($uid, $total_amount, 'bulk_sms', "Bulk SMS ({$pages} pages to {$rec_count} numbers)", [
             'sender' => $sender,
             'pages' => $pages,
             'recipients' => $rec_count
@@ -120,47 +109,76 @@ class BulkSMSService {
             $uid, $sender, $message, implode(',', $valid_recipients), $rec_count, $pages, $total_amount
         ]);
 
-        // API Call
-        $api_payload = [
-            'sender' => $sender,
-            'message' => $message,
-            'recipients' => implode(',', $valid_recipients),
-            'ref' => $debit['ref']
-        ];
+        // API Call with failover
+        $providers = get_api_providers('bulk_sms');
+        $success = false; $has_pending = false; $last_res = null; $last_prov = null;
+        foreach ($providers as $prov) {
+            $last_prov = $prov;
+            $pname = strtolower($prov['provider_name'] ?? '');
+            if (strpos($pname, 'autosyncng') !== false) {
+                $api_payload = ['sender' => $sender, 'sender_id' => $sender, 'message' => $message, 'recipients' => implode(',', $valid_recipients), 'phone' => implode(',', $valid_recipients), 'request_ref' => $debit['ref'], 'ref' => $debit['ref']];
+                if (!empty($prov['api_pin'])) $api_payload['pin'] = trim($prov['api_pin']);
+            } elseif (strpos($pname, 'sagecloud') !== false) {
+                $api_payload = ['reference' => $debit['ref'], 'recipients' => implode(', ', $valid_recipients), 'message' => $message, 'sender_ids' => $sender];
+            } else {
+                $api_payload = ['sender' => $sender, 'sender_id' => $sender, 'message' => $message, 'recipients' => implode(',', $valid_recipients), 'numbers' => implode(',', $valid_recipients), 'phones' => implode(',', $valid_recipients), 'ref' => $debit['ref']];
+                if (!empty($prov['api_pin'])) { $api_payload['pin'] = trim($prov['api_pin']); if (strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = trim($prov['api_pin']); }
+            }
+            
+            $url = rtrim($prov['api_base_url'], '/') . '/api/sms/';
+            if (strpos($pname, 'autosyncng') !== false) {
+                if (strpos(strtolower($prov['api_base_url']), '/api/v1') !== false) {
+                    $url = rtrim($prov['api_base_url'], '/') . '/sms/';
+                }
+            }
+            if (strpos($pname, 'telecomabode') !== false) {
+                $url = rtrim($prov['api_base_url'], '/') . '/api/bulk-sms/';
+                $api_payload = ['subject' => $sender, 'message' => $message, 'bulkPhones' => implode(',', $valid_recipients), 'ref' => $debit['ref']];
+            }
+            if (strpos($pname, 'sagecloud') !== false) {
+                $url = rtrim($prov['api_base_url'], '/') . '/v2/sms/bulk-sms/';
+            }
+            
+            if (!empty($prov['api_base_url'])) {
+                $prov['api_base_url'] = $url;
+                $res = $this->api_call($prov, $api_payload);
+                if ($res && in_array($res['_http_code'] ?? 0, [200, 201]) && !is_api_response_failure($res) && !is_api_response_pending($res)) { $success = true; break; }
+                if ($res && in_array($res['_http_code'] ?? 0, [200, 201]) && is_api_response_pending($res) && !$success) { $has_pending = true; $last_res = $res; continue; }
+                $last_res = $res;
+            }
+        }
         
-        $res = $prov ? $this->api_call($prov, $api_payload) : ['success' => true, '_http_code' => 200, 'mocked' => true];
-
-        if ($res && in_array($res['_http_code'] ?? 0, [200, 201])) {
-            update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? 'mocked'), 'SMS');
-            
-            // Update profit
-            db()->prepare("UPDATE transactions SET cost_price=?, selling_price=?, profit=?, provider=? WHERE transaction_ref=?")
-                ->execute([$total_cost, $total_amount, $total_amount - $total_cost, $prov['provider_name'] ?? 'System', $debit['ref']]);
-            
-            // Log history success
-            db()->prepare("UPDATE bulk_sms_history SET status='success', provider_response=? WHERE user_id=? AND total_cost=? ORDER BY id DESC LIMIT 1")
-                ->execute([json_encode($res), $uid, $total_amount]);
-
-            notify_user($uid, 'o. Bulk SMS Sent', "Campaign sent to {$rec_count} recipients.", 'success');
-            
-            return [
-                'success' => true, 
-                'message' => "Bulk SMS scheduled successfully to {$rec_count} recipients.", 
-                'ref' => $debit['ref']
-            ];
+        // If no providers, fallback to mock
+        if (empty($providers)) {
+            $last_res = ['success' => true, '_http_code' => 200, 'mocked' => true];
+            $success = true;
         }
 
+        if ($success) {
+            $prov = $last_prov; $res = $last_res;
+            update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? 'mocked'), 'SMS');
+            db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")
+                ->execute([$total_cost, $total_amount - $total_cost, $prov['provider_name'] ?? 'System', $debit['ref']]);
+            db()->prepare("UPDATE bulk_sms_history SET status='success', provider_response=? WHERE user_id=? AND total_cost=? ORDER BY id DESC LIMIT 1")
+                ->execute([json_encode($res), $uid, $total_amount]);
+            notify_user($uid, 'o. Bulk SMS Sent', "Campaign sent to {$rec_count} recipients", 'success', null, $debit['balance_before'], $debit['balance_after']);
+            return ['success' => true, 'message' => "Bulk SMS scheduled successfully to {$rec_count} recipients.", 'ref' => $debit['ref']];
+        }
+
+        // Pending on async response
+        if ($has_pending) {
+            update_tx_status($debit['ref'], 'pending', (string)($last_res['id'] ?? ''));
+            notify_user($uid, 'Bulk SMS Processing', 'Your bulk SMS campaign is being processed.', 'info', null, $debit['balance_before'], $debit['balance_after']);
+            return ['success' => true, 'message' => 'Transaction is being processed. Check receipt for updates.', 'ref' => $debit['ref'], 'pending' => true];
+        }
         // Refund on failure
-        update_tx_status($debit['ref'], 'failed');
+        if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'] ?? 'System', $debit['ref']]);
         db()->prepare("UPDATE bulk_sms_history SET status='failed', provider_response=? WHERE user_id=? AND total_cost=? ORDER BY id DESC LIMIT 1")
-            ->execute([json_encode($res), $uid, $total_amount]);
-            
-        credit_wallet($uid, $total_amount, 'bulk_sms', 'Bulk SMS reversal - API failure');
-        
-        return [
-            'success' => false, 
-            'message' => 'Campaign delivery failed. Wallet has been reversed.'
-        ];
+            ->execute([json_encode($last_res), $uid, $total_amount]);
+        $err_msg = 'Campaign delivery failed. Wallet reversed.';
+        if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
+        refund_failed_transaction($debit['ref'], $uid, $total_amount, $err_msg);
+        return ['success' => true, 'message' => $err_msg, 'ref' => $debit['ref'], 'refunded' => true];
     }
 }
 

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Contact Us - MsjPay</title>
-    <meta name="description" content="Get in touch with MsjPay. Submit a merchant inquiry or account support request, or reach us directly at our Lagos headquarters.">
+    <title>Contact Us - Gracehubtels</title>
+    <meta name="description" content="Get in touch with Gracehubtels. Submit a merchant inquiry or account support request, or reach us directly at our Lagos headquarters.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,7 +16,7 @@
         <div class="container">
             <nav class="nav-container">
                 <a href="index.php" class="logo-link" id="logo-link">
-                    <img src="assets/IMG_3899.PNG" alt="MsjPay Logo" class="logo-img" id="logo-img-header">
+                    <img src="assets/IMG_3899.PNG" alt="Gracehubtels Logo" class="logo-img" id="logo-img-header">
                     <span class="logo-text" id="logo-text-header">Msj<span>Pay</span></span>
                 </a>
                 
@@ -33,7 +33,7 @@
                 </div>
 
                 <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation">
-                    <i>☰</i>
+                    <i>â˜°</i>
                 </button>
             </nav>
         </div>
@@ -44,7 +44,7 @@
        ========================================== -->
     <div class="page-header">
         <div class="container text-center" style="max-width: 700px;">
-            <h1 id="contact-title">Get in Touch with MsjPay</h1>
+            <h1 id="contact-title">Get in Touch with Gracehubtels</h1>
             <p class="page-meta" style="font-size: 16px; margin-top: 12px; line-height: 1.6;" id="contact-subtitle">
                 Have questions about setting up your merchant account? Or need support with a transaction? Our engineering and support teams are on standby. Fill out the contact form or reach us via our direct channels—we aim to respond to all inquiries within 2 hours.
             </p>
@@ -67,7 +67,7 @@
                     <div class="contact-card-content">
                         <h3>Email Support</h3>
                         <p style="margin-bottom: 8px;">Direct your technical or payment questions here:</p>
-                        <a href="mailto:support@msjpay.ng">support@msjpay.ng</a>
+                        <a href="mailto:support@gracehubtels.com">support@gracehubtels.com</a>
                         <p style="font-size: 11px; margin-top: 6px; color: var(--neutral-muted);">Response time: Under 2 hours</p>
                     </div>
                 </div>
@@ -93,7 +93,7 @@
                     <div class="contact-card-content">
                         <h3>Corporate Headquarters</h3>
                         <p style="line-height: 1.5; color: var(--neutral-muted);">
-                            MsjPay Technologies Limited<br>
+                            Gracehubtels Technologies Limited<br>
                             F.C.T MUNICIPAL AREA COUNCIL,<br>Abuja,Nigeria.
                         </p>
                     </div>
@@ -155,7 +155,7 @@
        ========================================== -->
     <div class="modal-overlay" id="success-overlay">
         <div class="success-modal">
-            <div class="success-icon-box">✓</div>
+            <div class="success-icon-box">âœ“</div>
             <h3>Message Sent!</h3>
             <p>Thank you, <strong class="success-client-name">user</strong>. Your inquiry has been logged successfully. A payment specialist will respond to <strong class="success-client-email">your email</strong> within 2 hours.</p>
             <button class="btn btn-navy" id="close-modal-btn" style="padding: 10px 24px;">Close Window</button>
@@ -170,10 +170,10 @@
             <div class="footer-grid">
                 <div class="footer-brand">
                     <a href="index.php" class="logo-link" style="margin-bottom: 20px;">
-                        <img src="assets/IMG_3901.PNG" alt="MsjPay Footer Logo" class="logo-img" style="height: 36px;" id="logo-img-footer">
+                        <img src="assets/IMG_3901.PNG" alt="Gracehubtels Footer Logo" class="logo-img" style="height: 36px;" id="logo-img-footer">
                         <span class="logo-text" style="color: var(--white);" id="logo-text-footer">Msj<span>Pay</span></span>
                     </a>
-                    <p>MsjPay Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.</p>
+                    <p>Gracehubtels Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.</p>
                     <div class="footer-socials">
                         <a href="#" class="social-icon">F</a>
                         <a href="#" class="social-icon">T</a>
@@ -195,7 +195,7 @@
                     <h3 class="footer-title">Support</h3>
                     <ul class="footer-links">
                         <li><a href="contact.php" class="footer-link">Contact Us</a></li>
-                        <li><a href="mailto:support@msjpay.ng" class="footer-link">support@msjpay.ng</a></li>
+                        <li><a href="mailto:support@gracehubtels.com" class="footer-link">support@gracehubtels.com</a></li>
                         <li><a href="tel:+234 8126368886" class="footer-link">+234 8126368886</a></li>
                     </ul>
                 </div>
@@ -210,7 +210,7 @@
             </div>
 
             <div class="footer-bottom">
-                <p>&copy; 2026 MsjPay Technologies Limited. All rights reserved.</p>
+                <p>&copy; 2026 Gracehubtels Technologies Limited. All rights reserved.</p>
                 <div class="footer-bottom-links">
                     <a href="privacy-policy.php" class="footer-bottom-link">Privacy Policy</a>
                     <a href="terms.php" class="footer-bottom-link">Terms of Service</a>

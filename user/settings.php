@@ -29,7 +29,7 @@ include __DIR__ . '/includes/sidebar.php';
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+            <a href="/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
                 <i class="fas fa-arrow-left"></i>
             </a>
             <div>
@@ -49,9 +49,9 @@ include __DIR__ . '/includes/sidebar.php';
             </div>
             
             <div class="divide-y divide-slate-100">
-                <button onclick="openPhoneModal()" class="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors text-left group">
+                <div class="flex items-center justify-between p-4">
                     <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg">
                             <i class="fas fa-phone"></i>
                         </div>
                         <div>
@@ -59,8 +59,8 @@ include __DIR__ . '/includes/sidebar.php';
                             <p class="text-xs font-semibold text-slate-500"><?=htmlspecialchars($user['phone'])?></p>
                         </div>
                     </div>
-                    <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
-                </button>
+                    <i class="fas fa-lock text-slate-300 text-sm" title="Cannot be changed"></i>
+                </div>
                 
                 <div class="flex items-center justify-between p-4">
                     <div class="flex items-center gap-4">
@@ -75,7 +75,7 @@ include __DIR__ . '/includes/sidebar.php';
                     <i class="fas fa-lock text-slate-300 text-sm" title="Cannot be changed"></i>
                 </div>
                 
-                <a href="/msjpay/user/profile" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                <a href="/user/profile" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
                             <i class="fas fa-shield-alt"></i>
@@ -87,9 +87,79 @@ include __DIR__ . '/includes/sidebar.php';
                     </div>
                     <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
                 </a>
+                
+                <a href="/user/developer-api" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                            <i class="fas fa-code"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-slate-800 mb-0.5">Developer API</p>
+                            <p class="text-xs font-semibold text-slate-500">Access API docs and keys</p>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
+                </a>
             </div>
         </div>
         
+        <!-- Appearance & Notifications -->
+        <div class="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                <h3 class="font-bold text-slate-800 flex items-center gap-2 text-sm uppercase tracking-wider">
+                    <i class="fas fa-palette text-purple-500"></i> Appearance & Notifications
+                </h3>
+            </div>
+            
+            <div class="divide-y divide-slate-100">
+                <div class="flex items-center justify-between p-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg">
+                            <i class="fas fa-moon"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-slate-800 mb-0.5">Dark Mode</p>
+                            <p class="text-xs font-semibold text-slate-500">Toggle dark theme appearance</p>
+                        </div>
+                    </div>
+                    <button id="darkModeToggleSettings" class="relative w-11 h-6 rounded-full transition-colors focus:outline-none" style="background:#cbd5e1" onclick="toggleTheme()">
+                        <span id="dmThumb" class="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform"></span>
+                    </button>
+                </div>
+                
+                <a href="/user/notifications" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                            <i class="fas fa-bell"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-slate-800 mb-0.5">Notifications</p>
+                            <p class="text-xs font-semibold text-slate-500">View all your alerts and updates</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <?php if(isset($nc) && $nc > 0): ?>
+                        <span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full"><?= min($nc, 99) ?></span>
+                        <?php endif; ?>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
+                    </div>
+                </a>
+                
+                <a href="/user/profile" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                    <div class="flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-slate-800 mb-0.5">My Profile</p>
+                            <p class="text-xs font-semibold text-slate-500">Manage your personal information</p>
+                        </div>
+                    </div>
+                    <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
+                </a>
+            </div>
+        </div>
+
         <!-- Support & Legal -->
         <div class="bg-white rounded-2xl border border-slate-200 card-shadow overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -99,20 +169,20 @@ include __DIR__ . '/includes/sidebar.php';
             </div>
             
             <div class="divide-y divide-slate-100">
-                <a href="mailto:<?=setting('site_email','support@msjpay.com')?>" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                <a href="mailto:<?=setting('site_email','support@gracehubtels.com')?>" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
                             <i class="fas fa-headset"></i>
                         </div>
                         <div>
                             <p class="text-sm font-bold text-slate-800 mb-0.5">Contact Support</p>
-                            <p class="text-xs font-semibold text-slate-500"><?=setting('site_email','support@msjpay.com')?></p>
+                            <p class="text-xs font-semibold text-slate-500"><?=setting('site_email','support@gracehubtels.com')?></p>
                         </div>
                     </div>
                     <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
                 </a>
                 
-                <a href="/msjpay/privacy-policy.php" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                <a href="/privacy-policy.php" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
                             <i class="fas fa-user-secret"></i>
@@ -124,7 +194,7 @@ include __DIR__ . '/includes/sidebar.php';
                     <i class="fas fa-chevron-right text-slate-300 group-hover:text-brand-orange transition-colors"></i>
                 </a>
                 
-                <a href="/msjpay/terms.php" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
+                <a href="/terms.php" class="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors group">
                     <div class="flex items-center gap-4">
                         <div class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
                             <i class="fas fa-file-contract"></i>
@@ -138,14 +208,9 @@ include __DIR__ . '/includes/sidebar.php';
             </div>
         </div>
         
-        <a href="/msjpay/user/logout" class="w-full bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 font-bold text-center py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2 border border-slate-200 hover:border-rose-200">
+        <a href="/user/logout" class="w-full bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 font-bold text-center py-4 rounded-xl transition-colors inline-flex items-center justify-center gap-2 border border-slate-200 hover:border-rose-200">
             <i class="fas fa-sign-out-alt"></i> Sign Out
         </a>
-        
-        <div class="text-center mt-8 text-xs text-slate-400">
-            <p class="font-semibold text-slate-500 mb-1">MSJPay v2.0</p>
-            <p>Powered by <a href="https://dev.radni.com.ng" target="_blank" class="text-brand-orange hover:underline font-bold">Radnidev Technologies</a></p>
-        </div>
     </div>
 </div>
 
@@ -181,50 +246,32 @@ include __DIR__ . '/includes/sidebar.php';
 <input type="hidden" id="csrfF" value="<?= csrf_token() ?>">
 
 <script>
-function openPhoneModal() {
-    document.getElementById('phoneSheet').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-}
-
-function closePhoneModal() {
-    document.getElementById('phoneSheet').classList.add('hidden');
-    document.body.style.overflow = 'auto';
-}
-
-function submitPhoneForm(e) {
-    e.preventDefault();
-    const form = document.getElementById('phoneForm');
-    const btn = form.querySelector('button[type="submit"]');
-    const ogHtml = btn.innerHTML;
-    
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
-    btn.disabled = true;
-    
-    const fd = new FormData(form);
-    fd.append('action', 'update_phone');
-    fd.append('csrf_token', document.getElementById('csrfF').value);
-    
-    fetch('', {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-    })
-    .then(r => r.json())
-    .then(res => {
-        if(res.success) {
-            alert(`Success! ${res.message}`);
-            location.reload();
-        } else {
-            alert(`Error: ${res.message}`);
-            btn.innerHTML = ogHtml;
-            btn.disabled = false;
-        }
-    })
-    .catch(err => {
-        alert('Network error occurred.');
-        btn.innerHTML = ogHtml;
-        btn.disabled = false;
-    });
+document.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('darkModeToggleSettings');
+    const thumb = document.getElementById('dmThumb');
+    if (btn && document.documentElement.classList.contains('dark-mode')) {
+        btn.style.background = '#FF5A1F';
+        thumb.style.transform = 'translateX(20px)';
+    }
+});
+function toggleTheme() {
+    const html = document.documentElement;
+    const icon = document.getElementById('themeIcon');
+    const btn = document.getElementById('darkModeToggleSettings');
+    const thumb = document.getElementById('dmThumb');
+    if (html.classList.contains('dark-mode')) {
+        html.classList.remove('dark-mode');
+        localStorage.setItem('theme', 'light');
+        if(icon) { icon.className = 'fa-solid fa-moon text-xl'; }
+        if(btn) { btn.style.background = '#cbd5e1'; }
+        if(thumb) { thumb.style.transform = 'translateX(0)'; }
+    } else {
+        html.classList.add('dark-mode');
+        localStorage.setItem('theme', 'dark');
+        if(icon) { icon.className = 'fa-solid fa-sun text-xl'; }
+        if(btn) { btn.style.background = '#FF5A1F'; }
+        if(thumb) { thumb.style.transform = 'translateX(20px)'; }
+    }
 }
 </script>
 

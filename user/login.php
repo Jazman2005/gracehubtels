@@ -1,14 +1,21 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 start_session();
-if(!empty($_SESSION['user_id'])){header('Location: /msjpay/user/dashboard');exit;}
+if(!empty($_SESSION['user_id'])){header('Location: /user/dashboard');exit;}
 $error='';
 if($_SERVER['REQUEST_METHOD']==='POST'){ 
     if(!verify_csrf($_POST['csrf_token']??''))$error='Security error. Refresh and try again.'; 
     elseif(detect_tamper($_POST))$error='Invalid input detected.'; 
     else{
-        $r=login_user($_POST['phone']??'',$_POST['password']??'');
-        if($r['success']){header('Location: '.($_GET['next']??'/msjpay/user/dashboard'));exit;}
+        $r=login_user($_POST['identifier']??'',$_POST['password']??'');
+        if($r['success']){
+            $next = $_GET['next'] ?? '';
+            $allowed = ['/user/dashboard','/user/transactions','/user/airtime','/user/data','/user/cabletv','/user/electricity','/user/exam-pin','/user/recharge-card','/user/data-card','/user/bulk-sms','/user/profile','/user/settings','/user/support','/user/fund','/user/bank-transfer','/user/airtime-to-cash','/user/internal-transfer','/user/pricing','/user/notifications','/user/promo','/user/referrals','/user/beneficiaries','/user/virtual-card','/user/delete-account','/user/receipt','/user/api-docs','/user/developer-api'];
+            $path = parse_url($next, PHP_URL_PATH);
+            $next = ($path && in_array($path, $allowed, true)) ? $path : '/user/dashboard';
+            header('Location: '.$next);
+            exit;
+        }
         $error=$r['message'];
     }
 }
@@ -19,7 +26,7 @@ $csrf=csrf_token();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In - MsjPay</title>
+    <title>Sign In - Gracehubtels</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -32,14 +39,14 @@ $csrf=csrf_token();
                         'inter': ['Inter', 'sans-serif'],
                         'outfit': ['Outfit', 'sans-serif'],
                     },
-                    colors: {
+                                        colors: {
                         brand: {
-                            navy: '#002060',
-                            navyLight: '#0d2e6c',
-                            navyDark: '#001238',
-                            orange: '#ff5500',
-                            orangeHover: '#e04b00',
-                            orangeLight: '#fff0eb'
+                            navy: '#2563EB',
+                            navyLight: '#3B82F6',
+                            navyDark: '#1D4ED8',
+                            orange: '#F59E0B',
+                            orangeHover: '#D97706',
+                            orangeLight: '#FEF3C7'
                         }
                     }
                 }
@@ -128,34 +135,34 @@ $csrf=csrf_token();
     <div class="min-h-screen flex flex-col lg:flex-row">
         
         <!-- Left Side - Login Form -->
-        <div class="w-full lg:w-1/2 honeycomb-bg flex items-center justify-center p-6 sm:p-8 lg:p-12 min-h-screen lg:min-h-0">
-            <div class="w-full max-w-md">
+        <div class="w-full lg:w-1/2 honeycomb-bg flex items-center justify-center p-4 sm:p-6 min-h-screen lg:min-h-0">
+            <div class="w-full max-w-sm">
                 
                 <!-- Logo -->
-                <div class="mb-8">
-                    <a href="/msjpay/index.php" class="inline-flex items-center gap-3 group">
-                        <div class="w-12 h-12 bg-gradient-to-br from-brand-navy to-brand-navyDark rounded-xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-                            <img src="/msjpay/assets/images/msjpay-logo.png" alt="MsjPay" class="w-8 h-8 object-contain" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fas fa-bolt text-xl text-white\'></i>'">
+                <div class="mb-4">
+                    <a href="/index.php" class="inline-flex items-center gap-2 group">
+                        <div class="w-9 h-9 bg-gradient-to-br from-brand-navy to-brand-navyDark rounded-lg flex items-center justify-center shadow group-hover:scale-105 transition-transform">
+                            <img src="/img/icon.png" alt="Gracehubtels" class="w-6 h-6 object-contain" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fas fa-bolt text-sm text-white\'></i>'">
                         </div>
-                        <span class="text-2xl font-bold text-gray-800">MsjPay</span>
+                        <span class="text-lg font-bold text-gray-800">Gracehubtels</span>
                     </a>
                 </div>
                 
                 <!-- Welcome Text -->
-                <div class="mb-8">
-                    <h1 class="text-3xl sm:text-4xl font-bold text-gray-900 mb-2">Welcome Back!</h1>
-                    <p class="text-gray-600">Sign in to your account to continue</p>
+                <div class="mb-4">
+                    <h1 class="text-xl font-bold text-gray-900 mb-1">Welcome Back!</h1>
+                    <p class="text-gray-500 text-sm">Sign in to your account to continue</p>
                 </div>
                 
                 <!-- Error Messages -->
                 <?php if($error): ?>
-                <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6 rounded-r-lg shadow-sm">
+                <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r-lg shadow-sm">
                     <div class="flex items-center">
                         <div class="flex-shrink-0">
-                            <i class="fas fa-exclamation-circle text-red-500 text-lg"></i>
+                            <i class="fas fa-exclamation-circle text-red-500"></i>
                         </div>
                         <div class="ml-3">
-                            <p class="text-sm text-red-700 font-medium">
+                            <p class="text-xs text-red-700 font-medium">
                                 <?=htmlspecialchars($error)?>
                             </p>
                         </div>
@@ -164,51 +171,51 @@ $csrf=csrf_token();
                 <?php endif; ?>
                 
                 <!-- Login Form -->
-                <form method="POST" class="space-y-5" id="loginForm">
+                <form method="POST" class="space-y-3" id="loginForm">
                     <input type="hidden" name="csrf_token" value="<?=$csrf?>">
                     
-                    <!-- Username Field -->
+                    <!-- Email / Username Field -->
                     <div>
-                        <label for="id_phone" class="block text-sm font-semibold text-gray-700 mb-2">
-                            Phone Number
+                        <label for="id_identifier" class="block text-xs font-semibold text-gray-700 mb-1.5">
+                            Username or Email
                         </label>
-                        <input type="tel" name="phone" id="id_phone" 
-                               class="input-field w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl bg-white focus:bg-white transition-all outline-none text-gray-800"
-                               placeholder="08012345678" maxlength="11" required autofocus>
+                        <input type="text" name="identifier" id="id_identifier" 
+                               class="input-field w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg bg-white focus:bg-white transition-all outline-none text-gray-800 text-sm"
+                               placeholder="Username or Email" required autofocus>
                     </div>
                     
                     <!-- Password Field -->
                     <div>
-                        <label for="id_password" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <label for="id_password" class="block text-xs font-semibold text-gray-700 mb-1.5">
                             Password
                         </label>
                         <div class="relative">
                             <input type="password" name="password" id="id_password" 
-                                   class="input-field w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl bg-white focus:bg-white transition-all outline-none pr-12 text-gray-800"
+                                   class="input-field w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg bg-white focus:bg-white transition-all outline-none pr-10 text-gray-800 text-sm"
                                    placeholder="Enter your password" required>
                             <button type="button" onclick="togglePassword()" class="password-toggle">
-                                <i class="fas fa-eye" id="toggleIcon"></i>
+                                <i class="fas fa-eye text-sm" id="toggleIcon"></i>
                             </button>
                         </div>
                     </div>
                     
                     <!-- Remember & Forgot -->
                     <div class="flex items-center justify-between">
-                        <label class="flex items-center gap-2 cursor-pointer group">
-                            <input type="checkbox" name="remember" class="custom-checkbox w-4 h-4 rounded border-gray-300 cursor-pointer">
-                            <span class="text-sm text-gray-600 group-hover:text-gray-800 transition">Keep me logged in</span>
+                        <label class="flex items-center gap-1.5 cursor-pointer group">
+                            <input type="checkbox" name="remember" class="custom-checkbox w-3.5 h-3.5 rounded border-gray-300 cursor-pointer">
+                            <span class="text-xs text-gray-600 group-hover:text-gray-800 transition">Keep me logged in</span>
                         </label>
-                        <a href="/msjpay/user/forget-password" class="text-sm font-semibold text-brand-orange hover:text-brand-orangeHover transition hover:underline">
+                        <a href="/user/forget-password" class="text-xs font-semibold text-brand-orange hover:text-brand-orangeHover transition hover:underline">
                             Forgot Password?
                         </a>
                     </div>
                     
                     <!-- Submit Button -->
                     <button type="submit" id="submitBtn"
-                            class="btn-primary w-full py-4 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center gap-2">
+                            class="btn-primary w-full py-2.5 text-white text-sm font-semibold rounded-lg shadow flex items-center justify-center gap-1.5">
                         <span id="sbtxt">Sign In</span>
-                        <i class="fas fa-arrow-right" id="sbicn"></i>
-                        <svg viewBox="0 0 24 24" class="spin" id="sbl" style="display:none; width:20px;height:20px;stroke:#fff;fill:none;stroke-width:2; animation: spin 1s linear infinite;">
+                        <i class="fas fa-arrow-right text-xs" id="sbicn"></i>
+                        <svg viewBox="0 0 24 24" class="spin" id="sbl" style="display:none; width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2; animation: spin 1s linear infinite;">
                             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                         </svg>
                         <style>@keyframes spin { 100% { transform: rotate(360deg); } }</style>
@@ -216,40 +223,34 @@ $csrf=csrf_token();
                 </form>
                 
                 <!-- Sign Up Link -->
-                <div class="mt-8 text-center">
-                    <p class="text-gray-600">
+                <div class="mt-6 text-center">
+                    <p class="text-gray-500 text-xs">
                         Don't have an account? 
-                        <a href="/msjpay/user/signup" class="font-semibold text-brand-orange hover:text-brand-orangeHover transition hover:underline">
+                        <a href="/user/signup" class="font-semibold text-brand-orange hover:text-brand-orangeHover transition hover:underline">
                             Sign Up Now
                         </a>
                     </p>
                 </div>
                 
                 <!-- Footer -->
-                <p class="text-center text-gray-400 text-sm mt-8">
-                    &copy; 2026 MsjPay. All rights reserved.
+                <p class="text-center text-gray-400 text-xs mt-6">
+                    &copy; 2026 Gracehubtels. All rights reserved.
                 </p>
             </div>
         </div>
         
         <!-- Right Side - Hero Image -->
         <div class="hidden lg:flex w-1/2 hero-gradient relative overflow-hidden items-center justify-center">
-            <!-- Decorative circles -->
-            <div class="absolute top-20 right-20 w-32 h-32 bg-white/5 rounded-full float-animation"></div>
-            <div class="absolute bottom-32 left-16 w-24 h-24 bg-white/5 rounded-full float-animation" style="animation-delay: 2s;"></div>
-            <div class="absolute top-1/3 left-1/4 w-16 h-16 bg-brand-orange/10 rounded-full float-animation" style="animation-delay: 4s;"></div>
-            
             <!-- Content -->
-            <div class="relative z-10 text-center px-8">
-                <!-- Hero Image -->
-                <div class="mb-6">
-                    <div class="w-64 h-64 mx-auto bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center p-8 border border-white/20 shadow-2xl">
-                        <i class="fas fa-wallet text-white" style="font-size: 8rem;"></i>
+            <div class="relative z-10 text-center px-6">
+                <div class="mb-4">
+                    <div class="w-36 h-36 mx-auto bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center p-6 border border-white/20 shadow-2xl">
+                        <i class="fas fa-wallet text-white" style="font-size: 4rem;"></i>
                     </div>
                 </div>
-                <h2 class="text-3xl font-bold text-white mb-4">Seamless Payments</h2>
-                <p class="text-blue-100 text-lg max-w-md mx-auto opacity-90">
-                    Experience instant airtime, data top-ups, and bill payments with zero delays. Join MsjPay today.
+                <h2 class="text-xl font-bold text-white mb-2">Seamless Payments</h2>
+                <p class="text-blue-100 text-sm max-w-xs mx-auto opacity-90">
+                    Experience instant airtime, data top-ups, and bill payments with zero delays.
                 </p>
             </div>
         </div>

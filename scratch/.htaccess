@@ -1,0 +1,4 @@
+# Dev/debug scratch scripts — never web-accessible.
+Require all denied
+Order Allow,Deny
+Deny from all

@@ -1,156 +1,133 @@
 <?php
-// webhook/palmpay/index.php
 require_once __DIR__ . '/../../user/core/db.php';
-require_once __DIR__ . '/../../user/core/dashboard.php';
 
-header('Content-Type: application/json');
+try {
+    $payload = file_get_contents('php://input');
 
-$raw    = file_get_contents('php://input');
-$ip     = get_ip();
-
-// PalmPay sends a signature in X-PalmPay-Signature or similar header
-$sig    = $_SERVER['HTTP_X_PALMPAY_SIGNATURE'] ?? $_SERVER['HTTP_SIGNATURE'] ?? '';
-$secret = setting('palmpay_secret');
-
-$valid = true; // Default allow if no secret configured (sandbox)
-if (!empty($secret) && !empty($sig)) {
-    $expected = base64_encode(hash_hmac('sha256', $raw, $secret, true));
-    $valid    = hash_equals($expected, $sig);
-}
-
-$payload = json_decode($raw, true);
-
-// Log it
-db()->prepare(
-    "INSERT INTO webhook_logs (provider,event_type,transaction_ref,account_number,amount,payload,signature_valid,ip_address)
-     VALUES ('palmpay',?,?,?,?,?,?,?)"
-)->execute([
-    $payload['type'] ?? $payload['event'] ?? 'payment',
-    $payload['data']['orderId'] ?? $payload['orderId'] ?? '',
-    $payload['data']['virtualAccountNo'] ?? $payload['data']['payeeBankAccNo'] ?? '',
-    (float)($payload['data']['amount'] ?? 0) / 100,
-    $raw,
-    (int)$valid,
-    $ip
-]);
-
-if (!$valid) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid signature']);
-    exit;
-}
-
-if (!$payload) {
-    http_response_code(400);
-    echo json_encode(['error' => 'Invalid JSON']);
-    exit;
-}
-
-// Determine notification type
-$order_id   = $payload['data']['orderId']     ?? '';
-$acct_no    = $payload['data']['virtualAccountNo'] ?? '';
-$amount_raw = (float)($payload['data']['amount'] ?? 0);
-$amount     = $amount_raw / 100; // PalmPay sends in kobo
-$event_type = $payload['type'] ?? $payload['respCode'] ?? '';
-
-// Handle virtual account credit (inbound payment)
-if ($acct_no && $amount > 0) {
-    // Duplicate check
-    $ext_ref = $payload['data']['orderNo'] ?? $order_id;
-    if ($ext_ref) {
-        $dup = db()->prepare("SELECT id FROM transactions WHERE external_ref=? LIMIT 1");
-        $dup->execute([$ext_ref]);
-        if ($dup->fetch()) {
-            http_response_code(200);
-            echo json_encode(['status' => 'duplicate']);
-            exit;
-        }
+    if (empty($payload)) {
+        log_write('webhook_palmpay', 'WARN', 'Empty payload received');
+        http_response_code(400);
+        exit('Missing payload');
     }
 
-    // Find user by virtual account
-    $va = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number=? AND is_active=1 LIMIT 1");
-    $va->execute([$acct_no]);
-    $va_row = $va->fetch();
+    log_write('webhook_palmpay', 'INFO', 'Received webhook', ['payload' => $payload]);
 
-    if ($va_row) {
-        $user_id = (int)$va_row['user_id'];
-    } elseif (str_starts_with($order_id, 'DYN_') || str_starts_with($ext_ref, 'DYN_')) {
-        // Parse user ID from dynamic checkout reference (DYN_time_uid)
-        $ref_parts = explode('_', $ext_ref ?: $order_id);
-        if (count($ref_parts) >= 3) {
-            $user_id = (int)end($ref_parts);
-        }
+    $data = json_decode($payload, true);
+    if (!$data) {
+        log_write('webhook_palmpay', 'ERROR', 'Invalid JSON', ['payload' => mb_substr($payload, 0, 1000)]);
+        http_response_code(400);
+        exit('Invalid JSON');
     }
 
-    if (isset($user_id) && $user_id > 0) {
-        $payer   = $payload['data']['payerName'] ?? 'Unknown';
-        
-        // Fee Calculation
-        $fee_type = setting('palmpay_fee_type', 'flat');
-        $fee_val  = (float)setting('palmpay_fee_value', '0');
-        
-        $fee = 0;
-        if ($fee_val > 0) {
-            if ($fee_type === 'percent') {
-                $fee = ($amount * $fee_val) / 100;
-            } else {
-                $fee = $fee_val;
+    // Check orderStatus — 2 = success
+    $order_status = (int)($data['orderStatus'] ?? 0);
+    if ($order_status !== 2) {
+        log_write('webhook_palmpay', 'INFO', 'Ignored non-success status', ['orderStatus' => $order_status, 'allFields' => array_keys($data)]);
+        http_response_code(200);
+        exit('success');
+    }
+
+    // Signature verification using notify secret
+    $sign = $data['sign'] ?? '';
+    $notify_secret = setting('palmpay_notify_secret', '');
+    if (!empty($sign)) {
+        if (empty($notify_secret)) {
+            log_write('webhook_palmpay', 'ERROR', 'Signature present but notify_secret not configured — rejecting');
+            http_response_code(400);
+            exit('Webhook secret not configured');
+        }
+        $verify_data = $data;
+        unset($verify_data['sign']);
+        ksort($verify_data);
+        $str = '';
+        foreach ($verify_data as $k => $v) {
+            if ($v !== '' && $v !== null && !is_array($v)) {
+                $str .= "{$k}={$v}&";
             }
         }
-        
-        $credit_amount = max(0, $amount - $fee);
+        $str = rtrim($str, '&');
 
-        if ($credit_amount <= 0) {
-            db()->prepare("UPDATE webhook_logs SET error_message='Amount less than or equal to fee' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-               ->execute([$ext_ref ?? '']);
-            http_response_code(200);
-            echo json_encode(['status'=>'fee_too_high']);
-            exit;
+        $expected = strtoupper(hash_hmac('sha256', $str, $notify_secret));
+        if (!hash_equals($expected, strtoupper($sign))) {
+            log_write('webhook_palmpay', 'ERROR', 'Invalid signature', ['expected' => $expected, 'received' => $sign]);
+            http_response_code(400);
+            exit('Invalid signature');
         }
-
-        $desc = "Wallet funded via PalmPay - from {$payer}";
-        if ($fee > 0) $desc .= " (Fee: ₦".number_format($fee,2).")";
-
-        $result  = credit_wallet($user_id, $credit_amount, 'wallet_funding', $desc, [
-            'provider'       => 'palmpay_direct',
-            'external_ref'   => $ext_ref,
-            'payer'          => $payer,
-            'account_number' => $acct_no,
-        ]);
-
-        if ($result['success']) {
-            if ($ext_ref) {
-                db()->prepare("UPDATE transactions SET external_ref=?, provider='palmpay_direct' WHERE transaction_ref=? LIMIT 1")
-                   ->execute([$ext_ref, $result['ref']]);
-            }
-            db()->prepare("UPDATE webhook_logs SET processed=1 WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-               ->execute([$ext_ref ?? '']);
-            db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-               ->execute([$user_id, '💰 Wallet Funded', '₦' . number_format($credit_amount, 2) . ' credited to your wallet via PalmPay.', 'success']);
-        }
+        log_write('webhook_palmpay', 'INFO', 'Signature verified via HMAC');
     }
-}
 
-// Handle transfer/payout callback
-if ($order_id && empty($acct_no)) {
-    $status     = $payload['data']['orderStatus'] ?? 0;
-    $tx_status  = $status == 2 ? 'success' : ($status == 3 ? 'failed' : 'pending');
-    $provider_ref = $payload['data']['orderNo'] ?? '';
-    if ($order_id) {
-        db()->prepare("UPDATE transactions SET status=?, provider_ref=? WHERE transaction_ref=? AND status='pending'")
-           ->execute([$tx_status, $provider_ref, $order_id]);
-        if ($tx_status === 'failed') {
-            // Find transaction and reverse
-            $tx = db()->prepare("SELECT * FROM transactions WHERE transaction_ref=? LIMIT 1");
-            $tx->execute([$order_id]); $t = $tx->fetch();
-            if ($t) {
-                credit_wallet((int)$t['user_id'], (float)$t['amount'], 'bank_transfer', "Transfer reversal - provider rejected", ['reversed_tx' => $order_id]);
-                db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-                   ->execute([$t['user_id'], '❌ Transfer Failed', 'Your transfer was rejected by the bank. Wallet refunded.', 'danger']);
-            }
-        }
+    // Try orderNo (dynamic VA) or virtualAccountNo (permanent VA)
+    $ref = $data['orderNo'] ?? $data['virtualAccountNo'] ?? $data['accountNumber'] ?? $data['orderId'] ?? '';
+    $amount_kobo = (int)($data['amount'] ?? $data['totalAmount'] ?? 0);
+    $amount = $amount_kobo / 100;
+
+    if (empty($ref) || $amount <= 0) {
+        log_write('webhook_palmpay', 'WARN', 'Invalid order data', ['ref' => $ref, 'amount' => $amount, 'rawKeys' => array_keys($data)]);
+        http_response_code(200);
+        exit('success');
     }
+
+    // Check if already processed. This SELECT is a cheap fast-path only — the real
+    // guard against a concurrent replay of the same webhook is the UNIQUE constraint
+    // on transactions.idempotency_key, enforced atomically inside credit_wallet().
+    // (A plain "SELECT then credit" check alone has a race: two simultaneous
+    // deliveries of the same payload could both pass this SELECT before either has
+    // inserted its row, double-crediting the wallet.)
+    $idem_key = 'palmpay:' . $ref;
+    $stmt = db()->prepare("SELECT id FROM transactions WHERE idempotency_key = ? LIMIT 1");
+    $stmt->execute([$idem_key]);
+    if ($stmt->fetch()) {
+        log_write('webhook_palmpay', 'INFO', 'Already processed', ['ref' => $ref]);
+        http_response_code(200);
+        exit('success');
+    }
+
+    // Find user — match by bank_code (stores orderNo or virtualAccountNo) or account_number
+    $user_id = 0;
+    $stmt = db()->prepare("SELECT user_id FROM virtual_accounts WHERE (bank_code = ? OR account_number = ?) AND provider = 'palmpay' LIMIT 1");
+    $stmt->execute([$ref, $ref]);
+    $acc = $stmt->fetch();
+    if ($acc) {
+        $user_id = (int)$acc['user_id'];
+    }
+
+    if (!$user_id) {
+        log_write('webhook_palmpay', 'WARN', 'Could not match user for webhook', ['ref' => $ref]);
+        http_response_code(200);
+        exit('success');
+    }
+
+    // Fee handling
+    $fee_type = setting('palmpay_fee_type', 'percent');
+    $fee_value = (float)setting('palmpay_fee_value', '1');
+    if ($fee_type === 'flat') {
+        $fee = min($fee_value, $amount * 0.5);
+    } else {
+        $fee = ($amount * $fee_value) / 100;
+    }
+    $credit_amount = $amount - $fee;
+    if ($credit_amount <= 0) {
+        log_write('webhook_palmpay', 'WARN', 'Credit amount <= 0', ['amount' => $amount, 'fee' => $fee]);
+        http_response_code(200);
+        exit('success');
+    }
+
+    $res = credit_wallet($user_id, $credit_amount, 'wallet_funding', 'PalmPay Funding - ' . $ref, ['ref' => $ref], $idem_key);
+
+    if ($res['success']) {
+        notify_user($user_id, 'Wallet Funded', "Your wallet has been funded with \u20A6" . number_format($credit_amount, 2) . " via PalmPay", 'info', null, $res['balance_before'], $res['balance_after']);
+        log_write('webhook_palmpay', 'INFO', 'Wallet credited', ['user_id' => $user_id, 'amount' => $credit_amount, 'ref' => $ref]);
+
+        $stmt = db()->prepare("UPDATE virtual_accounts SET is_active = 0 WHERE bank_code = ? AND provider = 'palmpay'");
+        $stmt->execute([$ref]);
+    } elseif (!empty($res['duplicate'])) {
+        log_write('webhook_palmpay', 'INFO', 'Already processed (race-detected at insert)', ['ref' => $ref]);
+    } else {
+        log_write('webhook_palmpay', 'ERROR', 'credit_wallet failed', ['ref' => $ref, 'reason' => $res['message'] ?? 'unknown']);
+    }
+} catch (Throwable $e) {
+    log_write('webhook_palmpay', 'ERROR', 'Unhandled exception', ['message' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
 }
 
 http_response_code(200);
-echo json_encode(['status' => 'ok']);
+exit('success');

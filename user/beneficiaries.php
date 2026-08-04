@@ -45,18 +45,18 @@ include __DIR__ . '/includes/sidebar.php';
 
 <div class="max-w-3xl mx-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4 sm:mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/profile" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
-                <i class="fas fa-arrow-left"></i>
+            <a href="/user/profile" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left text-xs sm:text-sm"></i>
             </a>
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Beneficiaries</h1>
-                <p class="text-sm text-slate-500">Manage your saved accounts and numbers</p>
+                <h1 class="text-lg sm:text-xl font-bold text-slate-800">Beneficiaries</h1>
+                <p class="text-xs sm:text-sm text-slate-500">Manage your saved accounts and numbers</p>
             </div>
         </div>
-        <div class="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold border border-slate-200 shadow-sm hidden sm:flex items-center gap-2">
-            <span class="text-xs font-semibold uppercase tracking-wider opacity-80">Saved:</span>
+        <div class="bg-slate-100 text-slate-600 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold border border-slate-200 shadow-sm hidden sm:flex items-center gap-2 text-sm">
+            <span class="text-[10px] sm:text-xs font-semibold uppercase tracking-wider opacity-80">Saved:</span>
             <span><?=count($benefs)?>/20</span>
         </div>
     </div>
@@ -101,7 +101,7 @@ include __DIR__ . '/includes/sidebar.php';
                     </div>
                     
                     <div class="flex items-center gap-2 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        <a href="/msjpay/user/<?=$page?>?benef=<?=$b['id']?>" class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors" title="Use Beneficiary">
+                        <a href="/user/<?=$page?>?benef=<?=$b['id']?>" class="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white flex items-center justify-center transition-colors" title="Use Beneficiary">
                             <i class="fas fa-paper-plane text-sm"></i>
                         </a>
                         <button onclick="toggleFav(<?=$b['id']?>, this)" class="w-9 h-9 rounded-lg bg-amber-50 text-amber-500 hover:bg-amber-500 hover:text-white flex items-center justify-center transition-colors" title="Toggle Favorite">
@@ -140,7 +140,7 @@ function toggleFav(id, btn) {
     fd.append('csrf_token', document.getElementById('csrfF').value);
     
     fetch('', { method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd })
-    .then(r => r.json())
+    .then(async r => { const txt = await r.text(); try { return JSON.parse(txt); } catch(e) { console.error('Raw response:', txt); throw new Error(txt); } })
     .then(res => {
         if(res.success) {
             const isFav = res.is_favourite;
@@ -157,19 +157,19 @@ function toggleFav(id, btn) {
                 }
             }
         } else {
-            alert('Error toggling favorite');
+            Swal.fire('Notice', 'Error toggling favorite', 'info');
             // reset icon - assuming it was what it wasn't
             icon.className = 'far fa-star text-sm';
         }
     })
     .catch(err => {
-        alert('Network error');
+        Swal.fire('Notice', 'Network error', 'info');
         icon.className = 'far fa-star text-sm';
     });
 }
 
-function deleteBenef(id, btn) {
-    if(!confirm('Delete this beneficiary?')) return;
+async function deleteBenef(id, btn) {
+    if(!await showConfirm('Delete this beneficiary?', 'Confirm Deletion')) return;
     
     const icon = btn.querySelector('i');
     icon.className = 'fas fa-spinner fa-spin text-sm';
@@ -180,7 +180,7 @@ function deleteBenef(id, btn) {
     fd.append('csrf_token', document.getElementById('csrfF').value);
     
     fetch('', { method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd })
-    .then(r => r.json())
+    .then(async r => { const txt = await r.text(); try { return JSON.parse(txt); } catch(e) { console.error('Raw response:', txt); throw new Error(txt); } })
     .then(res => {
         if(res.success) {
             const row = document.getElementById('b-row-' + id);
@@ -193,12 +193,12 @@ function deleteBenef(id, btn) {
                 }
             }, 300);
         } else {
-            alert('Error deleting beneficiary');
+            Swal.fire('Notice', 'Error deleting beneficiary', 'info');
             icon.className = 'fas fa-trash-alt text-sm';
         }
     })
     .catch(err => {
-        alert('Network error');
+        Swal.fire('Notice', 'Network error', 'info');
         icon.className = 'fas fa-trash-alt text-sm';
     });
 }

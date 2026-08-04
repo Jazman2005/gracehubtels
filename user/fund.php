@@ -15,10 +15,23 @@ $csrf=csrf_token();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) { 
     if (!verify_csrf($_POST['csrf_token'] ?? '')) { 
         json_response(['success' => false, 'message' => 'Invalid token'], 403); 
-    } 
-    $action = $_POST['action'] ?? ''; 
+    }
+    $action = $_POST['action'] ?? '';
     if ($action === 'create_va') { 
+        $nin_input = '';
+        $original_nin = $user['nin'];
+        if (!empty($_POST['nin']) && preg_match('/^\d{11}$/', $_POST['nin'])) {
+            $nin_input = sanitize($_POST['nin']);
+            db()->prepare("UPDATE users SET nin=? WHERE id=?")->execute([$nin_input, $uid]);
+            $user['nin'] = $nin_input;
+        }
         $result = $va_mgr->create_for_user($uid); 
+        
+        // Rollback NIN if creation failed
+        if (!$result['success'] && $nin_input) {
+            db()->prepare("UPDATE users SET nin=? WHERE id=?")->execute([$original_nin, $uid]);
+        }
+        
         json_response($result); 
     } elseif ($action === 'create_dynamic_va') {
         if(setting('palmpay_dynamic_enabled') !== '1') {
@@ -53,6 +66,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if ($amount < 100) json_response(['success'=>false, 'message'=>'Minimum amount is 100 NGN']);
         if (!$sender_name) json_response(['success'=>false, 'message'=>'Sender name is required']);
         
+        $last_req = db()->prepare("SELECT created_at FROM manual_funding_requests WHERE user_id=? ORDER BY created_at DESC LIMIT 1");
+        $last_req->execute([$uid]);
+        $last_date = $last_req->fetchColumn();
+        if($last_date) {
+            $diff = time() - strtotime($last_date);
+            $wait_time = 5 * 60; // 5 minutes
+            if($diff < $wait_time) {
+                $rem = ceil(($wait_time - $diff) / 60);
+                json_response(['success'=>false, 'message'=>"We recently received your deposit notification. Please wait $rem minute(s) before submitting another one."]);
+            }
+        }
+        
         try {
             db()->prepare("INSERT INTO manual_funding_requests (user_id, amount, sender_name, status) VALUES (?, ?, ?, 'pending')")->execute([$uid, $amount, $sender_name]);
             json_response(['success'=>true, 'message'=>'Your transfer receipt has been submitted! It will be approved shortly.']);
@@ -72,12 +97,12 @@ include __DIR__ . '/includes/sidebar.php';
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+            <a href="/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
                 <i class="fas fa-arrow-left"></i>
             </a>
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Fund Wallet</h1>
-                <p class="text-sm text-slate-500">Add money to your MSJPay account</p>
+                <p class="text-sm text-slate-500">Add money to your Gracehubtels account</p>
             </div>
         </div>
     </div>
@@ -131,6 +156,13 @@ include __DIR__ . '/includes/sidebar.php';
                 </div>
             <?php endforeach; ?>
             </div>
+            
+            <div class="mt-4 text-center">
+                <button onclick="createVA()" id="genBtn" class="bg-brand-navy hover:bg-brand-navyLight text-white px-6 py-3 rounded-xl font-bold transition-colors inline-flex items-center gap-2">
+                    <i class="fas fa-plus"></i> Generate Another Account
+                </button>
+            </div>
+            
         <?php else: ?>
             <div class="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center">
                 <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
@@ -147,7 +179,7 @@ include __DIR__ . '/includes/sidebar.php';
         
         <div class="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
             <i class="fas fa-info-circle text-blue-500 mt-0.5 shrink-0"></i>
-            <p>Transfer to any of the account numbers above from your bank app. Your MSJPay wallet will be credited automatically within seconds.</p>
+            <p>Transfer to any of the account numbers above from your bank app. Your Gracehubtels wallet will be credited automatically within seconds.</p>
         </div>
     </div>
 
@@ -308,7 +340,7 @@ function switchFundTab(tabId, el) {
 function copyAcct(num) {
     if(navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(num).then(()=>{
-            alert('Account number copied to clipboard');
+            if (typeof showAlert === 'function') showAlert('Account number copied to clipboard', 'Success', 'check-circle', 'text-emerald-500');
         });
     } else {
         const ta = document.createElement('textarea');
@@ -319,9 +351,9 @@ function copyAcct(num) {
         ta.select();
         try {
             document.execCommand('copy');
-            alert('Account number copied to clipboard');
+            if (typeof showAlert === 'function') showAlert('Account number copied to clipboard', 'Success', 'check-circle', 'text-emerald-500');
         } catch (ex) {
-            alert('Failed to copy');
+            if (typeof showAlert === 'function') showAlert('Failed to copy', 'Error');
         }
         document.body.removeChild(ta);
     }
@@ -330,7 +362,7 @@ function copyAcct(num) {
 async function createDynamicVA() {
     const amt = document.getElementById('dyn_amount').value;
     if(!amt || isNaN(amt) || amt < 100) {
-        alert("Please enter a valid amount of at least 100 NGN");
+        if (typeof showAlert === 'function') showAlert("Please enter a valid amount of at least 100 NGN", "Notice");
         return;
     }
     
@@ -359,10 +391,10 @@ async function createDynamicVA() {
             document.getElementById('dynamic-form-wrap').classList.add('hidden');
             document.getElementById('dynamic-result-wrap').classList.remove('hidden');
         } else {
-            alert(res.message || "Failed to generate dynamic account.");
+            if (typeof showAlert === 'function') showAlert(res.message || "Failed to generate dynamic account.", "Error");
         }
     } catch(e) {
-        alert("Network error. Please try again.");
+        if (typeof showAlert === 'function') showAlert("Network error. Please try again.", "Error");
     }
     
     btn.disabled = false;
@@ -374,11 +406,11 @@ async function submitManualFunding() {
     const snd = document.getElementById('mf_sender').value;
     
     if(!amt || isNaN(amt) || amt < 100) {
-        alert("Please enter a valid amount of at least 100 NGN");
+        if (typeof showAlert === 'function') showAlert("Please enter a valid amount of at least 100 NGN", "Notice");
         return;
     }
     if(!snd.trim()) {
-        alert("Please enter the sender name");
+        if (typeof showAlert === 'function') showAlert("Please enter the sender name", "Notice");
         return;
     }
     
@@ -399,13 +431,13 @@ async function submitManualFunding() {
             body: fd
         }).then(r => r.json());
         
-        alert(res.message);
+        if (typeof showAlert === 'function') showAlert(res.message, res.success ? 'Success' : 'Notice', res.success ? 'check-circle' : 'exclamation-circle', res.success ? 'text-emerald-500' : 'text-amber-500');
         if(res.success) {
             document.getElementById('mf_amount').value = '';
             document.getElementById('mf_sender').value = '';
         }
     } catch(e) {
-        alert("Network error. Please try again.");
+        if (typeof showAlert === 'function') showAlert("Network error. Please try again.", "Error");
     }
     
     btn.disabled = false;
@@ -413,6 +445,49 @@ async function submitManualFunding() {
 }
 
 function createVA() {
+    const hasNin = '<?= !empty($user["nin"]) ? "1" : "" ?>';
+    if (!hasNin) {
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'NIN Required',
+                text: 'Please provide your 11-digit NIN (National Identification Number) to generate a virtual account.',
+                input: 'text',
+                inputAttributes: {
+                    maxlength: 11,
+                    pattern: '\\d{11}',
+                    placeholder: 'Enter your 11-digit NIN'
+                },
+                showCancelButton: true,
+                confirmButtonText: 'Generate Account',
+                confirmButtonColor: '#0f172a',
+                preConfirm: (nin) => {
+                    if (!nin || !/^\d{11}$/.test(nin)) {
+                        Swal.showValidationMessage('Please enter a valid 11-digit NIN');
+                        return false;
+                    }
+                    return nin;
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    processCreateVA(result.value);
+                }
+            });
+        } else {
+            const nin = prompt("Please provide your 11-digit NIN to generate a virtual account:");
+            if (nin) {
+                if (!/^\d{11}$/.test(nin)) {
+                    alert('Please enter a valid 11-digit NIN');
+                    return;
+                }
+                processCreateVA(nin);
+            }
+        }
+    } else {
+        processCreateVA('');
+    }
+}
+
+function processCreateVA(nin = '') {
     const btn = document.getElementById('genBtn');
     const ogHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
@@ -421,6 +496,7 @@ function createVA() {
     const fd = new FormData();
     fd.append('action', 'create_va');
     fd.append('csrf_token', '<?=$csrf?>');
+    if (nin) fd.append('nin', nin);
     
     fetch('', {
         method: 'POST',
@@ -430,16 +506,28 @@ function createVA() {
     .then(r => r.json())
     .then(res => {
         if(res.success) {
-            alert('Virtual Account generated successfully!');
-            location.reload();
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('Success', 'Virtual Account generated successfully!', 'success').then(() => location.reload());
+            } else {
+                alert('Virtual Account generated successfully!');
+                location.reload();
+            }
         } else {
-            alert('Error: ' + res.message);
+            if (typeof Swal !== 'undefined') {
+                Swal.fire('Error', res.message, 'error');
+            } else {
+                alert('Error: ' + res.message);
+            }
             btn.innerHTML = ogHtml;
             btn.disabled = false;
         }
     })
     .catch(err => {
-        alert('Network error generating account.');
+        if (typeof Swal !== 'undefined') {
+            Swal.fire('Error', 'Network error generating account.', 'error');
+        } else {
+            alert('Network error generating account.');
+        }
         btn.innerHTML = ogHtml;
         btn.disabled = false;
     });

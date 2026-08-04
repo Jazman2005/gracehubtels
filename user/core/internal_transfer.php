@@ -32,6 +32,8 @@ function process_internal_transfer(int $uid, array $post): array {
     
     if($amount < 50) return ['success'=>false, 'message'=>'Minimum transfer is ₦50'];
     if(empty($pin)) return ['success'=>false, 'message'=>'Transaction PIN is required'];
+    $limit_err = check_daily_limit($uid, $amount, 'internal_transfer');
+    if($limit_err) return['success'=>false,'message'=>$limit_err];
     
     $rec_res = resolve_recipient($identifier, $uid);
     if(!$rec_res['success']) return $rec_res;
@@ -47,8 +49,8 @@ function process_internal_transfer(int $uid, array $post): array {
     
     // Check for fee setting
     $fee = 0.0;
-    if (setting('internal_transfer_charge_enabled') === '1') {
-        $fee = (float)setting('internal_transfer_charge', '0');
+    if (setting('p2p_transfer_charge_enabled') === '1') {
+        $fee = (float)setting('p2p_transfer_charge', '0');
     }
     $total_deduction = $amount + $fee;
     
@@ -78,17 +80,26 @@ function process_internal_transfer(int $uid, array $post): array {
         ]);
         
         if(!$credit['success']) {
+            update_tx_status($debit['ref'], 'failed');
             db()->rollBack();
             return ['success'=>false, 'message'=>'Failed to credit recipient'];
         }
         
+        update_tx_status($debit['ref'], 'success');
         db()->commit();
         
         // Notify recipient
         db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-           ->execute([$rec_id, '💸 Transfer Received', "You have received ₦".number_format($amount,2)." from ".($sender['full_name']).".", 'success']);
+           ->execute([$rec_id, 'Transfer Received', "You have received ₦".number_format($amount,2)." from ".($sender['full_name']).".", 'success']);
            
-        return ['success'=>true, 'message'=>"Successfully transferred ₦".number_format($amount,2)." to $rec_name"];
+        return [
+            'success' => true,
+            'message' => "Successfully transferred ₦".number_format($amount,2)." to $rec_name",
+            'ref' => $debit['ref'] ?? null,
+            'balance_before' => $debit['balance_before'] ?? null,
+            'balance_after' => $debit['balance_after'] ?? null,
+            'recipient_name' => $rec_name
+        ];
         
     } catch(Exception $e) {
         db()->rollBack();

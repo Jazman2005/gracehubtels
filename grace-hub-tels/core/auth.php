@@ -1,0 +1,150 @@
+<?php
+require_once dirname(__DIR__, 2) . '/user/core/db.php';
+define('ADMIN_SESSION','gracehubtels_admin');
+if (!defined('ADMIN_URL')) {
+    define('ADMIN_URL', '/' . basename(dirname(__DIR__)));
+}
+function admin_session():void{if(session_status()===PHP_SESSION_NONE){session_name(ADMIN_SESSION);session_set_cookie_params(['lifetime'=>0,'path'=>ADMIN_URL,'secure'=>isset($_SERVER['HTTPS']),'httponly'=>true,'samesite'=>'Strict']);session_start();}}
+function auth_admin(string $min_role=''):void{admin_session();if(empty($_SESSION['admin_id'])){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Session expired']);exit;}header('Location: ' . ADMIN_URL . '/login.php');exit;}if($min_role!==''){$r=['support'=>1,'admin'=>2,'superadmin'=>3];if(($r[$_SESSION['admin_role']??'']??0)<($r[$min_role]??0)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Access denied']);exit;}die('Access denied');}}}
+function has_permission(string $perm):bool{admin_session();if(($_SESSION['admin_role']??'')==='superadmin')return true;$p=json_decode($_SESSION['admin_permissions']??'[]',true)?:[];return in_array($perm,$p);}
+function require_permission(string $perm):void{if(!has_permission($perm)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Missing permission: '.$perm]);exit;}die('Access denied - Missing permission: '.$perm);}}
+function audit_log(int $admin_id, string $action, string $details):void{db()->prepare("INSERT INTO admin_activity_logs (admin_id, action, details, ip_address) VALUES (?, ?, ?, ?)")->execute([$admin_id, $action, $details, get_ip()]);}
+function get_admin(int $id=0):array{$aid=$id?:(int)($_SESSION['admin_id']??0);if(!$aid)return[];$s=db()->prepare("SELECT * FROM admin WHERE id=? AND is_active=1 LIMIT 1");$s->execute([$aid]);return $s->fetch()?:[];}
+
+// --- Device fingerprint ---
+function get_device_hash(): string {
+    return hash('sha256', (get_ip()?:'0.0.0.0') . '|' . (get_ua()?:'unknown'));
+}
+function is_known_device(int $admin_id, string $hash): bool {
+    try{$s=db()->prepare("SELECT 1 FROM admin_known_devices WHERE admin_id=? AND device_hash=? LIMIT 1");$s->execute([$admin_id,$hash]);return (bool)$s->fetchColumn();}catch(\Throwable$e){return true;}
+}
+function mark_known_device(int $admin_id, string $hash): void {
+    try{db()->prepare("INSERT INTO admin_known_devices (admin_id,device_hash,ip_address,user_agent) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE last_seen=NOW()")->execute([$admin_id,$hash,get_ip(),get_ua()]);}catch(\Throwable$e){}
+}
+
+// --- OTP helpers ---
+function generate_admin_otp(int $admin_id): string {
+    cleanup_expired_otps();
+    db()->prepare("UPDATE admin_otps SET used=1 WHERE admin_id=? AND used=0")->execute([$admin_id]);
+    $otp=str_pad((string)random_int(0,999999),6,'0',STR_PAD_LEFT);
+    $exp=date('Y-m-d H:i:s',time()+600);
+    db()->prepare("INSERT INTO admin_otps (admin_id,otp_code,ip_address,user_agent,expires_at) VALUES (?,?,?,?,?)")->execute([$admin_id,$otp,get_ip(),get_ua(),$exp]);
+    return $otp;
+}
+function verify_admin_otp(int $admin_id, string $otp): bool {
+    $s=db()->prepare("SELECT id FROM admin_otps WHERE admin_id=? AND otp_code=? AND used=0 AND expires_at>NOW() ORDER BY id DESC LIMIT 1");
+    $s->execute([$admin_id,$otp]);
+    $row=$s->fetch();
+    if(!$row)return false;
+    db()->prepare("UPDATE admin_otps SET used=1 WHERE id=?")->execute([$row['id']]);
+    return true;
+}
+function cleanup_expired_otps(): void {
+    try{db()->exec("DELETE FROM admin_otps WHERE expires_at<NOW()");}catch(\Throwable$e){}
+}
+
+// --- Complete admin login (session setup + alerts) ---
+function complete_admin_login(array $admin): void {
+    admin_session();
+    session_regenerate_id(true);
+    $_SESSION['admin_id']=$admin['id'];
+    $_SESSION['admin_role']=$admin['role'];
+    $_SESSION['admin_email']=$admin['email'];
+    $_SESSION['admin_permissions']=$admin['permissions']??'[]';
+    audit_log($admin['id'],'LOGIN',"Admin logged in ({$admin['email']})");
+    try{
+        $ip=get_ip();$time=date('Y-m-d H:i:s');
+        notify_admin('Admin Login Alert',"
+<div style='text-align:center;padding:10px 0 16px;'>
+<span style='font-size:28px;line-height:1;font-weight:800;color:#4F46E5;'>KEY</span>
+<h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>Admin Login Notification</h3>
+<p style='color:#475569;font-size:13px;margin:0;'>An admin account was used to log in.</p>
+</div>
+<table style='width:100%;border-collapse:collapse;'>
+<tr><td style='padding:8px 12px;background:#f3f4f6;border-radius:8px;'>
+<table width='100%'>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Admin</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>".htmlspecialchars($admin['email'],ENT_QUOTES)."</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Role</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>".htmlspecialchars($admin['role'],ENT_QUOTES)."</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Time</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$time}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>IP</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#dc2626;font-size:13px;'>{$ip}</td></tr>
+</table>
+</td></tr>
+</table>
+<div style='margin-top:16px;padding:12px;background:#fff8e1;border-radius:8px;border:1px solid #ffe082;text-align:center;'>
+<p style='margin:0;color:#e65100;font-size:12px;font-weight:600;'>If you did not perform this action, secure your account immediately.</p>
+</div>");
+        send_whatsapp_alert("🔐 *Admin Login Alert*\nAdmin: {$admin['email']}\nRole: {$admin['role']}\nTime: {$time}\nIP: {$ip}");
+    }catch(\Throwable$e){}
+}
+
+function login_admin(string $email,string $password):array{
+    $email=strtolower(trim($email));
+    if(!filter_var($email,FILTER_VALIDATE_EMAIL))return['success'=>false,'message'=>'Invalid email'];
+    
+    try{db()->exec("ALTER TABLE admin ADD COLUMN login_attempts INT DEFAULT 0");}catch(\Throwable$e){}
+    try{db()->exec("ALTER TABLE admin ADD COLUMN locked_until DATETIME DEFAULT NULL");}catch(\Throwable$e){}
+    
+    $s=db()->prepare("SELECT * FROM admin WHERE email=? AND is_active=1 LIMIT 1");
+    $s->execute([$email]);
+    $admin=$s->fetch();
+    
+    if($admin && $admin['locked_until'] && strtotime($admin['locked_until'])>time()){
+        return['success'=>false,'message'=>'Account locked. Try again after 10 minutes.'];
+    }
+    
+    if(!$admin||!password_verify($password,$admin['password'])){
+        if($admin){
+            $att=(int)$admin['login_attempts']+1;
+            if($att>=3){
+                $lock=date('Y-m-d H:i:s',time()+600);
+                db()->prepare("UPDATE admin SET login_attempts=?, locked_until=? WHERE id=?")->execute([$att,$lock,$admin['id']]);
+            }else{
+                db()->prepare("UPDATE admin SET login_attempts=? WHERE id=?")->execute([$att,$admin['id']]);
+            }
+        }
+        return['success'=>false,'message'=>'Invalid credentials'];
+    }
+    
+    db()->prepare("UPDATE admin SET login_attempts=0,locked_until=NULL WHERE id=?")->execute([$admin['id']]);
+    
+    // Check if this device is known
+    $dhash=get_device_hash();
+    if(!is_known_device($admin['id'],$dhash)){
+        $otp=generate_admin_otp($admin['id']);
+        $name=preg_replace('/@.*/','',$admin['email']);
+        $html="
+<div style='text-align:center;padding:10px 0 16px;'>
+<span style='font-size:28px;line-height:1;font-weight:800;color:#4F46E5;'>OTP</span>
+<h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>OTP Verification</h3>
+<p style='color:#475569;font-size:13px;margin:0;'>Hi <strong>".htmlspecialchars($name,ENT_QUOTES)."</strong>, a login attempt was made from a new device.</p>
+</div>
+<div style='text-align:center;padding:20px;background:#f3f4f6;border-radius:10px;margin:16px 0;border:2px dashed #4F46E5;'>
+<span style='font-size:36px;font-weight:800;letter-spacing:10px;color:#4F46E5;font-family:monospace;'>".$otp."</span>
+</div>
+<table style='width:100%;border-collapse:collapse;'>
+<tr><td style='padding:8px 12px;background:#fff8e1;border-radius:8px;border:1px solid #ffe082;'>
+<table width='100%'>
+<tr><td style='padding:3px 0;color:#64748b;font-size:12px;'>Expires</td><td style='padding:3px 0;text-align:right;font-weight:600;color:#e65100;font-size:12px;'>10 minutes</td></tr>
+<tr><td style='padding:3px 0;color:#64748b;font-size:12px;'>IP Address</td><td style='padding:3px 0;text-align:right;font-weight:600;color:#0f172a;font-size:12px;'>".htmlspecialchars(get_ip(),ENT_QUOTES)."</td></tr>
+</table>
+</td></tr>
+</table>
+<div style='margin-top:16px;padding:12px;background:#fef2f2;border-radius:8px;border:1px solid #fecaca;text-align:center;'>
+<p style='margin:0;color:#dc2626;font-size:12px;font-weight:600;'>If you did not attempt this login, please secure your account immediately.</p>
+</div>";
+        send_email($admin['email'],'🔑 OTP Verification - '.setting('site_name','Gracehubtels'),$html);
+        admin_session();
+        $_SESSION['pending_otp_admin_id']=$admin['id'];
+        $_SESSION['pending_otp_device_hash']=$dhash;
+        $_SESSION['pending_otp_admin_data']=serialize($admin);
+        return['success'=>true,'otp_required'=>true];
+    }
+    
+    db()->prepare("UPDATE admin SET last_login=NOW(),last_login_ip=? WHERE id=?")->execute([get_ip(),$admin['id']]);
+    complete_admin_login($admin);
+    return['success'=>true,'admin'=>$admin];
+}
+function logout_admin():void{admin_session();$admin_id=(int)($_SESSION['admin_id']??0);$email=$_SESSION['admin_email']??'';$_SESSION=[];session_destroy();if($admin_id){try{db()->prepare("INSERT INTO admin_activity_logs (admin_id, action, details, ip_address) VALUES (?,'LOGOUT',?,?)")->execute([$admin_id,"Admin logged out",get_ip()]);}catch(Throwable$e){}}header('Location: ' . ADMIN_URL . '/login.php');exit;}
+function require_superadmin():void{auth_admin();if(($_SESSION['admin_role']??'')!=='superadmin'){http_response_code(403);die('Access denied — Superadmin only');}};
+function admin_csrf():string{admin_session();if(empty($_SESSION['admin_csrf']))$_SESSION['admin_csrf']=bin2hex(random_bytes(32));return $_SESSION['admin_csrf'];}
+function verify_admin_csrf(string $t):bool{admin_session();return isset($_SESSION['admin_csrf'])&&hash_equals($_SESSION['admin_csrf'],$t);}

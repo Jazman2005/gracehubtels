@@ -1,0 +1,5 @@
+# Local database credentials — never commit
+user/core/db_config.php
+
+# Environment files
+.env

@@ -21,12 +21,17 @@ if (empty($input['exam_name']) || empty($input['quantity'])) {
 $res = process_exam_pin((int)$user['id'], $input);
 
 if ($res['success']) {
+    $u_bal = db()->prepare("SELECT wallet_balance FROM users WHERE id=?");
+    $u_bal->execute([$user['id']]);
+    $updated = $u_bal->fetch();
     echo json_encode([
         'status' => 'success',
         'message' => $res['message'],
         'data' => [
             'reference' => $res['ref'] ?? null,
-            'pins' => $res['pins'] ?? []
+            'pins' => $res['pins'] ?? [],
+            'balance_before' => (float)$user['wallet_balance'],
+            'balance_after' => (float)($updated['wallet_balance'] ?? 0)
         ]
     ]);
 } else {

@@ -21,13 +21,20 @@ if (empty($input['disco_id']) || empty($input['meter_number']) || empty($input['
 $res = process_electricity((int)$user['id'], $input);
 
 if ($res['success']) {
+    $u_bal = db()->prepare("SELECT wallet_balance FROM users WHERE id=?");
+    $u_bal->execute([$user['id']]);
+    $updated = $u_bal->fetch();
     echo json_encode([
         'status' => 'success',
         'message' => $res['message'],
+        'pending' => !empty($res['pending']),
         'data' => [
             'reference' => $res['ref'] ?? null,
             'token' => $res['token'] ?? null,
-            'cashback_earned' => $res['cashback'] ?? 0
+            'cashback_earned' => $res['cashback'] ?? 0,
+            'pending' => !empty($res['pending']),
+            'balance_before' => (float)$user['wallet_balance'],
+            'balance_after' => (float)($updated['wallet_balance'] ?? 0)
         ]
     ]);
 } else {

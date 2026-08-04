@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Privacy Policy - MsjPay</title>
-    <meta name="description" content="Read MsjPay's Privacy Policy. Learn about the personal and financial information we collect, how we store and process data securely, and your rights under the NDPR.">
+    <title>Privacy Policy - Gracehubtels</title>
+    <meta name="description" content="Read Gracehubtels's Privacy Policy. Learn about the personal and financial information we collect, how we store and process data securely, and your rights under the NDPR.">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,7 +16,7 @@
         <div class="container">
             <nav class="nav-container">
                 <a href="index.php" class="logo-link" id="logo-link">
-                    <img src="assets/IMG_3899.PNG" alt="MsjPay Logo" class="logo-img" id="logo-img-header">
+                    <img src="assets/IMG_3899.PNG" alt="Gracehubtels Logo" class="logo-img" id="logo-img-header">
                     <span class="logo-text" id="logo-text-header">Msj<span>Pay</span></span>
                 </a>
                 
@@ -33,7 +33,7 @@
                 </div>
 
                 <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation">
-                    <i>☰</i>
+                    <i>â˜°</i>
                 </button>
             </nav>
         </div>
@@ -45,7 +45,7 @@
     <div class="page-header">
         <div class="container">
             <h1 id="privacy-title">Privacy Policy</h1>
-            <div class="page-meta" id="privacy-meta">Effective Date: June 19, 2026 | MsjPay Technologies Limited</div>
+            <div class="page-meta" id="privacy-meta">Effective Date: June 19, 2026 | Gracehubtels Technologies Limited</div>
         </div>
     </div>
 
@@ -68,8 +68,8 @@
 
             <!-- Policy Text -->
             <article class="legal-content" id="privacy-content-body">
-                <p>Welcome to MsjPay (accessible via <strong>msjpay.ng</strong>). At MsjPay (operated by MsjPay Technologies Limited), your privacy and data security are our highest priorities. This Privacy Policy describes how we collect, use, store, process, and protect your personal and financial information when you use our website, mobile application, APIs, and digital financial services.</p>
-                <p>By accessing or using MsjPay, you agree to the collection and use of your information in accordance with this Privacy Policy and the Nigeria Data Protection Regulation (NDPR) and other applicable international data protection standards.</p>
+                <p>Welcome to Gracehubtels (accessible via <strong>gracehubtels.com</strong>). At Gracehubtels (operated by Gracehubtels Technologies Limited), your privacy and data security are our highest priorities. This Privacy Policy describes how we collect, use, store, process, and protect your personal and financial information when you use our website, mobile application, APIs, and digital financial services.</p>
+                <p>By accessing or using Gracehubtels, you agree to the collection and use of your information in accordance with this Privacy Policy and the Nigeria Data Protection Regulation (NDPR) and other applicable international data protection standards.</p>
 
                 <section id="info-we-collect">
                     <h2>1. Information We Collect</h2>
@@ -108,7 +108,7 @@
                     <p>Cookies are tiny text files placed on your browser to improve site speed and usability.</p>
                     <p><strong>Essential Cookies:</strong> Required to maintain secure login sessions and active transaction flows.</p>
                     <p><strong>Analytical Cookies:</strong> Help us aggregate anonymized traffic patterns to optimize layout performance.</p>
-                    <p><strong>Managing Cookies:</strong> You can disable cookies in your web browser settings. However, disabling essential cookies will restrict security processes and prevent you from transacting on msjpay.ng.</p>
+                    <p><strong>Managing Cookies:</strong> You can disable cookies in your web browser settings. However, disabling essential cookies will restrict security processes and prevent you from transacting on gracehubtels.com.</p>
                 </section>
 
                 <section id="user-rights">
@@ -121,7 +121,7 @@
                         <li><strong>Right to Portability:</strong> You can request a structured, machine-readable export of your transactional history.</li>
                         <li><strong>Right to File a Complaint:</strong> You can report any data privacy concerns directly to the Nigeria Data Protection Commission (NDPC).</li>
                     </ul>
-                    <p>If you wish to exercise any of these rights, please contact our Data Protection Officer at <strong>dpo@msjpay.ng</strong>.</p>
+                    <p>If you wish to exercise any of these rights, please contact our Data Protection Officer at <strong>dpo@gracehubtels.com</strong>.</p>
                 </section>
             </article>
         </div>
@@ -135,10 +135,10 @@
             <div class="footer-grid">
                 <div class="footer-brand">
                     <a href="index.php" class="logo-link" style="margin-bottom: 20px;">
-                        <img src="assets/IMG_3901.PNG" alt="MsjPay Footer Logo" class="logo-img" style="height: 36px;" id="logo-img-footer">
+                        <img src="assets/IMG_3901.PNG" alt="Gracehubtels Footer Logo" class="logo-img" style="height: 36px;" id="logo-img-footer">
                         <span class="logo-text" style="color: var(--white);" id="logo-text-footer">Msj<span>Pay</span></span>
                     </a>
-                    <p>MsjPay Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.</p>
+                    <p>Gracehubtels Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.</p>
                     <div class="footer-socials">
                         <a href="#" class="social-icon">F</a>
                         <a href="#" class="social-icon">T</a>
@@ -160,7 +160,7 @@
                     <h3 class="footer-title">Support</h3>
                     <ul class="footer-links">
                         <li><a href="contact.php" class="footer-link">Contact Us</a></li>
-                        <li><a href="mailto:support@msjpay.ng" class="footer-link">support@msjpay.ng</a></li>
+                        <li><a href="mailto:support@gracehubtels.com" class="footer-link">support@gracehubtels.com</a></li>
                         <li><a href="tel:+234014598890" class="footer-link">+234 (0) 1 459 8890</a></li>
                     </ul>
                 </div>
@@ -175,7 +175,7 @@
             </div>
 
             <div class="footer-bottom">
-                <p>&copy; 2026 MsjPay Technologies Limited (RC: 1899021). All rights reserved.</p>
+                <p>&copy; 2026 Gracehubtels Technologies Limited (RC: 1899021). All rights reserved.</p>
                 <div class="footer-bottom-links">
                     <a href="privacy-policy.php" class="footer-bottom-link">Privacy Policy</a>
                     <a href="terms.php" class="footer-bottom-link">Terms of Service</a>

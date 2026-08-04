@@ -1,5 +1,5 @@
 -- ============================================================
--- MsjPay v2.0 — Complete Database Schema
+-- Gracehubtels v2.0 — Complete Database Schema
 -- Nigerian VTU / Fintech Platform — Radnidev Technologies
 -- ============================================================
 
@@ -24,9 +24,9 @@ CREATE TABLE `admin` (
   UNIQUE KEY `username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Default superadmin: admin@msjpay.com / Admin@1234
+-- Default superadmin: admin@gracehubtels.com / Admin@1234
 INSERT INTO `admin` (`username`,`email`,`password`,`role`,`is_active`) VALUES
-('superadmin','admin@msjpay.com','$2b$10$/nSpZDhQSM6wTx3AH1.vEOiJOkGbOOzqVSc4yxOtew5Z/.D/QEP8O','superadmin',1);
+('superadmin','admin@gracehubtels.com','$2b$10$/nSpZDhQSM6wTx3AH1.vEOiJOkGbOOzqVSc4yxOtew5Z/.D/QEP8O','superadmin',1);
 
 -- ----------------------------
 -- Table: users
@@ -42,6 +42,7 @@ CREATE TABLE `users` (
   `pin_attempts` tinyint(2) NOT NULL DEFAULT 0,
   `pin_locked_until` datetime DEFAULT NULL,
   `wallet_balance` decimal(15,2) NOT NULL DEFAULT 0.00,
+  `cashwyre_customer_code` varchar(100) DEFAULT NULL COMMENT 'Cashwyre customer code for virtual cards',
   `cashback_balance` decimal(15,2) NOT NULL DEFAULT 0.00,
   `referral_code` varchar(20) DEFAULT NULL,
   `referred_by` int(11) DEFAULT NULL,
@@ -288,7 +289,9 @@ CREATE TABLE `virtual_cards` (
   `user_id` int(11) NOT NULL,
   `card_id` varchar(100) NOT NULL,
   `masked_number` varchar(40) DEFAULT NULL,
+  `card_number` varchar(30) DEFAULT NULL,
   `expiry` varchar(10) DEFAULT NULL,
+  `cvv` varchar(10) DEFAULT NULL,
   `brand` varchar(20) DEFAULT 'Visa',
   `balance` decimal(12,2) NOT NULL DEFAULT 0.00,
   `status` enum('active','frozen','terminated') NOT NULL DEFAULT 'active',
@@ -540,9 +543,9 @@ SET FOREIGN_KEY_CHECKS=1;
 
 -- Site settings
 INSERT INTO `site_settings` (`setting_key`,`setting_value`) VALUES
-('site_name','MsjPay'),
+('site_name','Gracehubtels'),
 ('site_tagline','Nigeria''s Smartest Fintech App'),
-('site_email','support@msjpay.com'),
+('site_email','support@gracehubtels.com'),
 ('site_phone','+234 800 0000 000'),
 ('site_address','Lagos, Nigeria'),
 ('maintenance_mode','0'),
@@ -588,8 +591,8 @@ INSERT INTO `site_settings` (`setting_key`,`setting_value`) VALUES
 ('smtp_port','587'),
 ('smtp_user',''),
 ('smtp_pass',''),
-('smtp_from_name','MsjPay'),
-('smtp_from_email','noreply@msjpay.com');
+('smtp_from_name','Gracehubtels'),
+('smtp_from_email','noreply@gracehubtels.com');
 
 -- API Providers (Gladtidings for VTU services, Autopilot for A2C)
 INSERT INTO `api_providers` (`service`,`network`,`data_type`,`provider_name`,`api_base_url`,`api_key`,`priority`,`is_active`) VALUES

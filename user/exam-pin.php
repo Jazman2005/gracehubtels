@@ -22,9 +22,9 @@ foreach ($pricing as $p) {
 } 
 
 $exam_info = [ 
-    'WAEC' => ['icon' => '/msjpay/assets/logos/waec.png', 'full' => 'West African Examinations Council', 'color' => 'bg-blue-100', 'border' => 'border-blue-200', 'text' => 'text-blue-700'], 
-    'NECO' => ['icon' => '/msjpay/assets/logos/neco.png', 'full' => 'National Examinations Council', 'color' => 'bg-green-100', 'border' => 'border-green-200', 'text' => 'text-green-700'], 
-    'NABTEB' => ['icon' => '/msjpay/assets/logos/nabteb.png', 'full' => 'National Business and Technical Examinations Board', 'color' => 'bg-emerald-100', 'border' => 'border-emerald-200', 'text' => 'text-emerald-700'],
+    'WAEC' => ['icon' => '../assets/logos/waec.png', 'full' => 'West African Examinations Council', 'color' => 'bg-blue-100', 'border' => 'border-blue-200', 'text' => 'text-blue-700'], 
+    'NECO' => ['icon' => '../assets/logos/neco.png', 'full' => 'National Examinations Council', 'color' => 'bg-green-100', 'border' => 'border-green-200', 'text' => 'text-green-700'], 
+    'NABTEB' => ['icon' => '../assets/logos/nabteb.png', 'full' => 'National Business and Technical Examinations Board', 'color' => 'bg-emerald-100', 'border' => 'border-emerald-200', 'text' => 'text-emerald-700'],
 ]; 
 
 $page_title = 'Exam PIN'; 
@@ -34,49 +34,48 @@ include __DIR__ . '/includes/sidebar.php';
 
 <div class="max-w-2xl mx-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4 sm:mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
-                <i class="fas fa-arrow-left"></i>
+            <a href="/user/dashboard" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left text-xs sm:text-sm"></i>
             </a>
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Exam PINs</h1>
-                <p class="text-sm text-slate-500">Purchase scratch cards for results checking</p>
+                <h1 class="text-lg sm:text-xl font-bold text-slate-800">Exam PINs</h1>
+                <p class="text-xs sm:text-sm text-slate-500">Purchase scratch cards for results checking</p>
             </div>
         </div>
-        <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm text-sm">
             ₦<?=number_format((float)$user['wallet_balance'],2)?>
         </div>
     </div>
 
-    <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6 mb-6">
+    <div class="bg-white rounded-xl sm:rounded-2xl border border-slate-200 card-shadow p-4 sm:p-5 mb-4 sm:mb-6">
         
         <!-- Exam Selection -->
-        <div class="mb-6">
-            <label class="block text-sm font-semibold text-slate-700 mb-3">Select Exam Board</label>
-            <div class="space-y-3">
+        <div class="mb-4 sm:mb-5">
+            <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3">Select Exam Board</label>
+            <div class="space-y-2 sm:space-y-3">
                 <?php foreach ($exam_info as $exam => $info): 
                     $price = $prices[$exam] ?? 0; 
                 ?>
-                <button type="button" class="plan-item w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 bg-slate-50 hover:border-brand-orange/50 transition-all text-left relative overflow-hidden group" data-exam="<?= $exam ?>" data-price="<?= $price ?>" onclick="selectExam(this,'<?= $exam ?>')">
-                    <div class="flex items-center gap-4 relative z-10">
-                        <div class="w-12 h-12 rounded-lg <?=$info['color']?> border <?=$info['border']?> flex items-center justify-center p-1 bg-white">
+                <button type="button" class="plan-item w-full flex items-center justify-between p-3 sm:p-4 rounded-xl border-2 border-slate-100 bg-slate-50 hover:border-brand-orange/50 transition-all text-left relative overflow-hidden group" data-exam="<?= $exam ?>" data-price="<?= $price ?>" onclick="selectExam(this,'<?= $exam ?>')">
+                    <div class="flex items-center gap-3 sm:gap-4 relative z-10">
+                        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg <?=$info['color']?> border <?=$info['border']?> flex items-center justify-center p-1 bg-white">
                             <img src="<?= $info['icon'] ?>" alt="<?= $exam ?>" class="w-full h-full object-contain" onerror="this.style.display='none';this.parentNode.innerHTML='<span class=\'font-bold <?=$info['text']?>\'><?=substr($exam,0,1)?></span>'">
                         </div>
                         <div>
-                            <div class="font-bold text-slate-800 text-lg"><?= $exam ?></div>
-                            <div class="text-xs text-slate-500 line-clamp-1"><?= $info['full'] ?></div>
+                            <div class="font-bold text-slate-800 text-sm sm:text-lg"><?= $exam ?></div>
+                            <div class="text-[10px] sm:text-xs text-slate-500 line-clamp-1"><?= $info['full'] ?></div>
                         </div>
                     </div>
                     <div class="text-right relative z-10">
-                        <div class="font-bold text-brand-navy text-lg"><?= $price > 0 ? '₦' . number_format($price, 0) : 'N/A' ?></div>
-                        <div class="text-[10px] uppercase font-semibold text-slate-400">Per PIN</div>
+                        <div class="font-bold text-brand-navy text-sm sm:text-lg"><?= $price > 0 ? '₦' . number_format($price, 0) : 'N/A' ?></div>
+                        <div class="text-[9px] sm:text-[10px] uppercase font-semibold text-slate-400">Per PIN</div>
                     </div>
                     
-                    <!-- Selected state indicator (hidden by default) -->
                     <div class="absolute inset-0 border-2 border-brand-orange bg-brand-orangeLight rounded-xl opacity-0 check-bg transition-opacity pointer-events-none"></div>
-                    <div class="absolute top-3 right-3 text-brand-orange opacity-0 check-icon transition-opacity">
-                        <i class="fas fa-check-circle"></i>
+                    <div class="absolute top-2 sm:top-3 right-2 sm:right-3 text-brand-orange opacity-0 check-icon transition-opacity">
+                        <i class="fas fa-check-circle text-[10px] sm:text-sm"></i>
                     </div>
                 </button>
                 <?php endforeach; ?>
@@ -84,30 +83,30 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
 
         <!-- Quantity Selection -->
-        <div class="mb-6">
-            <label class="block text-sm font-semibold text-slate-700 mb-3">Quantity (1-5)</label>
-            <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-2">
-                <button type="button" onclick="changeQty(-1)" class="w-12 h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-colors shadow-sm">
+        <div class="mb-4 sm:mb-5">
+            <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3">Quantity (1-5)</label>
+            <div class="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-1.5 sm:p-2">
+                <button type="button" onclick="changeQty(-1)" class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-colors shadow-sm text-xs sm:text-sm">
                     <i class="fas fa-minus"></i>
                 </button>
                 
                 <div class="flex-1 text-center">
-                    <div id="qtyDisp" class="text-3xl font-black text-brand-navy">1</div>
-                    <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">PIN(s)</div>
+                    <div id="qtyDisp" class="text-2xl sm:text-3xl font-black text-brand-navy">1</div>
+                    <div class="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wide">PIN(s)</div>
                 </div>
                 
-                <button type="button" onclick="changeQty(1)" class="w-12 h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-colors shadow-sm">
+                <button type="button" onclick="changeQty(1)" class="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-brand-orange hover:text-brand-orange flex items-center justify-center transition-colors shadow-sm text-xs sm:text-sm">
                     <i class="fas fa-plus"></i>
                 </button>
             </div>
             
-            <div id="totalBox" class="hidden mt-4 p-4 bg-brand-orangeLight border border-brand-orange/30 rounded-xl flex justify-between items-center">
+            <div id="totalBox" class="hidden mt-3 sm:mt-4 p-3 sm:p-4 bg-brand-orangeLight border border-brand-orange/30 rounded-xl flex justify-between items-center">
                 <div>
-                    <span class="block text-xs text-brand-orange/80 uppercase tracking-wider mb-0.5">Total Amount</span>
-                    <span class="text-sm font-semibold text-brand-orangeHover"><span id="summaryQty">1</span>x <span id="summaryExam"></span></span>
+                    <span class="block text-[10px] sm:text-xs text-brand-orange/80 uppercase tracking-wider mb-0.5">Total Amount</span>
+                    <span class="text-xs sm:text-sm font-semibold text-brand-orangeHover"><span id="summaryQty">1</span>x <span id="summaryExam"></span></span>
                 </div>
                 <div class="text-right">
-                    <span class="text-2xl font-black text-brand-orangeHover" id="totalDisp"></span>
+                    <span class="text-lg sm:text-2xl font-black text-brand-orangeHover" id="totalDisp"></span>
                 </div>
             </div>
         </div>
@@ -117,11 +116,11 @@ include __DIR__ . '/includes/sidebar.php';
         <input type="hidden" id="qtyF" value="1">
         <input type="hidden" id="csrfF" value="<?= $csrf ?>">
         
-        <button type="button" onclick="openConfirm()" class="w-full bg-gradient-to-r from-brand-orange to-brand-orangeHover hover:from-brand-orangeHover hover:to-orange-600 text-white font-bold text-lg py-4 rounded-xl shadow-lg shadow-orange-500/30 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2">
+        <button type="button" onclick="openConfirm()" class="w-full bg-gradient-to-r from-brand-orange to-brand-orangeHover hover:from-brand-orangeHover hover:to-orange-600 text-white font-bold text-sm sm:text-base py-3 sm:py-3.5 rounded-xl shadow-lg shadow-orange-500/30 transition-all hover:-translate-y-0.5 flex items-center justify-center gap-2">
             Purchase PIN <i class="fas fa-arrow-right"></i>
         </button>
         
-        <p class="text-center text-xs text-slate-500 mt-4 flex items-center justify-center gap-1">
+        <p class="text-center text-[10px] sm:text-xs text-slate-500 mt-3 sm:mt-4 flex items-center justify-center gap-1">
             <i class="fas fa-graduation-cap text-teal-500"></i> PINs delivered instantly. Valid for official result portals.
         </p>
     </div>
@@ -178,27 +177,35 @@ function updateTotal() {
     }
 }
 
-function openConfirm() {
+async function openConfirm() {
     const exam = document.getElementById('selExam').value;
     const prc = parseFloat(document.getElementById('selPrice').value);
     const q = parseInt(document.getElementById('qtyF').value);
     
-    if(!exam || prc <= 0) return alert('Please select an exam board');
+    if(!exam || prc <= 0) return showAlert('Please select an exam board', 'Invalid Input');
     
     const total = prc * q;
     
-    const pin = prompt(`Confirm Exam PIN Purchase:\n\nExam: ${exam}\nQuantity: ${q}\nTotal Amount: ₦${total.toLocaleString()}\n\nEnter your 4-digit PIN:`);
-    
-    if(pin && pin.length >= 4) {
-        processPurchase(exam, q, pin);
+    if (typeof confirmTransaction === 'function') {
+        confirmTransaction({
+            "Transaction": "Exam PIN Purchase",
+            "Exam Board": exam,
+            "Quantity": q,
+            "Total Amount": "₦" + total.toLocaleString()
+        }, function(pin) {
+            processPurchase(exam, q, pin);
+        });
+    } else {
+        showAlert('Transaction system is loading, please refresh the page.', 'Notice');
     }
 }
 
 function processPurchase(exam, q, pin) {
+    if(!pin || pin.length < 4) return showAlert('Enter 4-digit PIN', 'Error');
+    
     const btn = document.querySelector('button[onclick="openConfirm()"]');
-    const ogHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-    btn.disabled = true;
+    const ogHtml = btn ? btn.innerHTML : '';
+    if(btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...'; btn.disabled = true; }
     
     const fd = new FormData();
     fd.append('csrf_token', document.getElementById('csrfF').value);
@@ -211,23 +218,33 @@ function processPurchase(exam, q, pin) {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         body: fd
     })
-    .then(r => r.json())
-    .then(res => {
-        if(res.success) {
-            // Need a custom alert for pins to show them properly
-            let pinText = res.data && res.data.pins ? res.data.pins.join('\n') : '';
-            alert(`Success! PINs Generated.\n\n${res.message}\n\n${pinText}`);
-            location.reload();
-        } else {
-            alert(`Error: ${res.message}`);
-            btn.innerHTML = ogHtml;
-            btn.disabled = false;
+    .then(async r => {
+        const text = await r.text();
+        try {
+            const res = JSON.parse(text);
+            if (res.ref) {
+                window.location.href = '/user/receipt.php?ref=' + res.ref;
+            } else {
+                Swal.fire(res.success ? 'Success' : 'Notice', res.message, res.success ? 'success' : 'info');
+                if (btn) {
+                    btn.innerHTML = ogHtml;
+                    btn.disabled = false;
+                }
+            }
+        } catch (e) {
+            showAlert("Raw Server Error:<br>" + text.substring(0, 500), "Error");
+            if (btn) {
+                btn.innerHTML = ogHtml;
+                btn.disabled = false;
+            }
         }
     })
     .catch(err => {
-        alert('Network error occurred.');
-        btn.innerHTML = ogHtml;
-        btn.disabled = false;
+        showAlert('Network request failed completely: ' + err.message, 'Error');
+        if (btn) {
+            btn.innerHTML = ogHtml;
+            btn.disabled = false;
+        }
     });
 }
 </script>

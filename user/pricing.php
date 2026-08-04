@@ -5,7 +5,7 @@ $uid = (int)$_SESSION['user_id'];
 $user = get_user($uid);
 
 $nets = ['MTN', 'GLO', 'AIRTEL', '9MOBILE'];
-$sel_net = strtoupper($_GET['net'] ?? 'MTN');
+$sel_net = htmlspecialchars(strtoupper($_GET['net'] ?? 'MTN'));
 if(!in_array($sel_net, $nets)) $sel_net = 'MTN';
 
 // Fetch data plans for the selected network
@@ -22,10 +22,10 @@ foreach($plans as $p) {
 }
 
 $net_styles = [
-    'MTN' => ['bg'=>'bg-yellow-400', 'text'=>'text-slate-900', 'logo'=>'/msjpay/assets/logos/mtn.png', 'light'=>'bg-yellow-50', 'border'=>'border-yellow-200'],
-    'GLO' => ['bg'=>'bg-green-600', 'text'=>'text-white', 'logo'=>'/msjpay/assets/logos/glo.png', 'light'=>'bg-green-50', 'border'=>'border-green-200'],
-    'AIRTEL' => ['bg'=>'bg-red-600', 'text'=>'text-white', 'logo'=>'/msjpay/assets/logos/airtel.png', 'light'=>'bg-red-50', 'border'=>'border-red-200'],
-    '9MOBILE' => ['bg'=>'bg-emerald-800', 'text'=>'text-white', 'logo'=>'/msjpay/assets/logos/9mobile.png', 'light'=>'bg-emerald-50', 'border'=>'border-emerald-200']
+    'MTN' => ['bg'=>'bg-yellow-400', 'text'=>'text-slate-900', 'logo'=>'../assets/logos/mtn.png', 'light'=>'bg-yellow-50', 'border'=>'border-yellow-200'],
+    'GLO' => ['bg'=>'bg-green-600', 'text'=>'text-white', 'logo'=>'../assets/logos/glo.png', 'light'=>'bg-green-50', 'border'=>'border-green-200'],
+    'AIRTEL' => ['bg'=>'bg-red-600', 'text'=>'text-white', 'logo'=>'../assets/logos/airtel.png', 'light'=>'bg-red-50', 'border'=>'border-red-200'],
+    '9MOBILE' => ['bg'=>'bg-emerald-800', 'text'=>'text-white', 'logo'=>'../assets/logos/9mobile.png', 'light'=>'bg-emerald-50', 'border'=>'border-emerald-200']
 ];
 
 $page_title = 'Pricing Catalog'; 
@@ -37,13 +37,16 @@ include __DIR__ . '/includes/sidebar.php';
     <!-- Header -->
     <div class="flex items-center justify-between mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+            <a href="/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
                 <i class="fas fa-arrow-left"></i>
             </a>
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Pricing Catalog</h1>
                 <p class="text-sm text-slate-500">Compare discounts for Regular, Agent, and Vendor roles.</p>
             </div>
+        </div>
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
+            ₦<?=number_format((float)$user['wallet_balance'],2)?>
         </div>
     </div>
 
@@ -54,7 +57,7 @@ include __DIR__ . '/includes/sidebar.php';
             <h3 class="text-lg font-bold mb-1"><i class="fas fa-rocket mr-2"></i>Upgrade to Agent or Vendor!</h3>
             <p class="text-orange-100 text-sm">You are currently a Regular user. Upgrade your account to get massive discounts on all services and maximize your profits.</p>
         </div>
-        <a href="/msjpay/user/support" class="bg-white text-brand-orange font-bold px-6 py-2.5 rounded-xl hover:bg-orange-50 transition-colors whitespace-nowrap shadow-sm">
+        <a href="/user/support" class="bg-white text-brand-orange font-bold px-6 py-2.5 rounded-xl hover:bg-orange-50 transition-colors whitespace-nowrap shadow-sm">
             Contact Admin
         </a>
     </div>

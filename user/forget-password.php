@@ -3,10 +3,10 @@ require_once __DIR__ . '/core/auth.php';
 require_once __DIR__ . '/core/db.php';
 start_session();
 
-if (!empty($_SESSION['user_id'])) { header('Location: /msjpay/user/dashboard'); exit; } 
+if (!empty($_SESSION['user_id'])) { header('Location: /user/dashboard'); exit; } 
 
 $step = $_GET['step'] ?? 'request'; // request | reset
-$token = $_GET['token'] ?? '';
+$token = $_GET['token'] ?? $_POST['token'] ?? '';
 $message = $error = ''; 
 
 // -- STEP 1: Request reset --------------------------------
@@ -26,10 +26,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 'request') {
             db()->prepare("UPDATE users SET reset_token=?, reset_token_expiry=? WHERE id=?")->execute([$reset_token, $expiry, $user['id']]); 
             
             // Send reset email (using simple mail; replace with PHPMailer for production) 
-            $reset_url = (isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/msjpay/user/forget-password.php?step=reset&token=' . $reset_token; 
-            $subject = 'MsjPay Password Reset'; 
-            $body = "Hello {$user['full_name']},\n\nClick the link below to reset your MsjPay password:\n\n{$reset_url}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.\n\nMsjPay Team"; 
-            @mail($user['email'], $subject, $body, 'From: noreply@msjpay.com'); 
+            $reset_url = 'https://www.gracehubtels.com/user/forget-password.php?step=reset&token=' . $reset_token; 
+            $subject = 'Gracehubtels Password Reset'; 
+            $body = "Hello {$user['full_name']},\n\nClick the link below to reset your Gracehubtels password:\n\n{$reset_url}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.\n\nGracehubtels Team"; 
+            @mail($user['email'], $subject, $body, 'From: noreply@gracehubtels.com'); 
         } 
         $message = 'If an account with that email/phone exists, a reset link has been sent.'; 
     }
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 'request') {
 
 // -- STEP 2: Reset password -------------------------------
 if ($step === 'reset') { 
-    if (empty($token)) { header('Location: /msjpay/user/forget-password'); exit; } 
+    if (empty($token)) { header('Location: /user/forget-password'); exit; } 
     $stmt = db()->prepare("SELECT * FROM users WHERE reset_token=? AND reset_token_expiry > NOW() LIMIT 1"); 
     $stmt->execute([$token]); 
     $reset_user = $stmt->fetch(); 
@@ -81,7 +81,7 @@ $csrf = csrf_token();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-    <title>Reset Password - MsjPay</title>
+    <title>Reset Password - Gracehubtels</title>
     <!-- Tailwind CSS (via CDN for migration, replace with compiled CSS in production) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
@@ -125,9 +125,9 @@ $csrf = csrf_token();
     <div class="w-full max-w-md glass-panel rounded-3xl p-8 sm:p-10 relative z-10">
         
         <div class="text-center mb-8">
-            <a href="/msjpay/index.php" class="inline-flex items-center gap-2 mb-6">
-                <img src="/msjpay/assets/images/msjpay-logo.png" alt="MsjPay" class="h-10 w-auto">
-                <span class="text-2xl font-black text-brand-navy tracking-tight">MsjPay</span>
+            <a href="/index.php" class="inline-flex items-center gap-2 mb-6">
+                <img src="/img/icon.png" alt="Gracehubtels" class="h-10 w-auto">
+                <span class="text-2xl font-black text-brand-navy tracking-tight">Gracehubtels</span>
             </a>
             
             <?php if ($step === 'request'): ?>
@@ -184,7 +184,7 @@ $csrf = csrf_token();
             </button>
             
             <div class="text-center">
-                <a href="/msjpay/user/login" class="text-sm font-bold text-slate-500 hover:text-brand-orange transition-colors">
+                <a href="/user/login" class="text-sm font-bold text-slate-500 hover:text-brand-orange transition-colors">
                     <i class="fas fa-arrow-left mr-1"></i> Back to Login
                 </a>
             </div>
@@ -224,12 +224,12 @@ $csrf = csrf_token();
         </form>
 
         <?php elseif ($step === 'done'): ?>
-        <a href="/msjpay/user/login" class="block w-full bg-brand-navy hover:bg-brand-navyLight text-white font-bold text-center py-3.5 rounded-xl shadow-sm transition-colors">
+        <a href="/user/login" class="block w-full bg-brand-navy hover:bg-brand-navyLight text-white font-bold text-center py-3.5 rounded-xl shadow-sm transition-colors">
             Go to Login <i class="fas fa-arrow-right ml-1"></i>
         </a>
         
         <?php elseif ($step === 'expired'): ?>
-        <a href="/msjpay/user/forget-password" class="block w-full bg-brand-orange hover:bg-brand-orangeHover text-white font-bold text-center py-3.5 rounded-xl shadow-sm transition-colors">
+        <a href="/user/forget-password" class="block w-full bg-brand-orange hover:bg-brand-orangeHover text-white font-bold text-center py-3.5 rounded-xl shadow-sm transition-colors">
             Request New Link
         </a>
         <?php endif; ?>

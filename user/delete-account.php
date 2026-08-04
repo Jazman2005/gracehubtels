@@ -12,8 +12,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if (!password_verify($password, $user['password'])) json_response(['success' => false, 'message' => 'Incorrect password']); 
     if ($confirm !== 'DELETE') json_response(['success' => false, 'message' => 'Type DELETE to confirm']); 
     
-    $anon_email = 'deleted_' . $uid . '@msjpay.deleted'; 
-    db()->prepare( "UPDATE users SET full_name='Deleted User', username='deleted_$uid', email=?, phone='00000000000', password='deleted', transaction_pin=NULL, is_active=0, updated_at=NOW() WHERE id=?" )->execute([$anon_email, $uid]); 
+    $anon_email = 'deleted_' . $uid . '@gracehubtels.deleted'; 
+    $anon_username = 'deleted_' . $uid;
+    db()->prepare( "UPDATE users SET full_name='Deleted User', username=?, email=?, phone='00000000000', password='deleted', transaction_pin=NULL, is_active=0, updated_at=NOW() WHERE id=?" )->execute([$anon_username, $anon_email, $uid]); 
     logout_user();
 }
 
@@ -28,7 +29,7 @@ include __DIR__ . '/includes/sidebar.php';
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/profile" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+            <a href="/user/profile" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
                 <i class="fas fa-arrow-left"></i>
             </a>
             <div>
@@ -82,7 +83,7 @@ include __DIR__ . '/includes/sidebar.php';
                     <i class="fas fa-trash-alt"></i> Permanently Delete Account
                 </button>
                 
-                <a href="/msjpay/user/profile" class="block w-full text-center py-3 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
+                <a href="/user/profile" class="block w-full text-center py-3 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">
                     Cancel, keep my account
                 </a>
             </form>
@@ -101,10 +102,10 @@ function deleteAccount(e) {
     const btn = document.getElementById('delBtn');
     const resDiv = document.getElementById('delResult');
     
-    if(!pwd) return alert('Please enter your password');
-    if(confirmVal !== 'DELETE') return alert('Please type DELETE to confirm');
+    if(!pwd) return Swal.fire('Notice', 'Please enter your password', 'info');
+    if(confirmVal !== 'DELETE') return Swal.fire('Notice', 'Please type DELETE to confirm', 'info');
     
-    if(!confirm('FINAL WARNING: Are you absolutely sure you want to permanently delete your MsjPay account? This cannot be undone.')) return;
+    if(!await showConfirm('FINAL WARNING: Are you absolutely sure you want to permanently delete your Gracehubtels account? This cannot be undone.', 'Confirm Deletion')) return;
     
     const ogHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
@@ -120,13 +121,13 @@ function deleteAccount(e) {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         body: fd
     })
-    .then(r => r.json())
+    .then(async r => { const txt = await r.text(); try { return JSON.parse(txt); } catch(e) { console.error('Raw response:', txt); throw new Error(txt); } })
     .then(res => {
         resDiv.classList.remove('hidden');
         if(res.success !== false) {
             // Success might be redirection from logout, handle any response not explicitly false
             resDiv.innerHTML = `<div class="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold rounded-xl flex items-center gap-2"><i class="fas fa-check-circle"></i> Account deleted successfully. Redirecting...</div>`;
-            setTimeout(() => { location.href = '/msjpay/user/login'; }, 1500);
+            setTimeout(() => { location.href = '/user/login'; }, 1500);
         } else {
             resDiv.innerHTML = `<div class="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm font-semibold rounded-xl flex items-center gap-2"><i class="fas fa-exclamation-circle"></i> ${res.message}</div>`;
             btn.innerHTML = ogHtml;
@@ -135,7 +136,7 @@ function deleteAccount(e) {
     })
     .catch(err => {
         // If logout redirects, it might throw a fetch error
-        setTimeout(() => { location.href = '/msjpay/user/login'; }, 1500);
+        setTimeout(() => { location.href = '/user/login'; }, 1500);
     });
 }
 </script>

@@ -49,8 +49,8 @@ function change_password(int $uid, array $data): array {
 }
 
 function set_transaction_pin(int $uid, array $data): array {
-    $current_pwd = $data['current_password'] ?? '';
-    $pin = $data['pin'] ?? '';
+    $current_pin = $data['current_pin'] ?? '';
+    $pin = $data['pin'] ?? $data['new_pin'] ?? '';
     $confirm = $data['confirm_pin'] ?? '';
     
     if (!preg_match('/^\d{4}$/', $pin)) {
@@ -61,18 +61,20 @@ function set_transaction_pin(int $uid, array $data): array {
     }
     
     try {
-        $stmt = db()->prepare("SELECT password FROM users WHERE id = ?");
+        $stmt = db()->prepare("SELECT transaction_pin FROM users WHERE id = ?");
         $stmt->execute([$uid]);
         $user = $stmt->fetch();
         
-        if (!$user || !password_verify($current_pwd, $user['password'])) {
-            return ['success' => false, 'message' => 'Incorrect login password.'];
+        if ($user && !empty($user['transaction_pin'])) {
+            if (!verify_pin($uid, $current_pin)) {
+                return ['success' => false, 'message' => 'Incorrect current transaction PIN.'];
+            }
         }
         
         $hash = password_hash($pin, PASSWORD_BCRYPT, ['cost' => 12]);
         db()->prepare("UPDATE users SET transaction_pin = ? WHERE id = ?")->execute([$hash, $uid]);
         
-        return ['success' => true, 'message' => 'Transaction PIN set successfully.'];
+        return ['success' => true, 'message' => 'Transaction PIN changed successfully.'];
     } catch (PDOException $e) {
         log_error('profile', 'set_transaction_pin failed: ' . $e->getMessage());
         return ['success' => false, 'message' => 'Failed to set PIN.'];

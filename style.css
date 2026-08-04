@@ -4,12 +4,12 @@
    CSS Design Tokens & Core Settings
    ========================================== */
 :root {
-    --primary-navy: #002060;      /* Signature Navy */
-    --accent-orange: #ff5500;     /* Energizing Orange */
-    --navy-light: #0d2e6c;        /* Hover / Light Navy */
-    --navy-dark: #001238;         /* Dark variant */
-    --orange-hover: #e04b00;      /* Darker Orange for Hover */
-    --orange-light: #fff0eb;      /* Soft Orange Tint */
+    --primary-navy: #2563EB;      /* Signature Navy */
+    --accent-orange: #F59E0B;     /* Energizing Orange */
+    --navy-light: #3B82F6;        /* Hover / Light Navy */
+    --navy-dark: #1D4ED8;         /* Dark variant */
+    --orange-hover: #D97706;      /* Darker Orange for Hover */
+    --orange-light: #FEF3C7;      /* Soft Orange Tint */
     --neutral-dark: #0f172a;      /* Text color dark */
     --neutral-light: #f8fafc;     /* Soft background */
     --neutral-muted: #64748b;     /* Paragraph / Subtitle gray */

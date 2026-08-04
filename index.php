@@ -1,349 +1,501 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <!-- Primary SEO Meta Tags -->
-    <title>MsjPay | Seamless Payments & Instant Settlements in Nigeria</title>
-    <meta name="description" content="MsjPay is a secure, all-in-one payment gateway and digital wallet built for Nigerian businesses, freelancers, and individuals. Accept payments, send instant bank transfers, and pay utility bills at zero cost.">
-    <meta name="keywords" content="MsjPay, payment gateway Nigeria, digital wallet Lagos, accept card payments, instant settlement, pay bills Nigeria, secure transactions, BVN verification, fintech Nigeria">
+    <title>Gracehubtels | Seamless Payments & Instant Settlements in Nigeria</title>
+    <meta name="description" content="Gracehubtels is a secure, all-in-one payment gateway and digital wallet built for Nigerian businesses, freelancers, and individuals. Accept payments, send instant bank transfers, and pay utility bills at zero cost.">
+    <meta name="keywords" content="Gracehubtels, payment gateway Nigeria, digital wallet Lagos, accept card payments, instant settlement, pay bills Nigeria, secure transactions, BVN verification, fintech Nigeria">
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://msjpay.ng/">
-    <meta property="og:title" content="MsjPay | Seamless Payments & Instant Settlements in Nigeria">
-    <meta property="og:description" content="Accept card deposits, send instant bank transfers, and pay bills at zero cost with MsjPay. The smarter payment gateway for Nigeria.">
+    <meta property="og:url" content="https://gracehubtels.com/">
+    <meta property="og:title" content="Gracehubtels | Seamless Payments & Instant Settlements in Nigeria">
+    <meta property="og:description" content="Accept card deposits, send instant bank transfers, and pay bills at zero cost with Gracehubtels. The smarter payment gateway for Nigeria.">
     <meta property="og:image" content="assets/IMG_3901.PNG">
+    <link rel="icon" type="image/png" href="assets/images/gracehubtels-favicon.png">
 
-    <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Tailwind CSS Engine -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        heading: ['Outfit', 'sans-serif'],
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            primary: '#2563EB',      // Royal Blue
+                            primaryDark: '#1D4ED8',  // Indigo
+                            primaryLight: '#EFF6FF', 
+                            accent: '#EC4899',       // Pink
+                            accentDark: '#DB2777',
+                            gold: '#F59E0B',         // Premium Gold
+                            goldHover: '#D97706',
+                            navy: '#1E293B',         // Slate 800
+                            navyLight: '#334155'
+                        }
+                    },
+                    animation: {
+                        'float': 'float 6s ease-in-out infinite',
+                        'float-delayed': 'float 6s ease-in-out 3s infinite',
+                        'marquee': 'marquee 25s linear infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        },
+                        marquee: {
+                            '0%': { transform: 'translateX(0%)' },
+                            '100%': { transform: 'translateX(-100%)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #2563EB, #EC4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-bg {
+            background-color: #f8fafc;
+            background-image: 
+                radial-gradient(at 0% 0%, hsla(217,100%,70%,0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(330,81%,70%,0.15) 0px, transparent 50%);
+        }
+    </style>
 </head>
-<body>
+<body class="font-sans text-slate-600 bg-slate-50 antialiased overflow-x-hidden">
 
-    <!-- ==========================================
-       Header / Navigation Bar
-       ========================================== -->
-    <header class="header" id="header">
-        <div class="container">
-            <nav class="nav-container">
-                <a href="index.php" class="logo-link" id="logo-link">
-                    <img src="assets/IMG_3899.PNG" alt="MsjPay Logo" class="logo-img" id="logo-img-header">
-                    <span class="logo-text" id="logo-text-header">Msj<span>Pay</span></span>
+    <!-- Navbar -->
+    <nav class="fixed w-full z-50 transition-all duration-300" id="navbar">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-20">
+                <!-- Logo -->
+                <a href="index.php" class="flex items-center gap-2 group">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-primary to-brand-primaryDark flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30 group-hover:scale-105 transition-transform">
+                        <img src="assets/IMG_3899.PNG" alt="Gracehubtels Logo" class="w-full h-full object-contain p-1" onerror="this.style.display='none'; this.parentNode.innerHTML='G'">
+                    </div>
+                    <span class="font-heading font-bold text-xl text-brand-navy tracking-tight">Gracehub<span class="text-brand-primary">tels</span></span>
                 </a>
-                
-                <ul class="nav-menu" id="nav-menu">
-                    <li><a href="#features" class="nav-link" id="link-features">Features</a></li>
-                    <li><a href="#how-it-works" class="nav-link" id="link-how">How It Works</a></li>
-                    <li><a href="contact.php" class="nav-link" id="link-contact">Contact</a></li>
-                    <li><a href="privacy-policy.php" class="nav-link" id="link-privacy">Privacy Policy</a></li>
-                    <!-- Mobile view active CTA links -->
-                    <li style="display: none;" class="mobile-cta-item"><a href="user/signup" class="btn btn-primary">Get Started</a></li>
-                </ul>
 
-                <div class="nav-actions" id="nav-actions">
-                    <a href="user/login" class="btn btn-ghost" id="btn-login-header">Sign In</a>
-                    <a href="user/signup" class="btn btn-primary" id="btn-signup-header">Get Started</a>
+                <!-- Desktop Menu -->
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="font-medium text-slate-600 hover:text-brand-primary transition-colors">Features</a>
+                    <a href="#services" class="font-medium text-slate-600 hover:text-brand-primary transition-colors">Services</a>
+                    <a href="#how-it-works" class="font-medium text-slate-600 hover:text-brand-primary transition-colors">How it Works</a>
                 </div>
 
-                <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation">
-                    <i>☰</i>
-                </button>
-            </nav>
+                <!-- Auth Buttons -->
+                <div class="hidden md:flex items-center space-x-4">
+                    <a href="user/login" class="font-medium text-brand-navy hover:text-brand-primary transition-colors">Sign In</a>
+                    <a href="user/signup" class="bg-brand-navy hover:bg-slate-800 text-white px-6 py-2.5 rounded-full font-medium transition-all hover:shadow-lg hover:-translate-y-0.5">Get Started</a>
+                </div>
+
+                <!-- Mobile menu button -->
+                <div class="md:hidden flex items-center">
+                    <button id="mobile-menu-btn" class="text-brand-navy hover:text-brand-primary focus:outline-none">
+                        <i class="fas fa-bars text-2xl"></i>
+                    </button>
+                </div>
+            </div>
         </div>
-    </header>
 
-    <!-- ==========================================
-       Hero Section
-       ========================================== -->
-    <section class="hero" id="hero">
-        <div class="container">
-            <div class="hero-grid">
-                <div class="hero-content">
-                    <div class="hero-tag">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                        Secure &amp; Borderless Fintech
+        <!-- Mobile Menu Panel -->
+        <div id="mobile-menu" class="hidden md:hidden bg-white border-b border-slate-100 shadow-xl absolute w-full">
+            <div class="px-4 pt-2 pb-6 space-y-2">
+                <a href="#features" class="block px-3 py-3 font-medium text-slate-700 hover:text-brand-primary hover:bg-slate-50 rounded-lg">Features</a>
+                <a href="#services" class="block px-3 py-3 font-medium text-slate-700 hover:text-brand-primary hover:bg-slate-50 rounded-lg">Services</a>
+                <a href="#how-it-works" class="block px-3 py-3 font-medium text-slate-700 hover:text-brand-primary hover:bg-slate-50 rounded-lg">How it Works</a>
+                <div class="border-t border-slate-100 pt-4 mt-2 flex flex-col gap-3">
+                    <a href="user/login" class="block text-center px-3 py-3 font-medium text-brand-navy border border-slate-200 rounded-lg">Sign In</a>
+                    <a href="user/signup" class="block text-center px-3 py-3 font-medium text-white bg-brand-primary rounded-lg shadow-md shadow-blue-500/20">Get Started</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden hero-bg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="grid lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+                <!-- Hero Content -->
+                <div class="max-w-2xl text-center lg:text-left mx-auto lg:mx-0">
+                    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm mb-6">
+                        <span class="flex h-2 w-2 rounded-full bg-brand-gold animate-pulse"></span>
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-600">Secure & Borderless Fintech</span>
                     </div>
-                    <h1 class="hero-title" id="hero-main-title">
-                        Seamless Payments,<br><span>Instant Settlements.</span>
+                    <h1 class="font-heading text-4xl sm:text-5xl lg:text-6xl font-extrabold text-brand-navy leading-[1.15] mb-6 tracking-tight">
+                        Seamless Payments,<br>
+                        <span class="text-gradient">Instant Settlements.</span>
                     </h1>
-                    <p class="hero-desc" id="hero-main-desc">
-                        MsjPay is the secure, all-in-one payment gateway and digital wallet designed for Nigerian businesses, freelancers, and individuals. Accept cards, bank transfers, and USSD, or pay bills and send money in seconds.
+                    <p class="text-lg text-slate-600 mb-8 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+                        The all-in-one digital wallet and payment gateway designed for Nigerian businesses and individuals. Pay bills, send money, and accept cards securely with zero hassle.
                     </p>
-                    <div class="hero-ctas">
-                        <a href="user/signup" class="btn btn-primary" id="hero-cta-primary">Create Free Account</a>
-                        <a href="#features" class="btn btn-secondary" id="hero-cta-secondary">Learn More</a>
+                    <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                        <a href="user/signup" class="bg-brand-primary hover:bg-brand-primaryDark text-white px-8 py-3.5 rounded-full font-semibold text-lg transition-all hover:shadow-xl hover:shadow-blue-500/30 flex items-center justify-center gap-2 hover:-translate-y-1">
+                            Create Free Account <i class="fas fa-arrow-right text-sm"></i>
+                        </a>
+                        <a href="user/login" class="bg-white hover:bg-slate-50 text-brand-navy border border-slate-200 px-8 py-3.5 rounded-full font-semibold text-lg transition-all hover:shadow-md flex items-center justify-center">
+                            Sign In
+                        </a>
                     </div>
-                    <div class="hero-trust">
-                        <div class="trust-item">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            CBN-Licensed Partner Banks
-                        </div>
-                        <div class="trust-item">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            NDPR Compliant
-                        </div>
-                        <div class="trust-item">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                            256-bit Encryption
-                        </div>
+                    <div class="mt-10 flex items-center justify-center lg:justify-start gap-6 text-sm font-medium text-slate-500">
+                        <div class="flex items-center gap-2"><i class="fas fa-check-circle text-brand-gold"></i> CBN Licensed</div>
+                        <div class="flex items-center gap-2"><i class="fas fa-shield-alt text-brand-gold"></i> 256-bit Secure</div>
                     </div>
                 </div>
-                
-                <div class="hero-visual" id="hero-visual-panel">
-                    <div class="dashboard-mockup" id="dashboard-mockup-wrapper">
-                        <div class="mockup-header">
-                            <div class="mockup-user">
-                                <div class="mockup-avatar">O</div>
+
+                <!-- Hero Visual / Mockups -->
+                <div class="relative lg:h-[600px] flex items-center justify-center hidden sm:flex">
+                    <!-- Main Dashboard Card -->
+                    <div class="relative w-full max-w-sm glass-card rounded-3xl p-6 shadow-2xl z-20 animate-float border-t border-white/50">
+                        <div class="flex justify-between items-center mb-8">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-brand-accent to-brand-accentDark text-white flex items-center justify-center font-bold shadow-md">CO</div>
                                 <div>
-                                    <div class="mockup-title">Chidi Okafor</div>
-                                    <div class="balance-lbl" style="font-size: 8px;">Personal Account</div>
+                                    <div class="font-bold text-brand-navy leading-tight">Chidi Okafor</div>
+                                    <div class="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Personal Account</div>
                                 </div>
                             </div>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-navy)" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                            <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"><i class="fas fa-bell text-xs"></i></button>
                         </div>
-                        <div class="mockup-balance-card" id="mockup-balance-card">
-                            <div class="balance-lbl">Available Balance</div>
-                            <div class="balance-val">₦450,250.00</div>
-                            <div class="balance-card-num">•••• •••• •••• 8890</div>
-                        </div>
-                        <div class="mockup-transactions">
-                            <div class="mockup-title">Recent Transactions</div>
-                            
-                            <div class="mockup-tx">
-                                <div class="tx-info">
-                                    <div class="tx-icon-box">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary-navy)" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                    </div>
-                                    <div>
-                                        <div class="tx-title">Wallet Funded</div>
-                                        <div class="tx-time">Today, 2:40 PM</div>
-                                    </div>
-                                </div>
-                                <div class="tx-amt plus">+ ₦50,000.00</div>
-                            </div>
-
-                            <div class="mockup-tx">
-                                <div class="tx-info">
-                                    <div class="tx-icon-box">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-orange)" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                    </div>
-                                    <div>
-                                        <div class="tx-title">Transfer to Providus Bank</div>
-                                        <div class="tx-time">Yesterday, 9:15 AM</div>
-                                    </div>
-                                </div>
-                                <div class="tx-amt">- ₦12,500.00</div>
+                        
+                        <div class="bg-gradient-to-br from-brand-primary to-brand-primaryDark rounded-2xl p-5 text-white shadow-lg shadow-blue-500/25 mb-6 relative overflow-hidden">
+                            <div class="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+                            <div class="text-xs font-medium text-blue-100 mb-1 opacity-90">Available Balance</div>
+                            <div class="text-3xl font-heading font-bold mb-4 tracking-tight">₦450,250<span class="text-blue-300 text-lg">.00</span></div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="font-mono opacity-80 tracking-widest">**** 8890</span>
+                                <i class="fab fa-cc-visa text-2xl opacity-90"></i>
                             </div>
                         </div>
 
-                        <!-- Floating Micro Badges -->
-                        <div class="floating-badge fb-success" id="fb-success-box">
-                            <div class="success-icon-box" style="width: 24px; height: 24px; margin: 0; font-size: 12px;">✓</div>
-                            <div>
-                                <div class="tx-title" style="font-size: 11px;">Payment Secured</div>
-                                <div class="tx-time" style="font-size: 9px;">Settled in 0.4s</div>
+                        <div>
+                            <div class="font-bold text-brand-navy mb-4 text-sm uppercase tracking-wider">Recent Activity</div>
+                            <div class="space-y-4">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-full bg-blue-50 text-brand-primary flex items-center justify-center"><i class="fas fa-arrow-down"></i></div>
+                                        <div>
+                                            <div class="font-semibold text-brand-navy text-sm">Wallet Funded</div>
+                                            <div class="text-xs text-slate-500">Today, 2:40 PM</div>
+                                        </div>
+                                    </div>
+                                    <div class="font-bold text-emerald-500 text-sm">+ ₦50,000</div>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-10 h-10 rounded-full bg-pink-50 text-brand-accent flex items-center justify-center"><i class="fas fa-paper-plane"></i></div>
+                                        <div>
+                                            <div class="font-semibold text-brand-navy text-sm">Providus Bank</div>
+                                            <div class="text-xs text-slate-500">Yesterday</div>
+                                        </div>
+                                    </div>
+                                    <div class="font-bold text-slate-700 text-sm">- ₦12,500</div>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="floating-badge fb-shield" id="fb-shield-box">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary-navy)" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                            <span class="tx-title" style="font-size: 11px;">PCI-DSS Compliant</span>
                         </div>
                     </div>
+
+                    <!-- Floating Elements -->
+                    <div class="absolute top-10 right-0 glass-card p-4 rounded-2xl shadow-xl z-30 animate-float-delayed flex items-center gap-3 border-t border-white/50">
+                        <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fas fa-check"></i></div>
+                        <div>
+                            <div class="font-bold text-brand-navy text-sm">Payment Secured</div>
+                            <div class="text-xs text-slate-500">Settled in 0.4s</div>
+                        </div>
+                    </div>
+                    
+                    <div class="absolute bottom-20 -left-10 glass-card p-4 rounded-2xl shadow-xl z-30 animate-float flex items-center gap-3 border-t border-white/50" style="animation-duration: 7s;">
+                        <div class="w-10 h-10 rounded-full bg-brand-gold/20 text-brand-goldHover flex items-center justify-center"><i class="fas fa-bolt"></i></div>
+                        <div>
+                            <div class="font-bold text-brand-navy text-sm">Bill Paid</div>
+                            <div class="text-xs text-slate-500">Zero Fees Applied</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Decorative blur -->
+                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-gradient-to-tr from-brand-primary/10 to-brand-accent/10 blur-3xl rounded-full z-0"></div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ==========================================
-       Trust / Social Proof Banner
-       ========================================== -->
-    <div class="trust-banner" id="trust-banner">
-        <div class="container text-center">
-            <h2 class="trust-banner-title">Supported Integrations &amp; Clearing Partners</h2>
-            <div class="partner-grid">
-                <div class="partner-logo">PROVIDUS<span>BANK</span></div>
-                <div class="partner-logo">WEMA<span>BANK</span></div>
-                <div class="partner-logo">INTER<span>SWITCH</span></div>
-                <div class="partner-logo">PAY<span>STACK</span></div>
-                <div class="partner-logo">FLUTTER<span>WAVE</span></div>
+    <!-- Trusted Partners (Marquee) -->
+    <div class="border-y border-slate-200 bg-white py-8 overflow-hidden relative">
+        <div class="text-center text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Supported Integrations & Clearing Partners</div>
+        <div class="flex overflow-hidden relative w-full">
+            <div class="flex whitespace-nowrap animate-marquee items-center gap-16 px-8">
+                <!-- Set 1 -->
+                <div class="text-xl font-heading font-extrabold text-slate-300">PROVIDUS<span class="text-slate-800">BANK</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">WEMA<span class="text-slate-800">BANK</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">INTER<span class="text-slate-800">SWITCH</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">PAY<span class="text-slate-800">STACK</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">FLUTTER<span class="text-slate-800">WAVE</span></div>
+                <!-- Set 2 (for continuous scroll) -->
+                <div class="text-xl font-heading font-extrabold text-slate-300">PROVIDUS<span class="text-slate-800">BANK</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">WEMA<span class="text-slate-800">BANK</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">INTER<span class="text-slate-800">SWITCH</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">PAY<span class="text-slate-800">STACK</span></div>
+                <div class="text-xl font-heading font-extrabold text-slate-300">FLUTTER<span class="text-slate-800">WAVE</span></div>
             </div>
         </div>
     </div>
 
-    <!-- ==========================================
-       Value Propositions / Features Section
-       ========================================== -->
-    <section class="section" id="features">
-        <div class="container">
-            <div class="text-center">
-                <h2 class="section-title">Built for Modern Commercial Growth</h2>
-                <p class="section-desc">We build enterprise-grade payment solutions that give you the security, routing speed, and reliability your finances deserve.</p>
+    <!-- Quick Services Grid -->
+    <section id="services" class="py-24 bg-slate-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="font-heading text-3xl md:text-4xl font-bold text-brand-navy mb-4">Everything you need, in one place.</h2>
+                <p class="text-lg text-slate-600">From everyday bills to business transfers, experience a comprehensive suite of financial services designed for speed and reliability.</p>
             </div>
             
-            <div class="features-grid">
-                <!-- Feature 1 -->
-                <div class="feature-card" id="feat-security">
-                    <div class="feature-icon feature-icon-1">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
+                <!-- Service Card -->
+                <div class="bg-white rounded-2xl p-6 text-center border border-slate-100 shadow-sm hover:shadow-xl hover:border-pink-200 transition-all duration-300 hover:-translate-y-1 group">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-pink-50 text-brand-accent flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-mobile-alt"></i>
                     </div>
-                    <h3>Bank-Grade Security</h3>
-                    <p>Your funds and private details are guarded by multi-level 256-bit SSL encryption, mandatory 2FA, and state-of-the-art AI-driven fraud monitoring systems.</p>
+                    <h3 class="font-bold text-brand-navy mb-1">Buy Airtime</h3>
+                    <p class="text-xs text-slate-500">Instant recharge across all networks.</p>
                 </div>
-
-                <!-- Feature 2 -->
-                <div class="feature-card" id="feat-settlement">
-                    <div class="feature-icon feature-icon-2">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                <!-- Service Card -->
+                <div class="bg-white rounded-2xl p-6 text-center border border-slate-100 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all duration-300 hover:-translate-y-1 group">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-blue-50 text-brand-primary flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-wifi"></i>
                     </div>
-                    <h3>Instant Settlements</h3>
-                    <p>Keep your cash flow fluid. MsjPay routes and settles your transaction payouts directly to any Nigerian bank account instantly, without delays.</p>
+                    <h3 class="font-bold text-brand-navy mb-1">Data Bundles</h3>
+                    <p class="text-xs text-slate-500">Cheap and reliable internet data.</p>
                 </div>
-
-                <!-- Feature 3 -->
-                <div class="feature-card" id="feat-support">
-                    <div class="feature-icon feature-icon-3">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                <!-- Service Card -->
+                <div class="bg-white rounded-2xl p-6 text-center border border-slate-100 shadow-sm hover:shadow-xl hover:border-orange-200 transition-all duration-300 hover:-translate-y-1 group">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-orange-50 text-orange-500 flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-tv"></i>
                     </div>
-                    <h3>24/7 Dedicated Support</h3>
-                    <p>Talk to real financial engineering specialists. Our customer success team is available 24/7/365 through phone, email, and live chat to keep your operations running.</p>
+                    <h3 class="font-bold text-brand-navy mb-1">Cable TV</h3>
+                    <p class="text-xs text-slate-500">DSTV, GOTV & Startimes subs.</p>
+                </div>
+                <!-- Service Card -->
+                <div class="bg-white rounded-2xl p-6 text-center border border-slate-100 shadow-sm hover:shadow-xl hover:border-purple-200 transition-all duration-300 hover:-translate-y-1 group">
+                    <div class="w-14 h-14 mx-auto rounded-full bg-purple-50 text-purple-600 flex items-center justify-center text-2xl mb-4 group-hover:scale-110 transition-transform">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <h3 class="font-bold text-brand-navy mb-1">Electricity</h3>
+                    <p class="text-xs text-slate-500">Zero fee prepaid meter tokens.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ==========================================
-       How It Works Section
-       ========================================== -->
-    <section class="section how-it-works" id="how-it-works">
-        <div class="container">
-            <div class="text-center">
-                <h2 class="section-title">Get Started in 3 Simple Steps</h2>
-                <p class="section-desc">You don't need a stack of paperwork. Our onboarding is designed to get you processing live payments in under 10 minutes.</p>
+    <!-- Features Section -->
+    <section id="features" class="py-24 bg-white border-t border-slate-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <div>
+                    <h2 class="font-heading text-3xl md:text-4xl font-bold text-brand-navy mb-6">Built for modern commercial growth</h2>
+                    <p class="text-lg text-slate-600 mb-8">We build enterprise-grade payment solutions that give you the security, routing speed, and reliability your finances deserve.</p>
+                    
+                    <div class="space-y-8">
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-blue-50 text-brand-primary flex items-center justify-center text-xl">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-brand-navy text-lg mb-2">Bank-Grade Security</h4>
+                                <p class="text-slate-600">Your funds and private details are guarded by multi-level 256-bit SSL encryption, mandatory 2FA, and AI fraud monitoring.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-50 text-brand-gold flex items-center justify-center text-xl">
+                                <i class="fas fa-bolt"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-brand-navy text-lg mb-2">Instant Settlements</h4>
+                                <p class="text-slate-600">Keep your cash flow fluid. Gracehubtels routes and settles your transaction payouts directly to any Nigerian bank account instantly.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="flex-shrink-0 w-12 h-12 rounded-xl bg-pink-50 text-brand-accent flex items-center justify-center text-xl">
+                                <i class="fas fa-headset"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-brand-navy text-lg mb-2">24/7 Dedicated Support</h4>
+                                <p class="text-slate-600">Talk to real financial specialists. Our customer success team is available 24/7/365 to keep your operations running.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="relative">
+                    <div class="absolute inset-0 bg-gradient-to-tr from-brand-primary/10 to-brand-accent/10 rounded-3xl transform rotate-3 scale-105"></div>
+                    <img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&q=80&w=800" alt="Team working" class="relative rounded-3xl shadow-2xl object-cover h-[500px] w-full">
+                    
+                    <!-- Floating stat -->
+                    <div class="absolute -bottom-6 -left-6 glass-card p-5 rounded-2xl shadow-xl flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl"><i class="fas fa-chart-line"></i></div>
+                        <div>
+                            <div class="text-2xl font-bold text-brand-navy">99.99%</div>
+                            <div class="text-sm text-slate-500 font-medium">Uptime Guarantee</div>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
+    </section>
 
-            <div class="steps-grid">
+    <!-- How It Works -->
+    <section id="how-it-works" class="py-24 bg-slate-900 text-white relative overflow-hidden">
+        <!-- Abstract bg -->
+        <div class="absolute top-0 right-0 w-[800px] h-[800px] bg-brand-primary/20 blur-[120px] rounded-full translate-x-1/3 -translate-y-1/3 pointer-events-none"></div>
+        
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="font-heading text-3xl md:text-4xl font-bold mb-4">Get Started in 3 Simple Steps</h2>
+                <p class="text-lg text-slate-400">No paperwork, no branch visits. Our onboarding is designed to get you processing live payments in under 10 minutes.</p>
+            </div>
+            
+            <div class="grid md:grid-cols-3 gap-8">
                 <!-- Step 1 -->
-                <div class="step-card" id="step-one">
-                    <div class="step-number">1</div>
-                    <h3>Register in Minutes</h3>
-                    <p>Download the MsjPay app or sign up on msjpay.ng. Verify your identity with your BVN/NIN, or upload CAC documents for business accounts.</p>
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors">
+                    <div class="w-14 h-14 rounded-full bg-brand-primary/20 text-brand-primaryLight flex items-center justify-center text-2xl font-bold mb-6 font-heading">1</div>
+                    <h3 class="font-bold text-xl mb-3">Create an Account</h3>
+                    <p class="text-slate-400 leading-relaxed">Sign up on gracehubtels.com in minutes. Verify your identity seamlessly with your BVN/NIN for total security.</p>
                 </div>
-
                 <!-- Step 2 -->
-                <div class="step-card" id="step-two">
-                    <div class="step-number">2</div>
-                    <h3>Fund &amp; Link Account</h3>
-                    <p>Instantly deposit funds into your wallet using bank transfers, or configure our low-code SDK checkout API on your web platform.</p>
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors">
+                    <div class="w-14 h-14 rounded-full bg-brand-gold/20 text-brand-gold flex items-center justify-center text-2xl font-bold mb-6 font-heading">2</div>
+                    <h3 class="font-bold text-xl mb-3">Fund Your Wallet</h3>
+                    <p class="text-slate-400 leading-relaxed">Instantly deposit funds into your secure wallet using bank transfers, USSD, or debit cards with zero hidden fees.</p>
                 </div>
-
                 <!-- Step 3 -->
-                <div class="step-card" id="step-three">
-                    <div class="step-number">3</div>
-                    <h3>Transact and Scale</h3>
-                    <p>Send peer-to-peer transfers, pay utility bills at zero fees, send digital invoices, and watch your business thrive.</p>
+                <div class="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors">
+                    <div class="w-14 h-14 rounded-full bg-brand-accent/20 text-pink-300 flex items-center justify-center text-2xl font-bold mb-6 font-heading">3</div>
+                    <h3 class="font-bold text-xl mb-3">Transact & Scale</h3>
+                    <p class="text-slate-400 leading-relaxed">Send money, pay bills, buy airtime, or integrate our API to accept payments and watch your business thrive.</p>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ==========================================
-       Testimonials Section
-       ========================================== -->
-    <section class="section testimonials" id="testimonials">
-        <div class="container">
-            <div class="text-center">
-                <h2 class="section-title">Loved by Thousands across Nigeria</h2>
-                <p class="section-desc">See how business owners, entrepreneurs, and freelancers are leveraging MsjPay to simplify their daily payments.</p>
+    <!-- Testimonials -->
+    <section class="py-24 bg-slate-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16">
+                <h2 class="font-heading text-3xl md:text-4xl font-bold text-brand-navy mb-4">Loved by Thousands across Nigeria</h2>
             </div>
             
-            <div class="testimonial-container" id="testimonial-box">
-                <blockquote class="testimonial-quote">
-                    "Integrating MsjPay's checkout API took our e-commerce sales to the next level. Settlements are actually instant, and checkout drop-offs are a thing of the past! Highly recommended for any serious business."
-                </blockquote>
-                <div class="testimonial-author">
-                    <div class="mockup-avatar" style="width: 48px; height: 48px; background-color: var(--orange-light); color: var(--accent-orange);">AO</div>
-                    <div class="author-info">
-                        <h4>Amara Okafor</h4>
-                        <p>CEO, ShopVibe Nigeria</p>
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-white rounded-3xl p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 text-center relative">
+                    <i class="fas fa-quote-left text-4xl text-brand-primary/20 absolute top-8 left-8"></i>
+                    <p class="text-xl md:text-2xl text-slate-700 font-medium leading-relaxed mb-8 relative z-10">
+                        "Integrating Gracehubtels took our sales to the next level. Settlements are actually instant, and checkout drop-offs are a thing of the past! Highly recommended for any serious business."
+                    </p>
+                    <div class="flex items-center justify-center gap-4">
+                        <div class="w-14 h-14 rounded-full bg-gradient-to-br from-brand-gold to-brand-goldHover text-white flex items-center justify-center font-bold text-lg shadow-md">AO</div>
+                        <div class="text-left">
+                            <div class="font-bold text-brand-navy text-lg">Amara Okafor</div>
+                            <div class="text-sm text-slate-500">CEO, ShopVibe Nigeria</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
 
-    <!-- ==========================================
-       CTA Banner Section
-       ========================================== -->
-    <section class="section cta-banner text-center" id="cta-banner">
-        <div class="container">
-            <div class="cta-banner-content">
-                <h2>Ready to experience smooth payments?</h2>
-                <p>Join thousands of Nigerian companies and smart savers today. Set up your wallet in minutes and start transacting with peace of mind.</p>
-                <a href="user/signup" class="btn btn-primary" style="background-color: var(--white); color: var(--primary-navy); box-shadow: 0 10px 25px rgba(0,0,0,0.1);" id="cta-footer-getstarted">Get Started Now</a>
-            </div>
+    <!-- CTA Section -->
+    <section class="py-20 relative overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-brand-primary to-brand-primaryDark"></div>
+        <!-- Decorative abstract -->
+        <div class="absolute -top-24 -right-24 w-96 h-96 bg-white/10 blur-3xl rounded-full"></div>
+        <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-brand-accent/20 blur-3xl rounded-full"></div>
+        
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
+            <h2 class="font-heading text-3xl md:text-5xl font-bold text-white mb-6">Ready to experience smooth payments?</h2>
+            <p class="text-xl text-blue-100 mb-10 max-w-2xl mx-auto">Join thousands of Nigerian companies and smart savers today. Set up your wallet in minutes and start transacting with peace of mind.</p>
+            <a href="user/signup" class="inline-block bg-white text-brand-primary px-8 py-4 rounded-full font-bold text-lg transition-all hover:shadow-2xl hover:scale-105 shadow-blue-900/50">
+                Get Started For Free
+            </a>
         </div>
     </section>
 
-    <!-- ==========================================
-       Footer Component
-       ========================================== -->
-    <footer class="footer" id="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-brand">
-                    <a href="index.php" class="logo-link" style="margin-bottom: 20px;">
-                        <img src="assets/IMG_3901.PNG" alt="MsjPay Footer Logo" class="logo-img" style="height: 36px;" id="logo-img-footer">
-                        <span class="logo-text" style="color: var(--white);" id="logo-text-footer">Msj<span>Pay</span></span>
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 py-16 border-t border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid md:grid-cols-4 gap-12 mb-12 border-b border-slate-800 pb-12">
+                <div class="md:col-span-2">
+                    <a href="index.php" class="flex items-center gap-2 mb-6">
+                        <img src="assets/IMG_3901.PNG" alt="Gracehubtels Footer Logo" class="h-8" onerror="this.style.display='none'">
+                        <span class="font-heading font-bold text-xl text-white tracking-tight">Gracehub<span class="text-brand-primary">tels</span></span>
                     </a>
-                    <p>MsjPay Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.</p>
-                    <div class="footer-socials">
-                        <a href="#" class="social-icon" aria-label="Facebook">F</a>
-                        <a href="#" class="social-icon" aria-label="Twitter">T</a>
-                        <a href="#" class="social-icon" aria-label="LinkedIn">L</a>
-                        <a href="#" class="social-icon" aria-label="Instagram">I</a>
+                    <p class="text-slate-400 leading-relaxed max-w-md">
+                        Gracehubtels Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.
+                    </p>
+                </div>
+                <div>
+                    <h4 class="text-white font-bold mb-6">Company</h4>
+                    <ul class="space-y-4">
+                        <li><a href="contact.php" class="hover:text-white transition-colors">Contact Us</a></li>
+                        <li><a href="terms.php" class="hover:text-white transition-colors">Terms of Service</a></li>
+                        <li><a href="privacy-policy.php" class="hover:text-white transition-colors">Privacy Policy</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-white font-bold mb-6">Connect</h4>
+                    <div class="flex gap-4">
+                        <a href="#" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-brand-primary flex items-center justify-center text-white transition-colors"><i class="fab fa-twitter"></i></a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-brand-primary flex items-center justify-center text-white transition-colors"><i class="fab fa-facebook-f"></i></a>
+                        <a href="#" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-brand-accent flex items-center justify-center text-white transition-colors"><i class="fab fa-instagram"></i></a>
                     </div>
                 </div>
-                
-                <div>
-                    <h3 class="footer-title">Platform</h3>
-                    <ul class="footer-links">
-                        <li><a href="#features" class="footer-link">Features</a></li>
-                        <li><a href="#how-it-works" class="footer-link">How It Works</a></li>
-                        <li><a href="#testimonials" class="footer-link">Testimonials</a></li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h3 class="footer-title">Support</h3>
-                    <ul class="footer-links">
-                        <li><a href="contact.php" class="footer-link">Contact Us</a></li>
-                        <li><a href="mailto:support@msjpay.ng" class="footer-link">support@msjpay.ng</a></li>
-                        <li><a href="tel:+234014598890" class="footer-link">+234 (0) 1 459 8890</a></li>
-                    </ul>
-                </div>
-                
-                <div>
-                    <h3 class="footer-title">Legal</h3>
-                    <ul class="footer-links">
-                        <li><a href="privacy-policy.php" class="footer-link">Privacy Policy</a></li>
-                        <li><a href="terms.php" class="footer-link">Terms of Service</a></li>
-                    </ul>
-                </div>
             </div>
-
-            <div class="footer-bottom">
-                <p>&copy; 2026 MsjPay Technologies Limited (RC: 1899021). All rights reserved.</p>
-                <div class="footer-bottom-links">
-                    <a href="privacy-policy.php" class="footer-bottom-link">Privacy Policy</a>
-                    <a href="terms.php" class="footer-bottom-link">Terms of Service</a>
-                </div>
+            <div class="text-sm text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4">
+                <p>&copy; 2026 Gracehubtels. All rights reserved.</p>
+                <p>Registered in Nigeria.</p>
             </div>
         </div>
     </footer>
 
-    <!-- Script -->
-    <script src="main.js"></script>
+    <!-- Mobile Menu Script -->
+    <script>
+        document.getElementById('mobile-menu-btn').addEventListener('click', function() {
+            const menu = document.getElementById('mobile-menu');
+            if(menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+            } else {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', function() {
+            const navbar = document.getElementById('navbar');
+            if (window.scrollY > 20) {
+                navbar.classList.add('bg-white/90', 'backdrop-blur-md', 'shadow-sm');
+                navbar.classList.remove('bg-transparent');
+            } else {
+                navbar.classList.add('bg-transparent');
+                navbar.classList.remove('bg-white/90', 'backdrop-blur-md', 'shadow-sm');
+            }
+        });
+    </script>
 </body>
 </html>

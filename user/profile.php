@@ -1,7 +1,6 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/profile.php';
-require_once __DIR__.'/core/virtual-account.php';
 auth_user(); 
 $uid = (int) $_SESSION['user_id'];
 $user = get_user($uid); 
@@ -21,8 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     json_response(['success' => false, 'message' => 'Unknown action'], 400);
 } 
 
-$va_mgr = new VirtualAccountManager();
-$accounts = $va_mgr->get_user_accounts($uid);
 $has_pin = !empty($user['transaction_pin']); 
 
 // Stats
@@ -39,228 +36,159 @@ include __DIR__ . '/includes/header.php';
 include __DIR__ . '/includes/sidebar.php'; 
 ?>
 
-<div class="max-w-3xl mx-auto pb-10">
+<div class="max-w-3xl mx-auto pb-6 sm:pb-10">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-4 sm:mb-6">
         <div class="flex items-center gap-4">
-            <a href="/msjpay/user/dashboard" class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
-                <i class="fas fa-arrow-left"></i>
+            <a href="/user/dashboard" class="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 transition-colors">
+                <i class="fas fa-arrow-left text-xs sm:text-sm"></i>
             </a>
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">My Profile</h1>
+                <h1 class="text-lg sm:text-xl font-bold text-slate-800">My Profile</h1>
             </div>
+        </div>
+        <div class="bg-brand-orangeLight text-brand-orangeHover px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm text-sm">
+            ₦<?=number_format((float)$user['wallet_balance'],2)?>
         </div>
     </div>
 
     <!-- PROFILE HERO -->
-    <div class="bg-white rounded-3xl border border-slate-200 card-shadow overflow-hidden mb-6">
-        <div class="h-32 bg-gradient-to-r from-brand-navy to-brand-navyLight relative">
-            <!-- Decorative Elements -->
-            <div class="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
-            <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12 pointer-events-none"></div>
-            <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 pointer-events-none"></div>
+    <div class="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 card-shadow overflow-hidden mb-4 sm:mb-6">
+        <div class="h-20 sm:h-28 bg-gradient-to-r from-brand-navy to-brand-navyLight relative">
+            <div class="absolute top-0 right-0 w-20 h-20 bg-white/5 rounded-full -mr-10 -mt-10 pointer-events-none"></div>
+            <div class="absolute bottom-0 left-0 w-16 h-16 bg-white/5 rounded-full -ml-8 -mb-8 pointer-events-none"></div>
         </div>
         
-        <div class="px-6 pb-6 relative">
-            <div class="flex justify-between items-end -mt-12 mb-4">
-                <div class="w-24 h-24 rounded-2xl bg-white p-1.5 shadow-md">
-                    <div class="w-full h-full rounded-xl bg-gradient-to-br from-brand-orange to-orange-500 flex items-center justify-center text-4xl font-black text-white">
+        <div class="px-4 sm:px-6 pb-4 sm:pb-6 relative">
+            <div class="flex justify-between items-end -mt-10 sm:-mt-12 mb-3 sm:mb-4">
+                <div class="w-16 h-16 sm:w-24 sm:h-24 rounded-xl sm:rounded-2xl bg-white p-1 sm:p-1.5 shadow-md">
+                    <div class="w-full h-full rounded-lg sm:rounded-xl bg-gradient-to-br from-brand-orange to-orange-500 flex items-center justify-center text-2xl sm:text-4xl font-black text-white">
                         <?= strtoupper(substr($user['full_name'], 0, 1)) ?>
                     </div>
                 </div>
-                <button onclick="openSection('editProfile')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl font-bold transition-colors text-sm flex items-center gap-2">
-                    <i class="fas fa-pen"></i> Edit Profile
+                <button onclick="openSection('editProfile')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl font-bold transition-colors text-xs sm:text-sm flex items-center gap-1.5 sm:gap-2">
+                    <i class="fas fa-pen text-xs"></i> Edit Profile
                 </button>
             </div>
             
-            <div class="mb-6">
-                <h2 class="text-2xl font-black text-slate-800"><?= htmlspecialchars($user['full_name']) ?></h2>
-                <div class="flex items-center gap-2 text-slate-500 font-medium">
+            <div class="mb-4 sm:mb-6">
+                <h2 class="text-lg sm:text-2xl font-black text-slate-800"><?= htmlspecialchars($user['full_name']) ?></h2>
+                <div class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-500 font-medium">
                     <span>@<?= htmlspecialchars($user['username']) ?></span>
-                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                    <span class="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-300"></span>
                     <span>Joined <?= date('M Y', strtotime($user['created_at'])) ?></span>
                 </div>
             </div>
             
-            <div class="flex border border-slate-100 rounded-2xl overflow-hidden divide-x divide-slate-100 bg-slate-50">
-                <div class="flex-1 p-4 text-center">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Transactions</p>
-                    <p class="text-2xl font-black text-brand-navy"><?= number_format($tx_count) ?></p>
+            <div class="flex border border-slate-100 rounded-xl sm:rounded-2xl overflow-hidden divide-x divide-slate-100 bg-slate-50">
+                <div class="flex-1 p-2.5 sm:p-4 text-center">
+                    <p class="text-[10px] sm:text-sm font-semibold text-slate-500 uppercase tracking-wider mb-0.5 sm:mb-1">Transactions</p>
+                    <p class="text-lg sm:text-2xl font-black text-brand-navy"><?= number_format($tx_count) ?></p>
                 </div>
-                <div class="flex-1 p-4 text-center">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-1">Total Spent</p>
-                    <p class="text-2xl font-black text-brand-orangeHover">₦<?= number_format($total_spent, 0) ?></p>
+                <div class="flex-1 p-2.5 sm:p-4 text-center">
+                    <p class="text-[10px] sm:text-sm font-semibold text-slate-500 uppercase tracking-wider mb-0.5 sm:mb-1">Total Spent</p>
+                    <p class="text-lg sm:text-2xl font-black text-brand-orangeHover">₦<?= number_format($total_spent, 0) ?></p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- PIN STATUS -->
-    <?php if (!$has_pin): ?>
-    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 flex flex-col sm:flex-row items-center gap-4 shadow-sm">
-        <div class="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-500 shrink-0">
-            <i class="fas fa-shield-alt text-xl"></i>
-        </div>
-        <div class="flex-1 text-center sm:text-left">
-            <h3 class="font-bold text-amber-900 mb-1">Set Your Transaction PIN</h3>
-            <p class="text-sm text-amber-700">You need a PIN to secure your wallet and authorize payments.</p>
-        </div>
-        <button onclick="openSection('pinSection')" class="bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl font-bold transition-colors shadow-sm whitespace-nowrap w-full sm:w-auto">
-            Set PIN Now
-        </button>
-    </div>
-    <?php endif; ?>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+        <div class="space-y-4 sm:space-y-6">
             <!-- PERSONAL INFO -->
-            <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6">
-                <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <i class="fas fa-user text-brand-orange"></i> Personal Information
+            <div class="bg-white rounded-xl sm:rounded-2xl border border-slate-200 card-shadow p-4 sm:p-6">
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base mb-3 sm:mb-4 flex items-center gap-2">
+                    <i class="fas fa-user text-brand-orange text-xs sm:text-sm"></i> Personal Information
                 </h3>
                 
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center py-3 border-b border-slate-100">
-                        <span class="text-sm font-semibold text-slate-500">Email Address</span>
-                        <span class="text-sm font-bold text-slate-800"><?= htmlspecialchars($user['email']) ?></span>
+                <div class="space-y-2 sm:space-y-4">
+                    <div class="flex justify-between items-center py-2 sm:py-3 border-b border-slate-100">
+                        <span class="text-xs sm:text-sm font-semibold text-slate-500">Email Address</span>
+                        <span class="text-xs sm:text-sm font-bold text-slate-800"><?= htmlspecialchars($user['email']) ?></span>
                     </div>
-                    <div class="flex justify-between items-center py-3 border-b border-slate-100">
-                        <span class="text-sm font-semibold text-slate-500">Phone Number</span>
-                        <span class="text-sm font-bold text-slate-800"><?= htmlspecialchars($user['phone']) ?></span>
+                    <div class="flex justify-between items-center py-2 sm:py-3 border-b border-slate-100">
+                        <span class="text-xs sm:text-sm font-semibold text-slate-500">Phone Number</span>
+                        <span class="text-xs sm:text-sm font-bold text-slate-800"><?= htmlspecialchars($user['phone']) ?></span>
                     </div>
-                    <div class="flex justify-between items-center py-3 border-b border-slate-100">
-                        <span class="text-sm font-semibold text-slate-500">Referral Code</span>
-                        <button onclick="copyNum('<?= htmlspecialchars($user['referral_code']) ?>')" class="flex items-center gap-2 text-sm font-bold text-brand-orange bg-brand-orangeLight px-3 py-1 rounded-lg hover:bg-brand-orange hover:text-white transition-colors">
-                            <?= htmlspecialchars($user['referral_code']) ?> <i class="fas fa-copy"></i>
+                    <?php $ref_display = $user['referral_code'] ?: $user['phone']; ?>
+                    <div class="flex justify-between items-center py-2 sm:py-3 border-b border-slate-100">
+                        <span class="text-xs sm:text-sm font-semibold text-slate-500">Referral Code</span>
+                        <button onclick="copyNum('<?= htmlspecialchars($ref_display) ?>')" class="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold text-brand-orange bg-brand-orangeLight px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg hover:bg-brand-orange hover:text-white transition-colors">
+                            <?= htmlspecialchars($ref_display) ?> <i class="fas fa-copy text-xs"></i>
                         </button>
+                    </div>
+                    <div class="py-2 sm:py-3">
+                        <span class="text-xs sm:text-sm font-semibold text-slate-500 block mb-1.5">Referral Link</span>
+                        <div class="flex items-center gap-2">
+                            <input type="text" value="https://www.gracehubtels.com/user/signup?ref=<?= urlencode($ref_display) ?>" class="flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 font-medium outline-none" readonly onclick="this.select()">
+                            <button onclick="copyNum('https://www.gracehubtels.com/user/signup?ref=<?= urlencode($ref_display) ?>')" class="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-brand-orange bg-brand-orangeLight px-3 py-2 rounded-lg hover:bg-brand-orange hover:text-white transition-colors whitespace-nowrap">
+                                <i class="fas fa-copy text-xs"></i> Copy
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- SECURITY -->
-            <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6">
-                <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <i class="fas fa-lock text-emerald-500"></i> Security Settings
+            <div class="bg-white rounded-xl sm:rounded-2xl border border-slate-200 card-shadow p-4 sm:p-6">
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base mb-3 sm:mb-4 flex items-center gap-2">
+                    <i class="fas fa-lock text-emerald-500 text-xs sm:text-sm"></i> Security Settings
                 </h3>
                 
-                <div class="space-y-3">
-                    <button onclick="openSection('pinSection')" class="w-full flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition-colors text-left group">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-emerald-500 transition-colors">
-                                <i class="fas fa-key"></i>
+                <div class="space-y-2 sm:space-y-3">
+                    <button onclick="openSection('pinSection')" class="w-full flex items-center justify-between p-3 sm:p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition-colors text-left group">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-emerald-500 transition-colors">
+                                <i class="fas fa-key text-xs sm:text-sm"></i>
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-slate-800"><?= $has_pin ? 'Change' : 'Set' ?> Transaction PIN</h4>
-                                <p class="text-xs text-slate-500">Secure your payments</p>
+                                <h4 class="text-xs sm:text-sm font-bold text-slate-800">Change Transaction PIN</h4>
+                                <p class="text-[10px] sm:text-xs text-slate-500">Update your current PIN</p>
                             </div>
                         </div>
-                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-slate-400"></i>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-slate-400 text-xs sm:text-sm"></i>
                     </button>
                     
-                    <button onclick="openSection('pwdSection')" class="w-full flex items-center justify-between p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition-colors text-left group">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-blue-500 transition-colors">
-                                <i class="fas fa-shield-alt"></i>
+                    <button onclick="openSection('pinSection')" class="w-full flex items-center justify-between p-3 sm:p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition-colors text-left group">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-amber-500 transition-colors">
+                                <i class="fas fa-unlock-alt text-xs sm:text-sm"></i>
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-slate-800">Change Password</h4>
-                                <p class="text-xs text-slate-500">Update your login password</p>
+                                <h4 class="text-xs sm:text-sm font-bold text-slate-800">Reset Transaction PIN</h4>
+                                <p class="text-[10px] sm:text-xs text-slate-500">If you forgot your PIN</p>
                             </div>
                         </div>
-                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-slate-400"></i>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-slate-400 text-xs sm:text-sm"></i>
                     </button>
                     
-                    <a href="/msjpay/user/delete-account" class="w-full flex items-center justify-between p-4 rounded-xl border border-rose-100 bg-rose-50 hover:border-rose-300 hover:bg-rose-100 transition-colors text-left group">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-lg bg-white border border-rose-200 flex items-center justify-center text-rose-500 transition-colors">
-                                <i class="fas fa-user-minus"></i>
+                    <button onclick="openSection('pwdSection')" class="w-full flex items-center justify-between p-3 sm:p-4 rounded-xl border border-slate-100 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition-colors text-left group">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-600 group-hover:text-blue-500 transition-colors">
+                                <i class="fas fa-shield-alt text-xs sm:text-sm"></i>
                             </div>
                             <div>
-                                <h4 class="text-sm font-bold text-rose-600">Delete Account</h4>
-                                <p class="text-xs text-rose-400">Permanently close your account</p>
+                                <h4 class="text-xs sm:text-sm font-bold text-slate-800">Change Password</h4>
+                                <p class="text-[10px] sm:text-xs text-slate-500">Update your login password</p>
                             </div>
                         </div>
-                        <i class="fas fa-chevron-right text-rose-300 group-hover:text-rose-400"></i>
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <div class="space-y-6">
-            <!-- VIRTUAL ACCOUNTS -->
-            <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="font-bold text-slate-800 flex items-center gap-2">
-                        <i class="fas fa-university text-blue-500"></i> Virtual Accounts
-                    </h3>
-                </div>
-                
-                <?php if (empty($accounts)): ?>
-                    <div class="bg-slate-50 border border-slate-100 rounded-xl p-6 text-center">
-                        <p class="text-sm text-slate-500 mb-4">You don't have any virtual accounts for automated funding yet.</p>
-                        <a href="/msjpay/user/fund" class="bg-brand-navy hover:bg-brand-navyLight text-white px-5 py-2.5 rounded-xl font-bold transition-colors text-sm shadow-sm">
-                            Create Account
-                        </a>
-                    </div>
-                <?php else: ?>
-                    <div class="space-y-3">
-                        <?php foreach ($accounts as $a): ?>
-                        <div onclick="copyNum('<?= htmlspecialchars($a['account_number']) ?>')" class="bg-gradient-to-r from-slate-50 to-white border border-slate-200 p-4 rounded-xl flex justify-between items-center cursor-pointer hover:border-brand-orange hover:shadow-md transition-all group relative overflow-hidden">
-                            <div class="absolute left-0 top-0 bottom-0 w-1 bg-brand-orange"></div>
+                        <i class="fas fa-chevron-right text-slate-300 group-hover:text-slate-400 text-xs sm:text-sm"></i>
+                    </button>
+                    
+                    <a href="/user/delete-account" class="w-full flex items-center justify-between p-3 sm:p-4 rounded-xl border border-rose-100 bg-rose-50 hover:border-rose-300 hover:bg-rose-100 transition-colors text-left group">
+                        <div class="flex items-center gap-2 sm:gap-3">
+                            <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-white border border-rose-200 flex items-center justify-center text-rose-500 transition-colors">
+                                <i class="fas fa-user-minus text-xs sm:text-sm"></i>
+                            </div>
                             <div>
-                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1"><?= htmlspecialchars($a['bank_name']) ?></p>
-                                <h4 class="text-lg font-black text-brand-navy font-mono tracking-wider"><?= htmlspecialchars($a['account_number']) ?></h4>
-                                <p class="text-xs font-medium text-slate-600 mt-0.5"><?= htmlspecialchars($a['account_name']) ?></p>
-                            </div>
-                            <div class="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-brand-orange group-hover:text-white transition-colors">
-                                <i class="fas fa-copy"></i>
+                                <h4 class="text-xs sm:text-sm font-bold text-rose-600">Delete Account</h4>
+                                <p class="text-[10px] sm:text-xs text-rose-400">Permanently close your account</p>
                             </div>
                         </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
-
-            <!-- QUICK LINKS -->
-            <div class="bg-white rounded-2xl border border-slate-200 card-shadow p-6">
-                <h3 class="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                    <i class="fas fa-bolt text-amber-500"></i> Quick Actions
-                </h3>
-                
-                <div class="grid grid-cols-2 gap-3">
-                    <a href="/msjpay/user/beneficiaries" class="bg-slate-50 hover:bg-slate-100 border border-slate-100 hover:border-slate-300 p-4 rounded-xl text-center transition-colors">
-                        <div class="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center mx-auto mb-2 text-slate-600">
-                            <i class="fas fa-users"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-slate-800">Beneficiaries</h4>
-                    </a>
-                    
-                    <a href="/msjpay/user/virtual-card" class="bg-slate-50 hover:bg-slate-100 border border-slate-100 hover:border-slate-300 p-4 rounded-xl text-center transition-colors">
-                        <div class="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center mx-auto mb-2 text-slate-600">
-                            <i class="fas fa-credit-card"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-slate-800">Virtual Cards</h4>
-                    </a>
-                    
-                    <a href="/msjpay/user/settings" class="bg-slate-50 hover:bg-slate-100 border border-slate-100 hover:border-slate-300 p-4 rounded-xl text-center transition-colors">
-                        <div class="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center mx-auto mb-2 text-slate-600">
-                            <i class="fas fa-cog"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-slate-800">Settings</h4>
-                    </a>
-                    
-                    <a href="/msjpay/user/support" class="bg-slate-50 hover:bg-slate-100 border border-slate-100 hover:border-slate-300 p-4 rounded-xl text-center transition-colors">
-                        <div class="w-10 h-10 bg-white border border-slate-200 rounded-full flex items-center justify-center mx-auto mb-2 text-slate-600">
-                            <i class="fas fa-headset"></i>
-                        </div>
-                        <h4 class="text-sm font-bold text-slate-800">Support</h4>
+                        <i class="fas fa-chevron-right text-rose-300 group-hover:text-rose-400 text-xs sm:text-sm"></i>
                     </a>
                 </div>
             </div>
-            
-            <a href="/msjpay/user/logout" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-center py-4 rounded-xl shadow-sm transition-colors inline-flex items-center justify-center gap-2">
-                <i class="fas fa-sign-out-alt"></i> Sign Out
-            </a>
         </div>
     </div>
 </div>
@@ -299,7 +227,7 @@ include __DIR__ . '/includes/sidebar.php';
     <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeSection('pinSection')"></div>
     <div class="bg-white rounded-2xl shadow-xl w-full max-w-md m-4 relative z-10 transform transition-all p-6">
         <div class="flex justify-between items-center mb-6">
-            <h3 class="text-xl font-bold text-slate-800">Transaction PIN</h3>
+            <h3 class="text-xl font-bold text-slate-800">Change PIN</h3>
             <button onclick="closeSection('pinSection')" class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center transition-colors">
                 <i class="fas fa-times"></i>
             </button>
@@ -307,12 +235,12 @@ include __DIR__ . '/includes/sidebar.php';
         
         <form id="pinForm" onsubmit="submitProfileForm(event, 'set_pin', 'pinForm')">
             <div class="mb-5">
-                <label class="block text-sm font-semibold text-slate-700 mb-2">Current Login Password</label>
+                <label class="block text-sm font-semibold text-slate-700 mb-2">Current Transaction PIN</label>
                 <div class="relative">
                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <i class="fas fa-lock text-slate-400"></i>
                     </div>
-                    <input type="password" name="current_password" class="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-colors font-medium" required>
+                    <input type="password" name="current_pin" maxlength="4" class="block w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-colors font-medium" required inputmode="numeric">
                 </div>
             </div>
             
@@ -384,7 +312,7 @@ include __DIR__ . '/includes/sidebar.php';
 <script>
 function copyNum(txt) {
     if(navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(txt).then(() => alert('Copied to clipboard!'));
+        navigator.clipboard.writeText(txt).then(() => showAlert('Copied to clipboard!', 'Copied'));
     } else {
         const ta = document.createElement('textarea');
         ta.value = txt;
@@ -392,8 +320,8 @@ function copyNum(txt) {
         ta.style.left = '-9999px';
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); alert('Copied to clipboard!'); } 
-        catch (ex) { alert('Failed to copy'); }
+        try { document.execCommand('copy'); showAlert('Copied to clipboard!', 'Copied'); } 
+        catch (ex) { showAlert('Failed to copy', 'Error'); }
         document.body.removeChild(ta);
     }
 }
@@ -430,16 +358,16 @@ function submitProfileForm(e, action, formId) {
     .then(r => r.json())
     .then(res => {
         if(res.success) {
-            alert(`Success! ${res.message}`);
+            showAlert(res.message || 'Updated successfully!', 'Success', 'check-circle', 'text-emerald-500');
             location.reload();
         } else {
-            alert(`Error: ${res.message}`);
+            showAlert(res.message || 'Error occurred', 'Error', 'exclamation-circle', 'text-red-500');
             btn.innerHTML = ogHtml;
             btn.disabled = false;
         }
     })
     .catch(err => {
-        alert('Network error occurred.');
+        showAlert('Network error occurred. Please try again.', 'Error');
         btn.innerHTML = ogHtml;
         btn.disabled = false;
     });

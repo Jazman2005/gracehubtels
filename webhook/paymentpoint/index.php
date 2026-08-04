@@ -1,129 +1,133 @@
 <?php
-// webhook/paymentpoint/index.php
 require_once __DIR__ . '/../../user/core/db.php';
-require_once __DIR__ . '/../../user/core/dashboard.php';
 
-header('Content-Type: application/json');
+$payload = file_get_contents('php://input');
+log_write('webhook_paymentpoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 
-$raw     = file_get_contents('php://input');
-$sig     = $_SERVER['HTTP_PAYMENTPOINT_SIGNATURE'] ?? '';
-$secret  = setting('paymentpoint_webhook_secret');
-$ip      = get_ip();
-
-$valid = false;
-if (!empty($secret) && !empty($sig)) {
-    $expected = hash_hmac('sha256', $raw, $secret);
-    $valid     = hash_equals($expected, $sig);
-}
-
-$payload = json_decode($raw, true);
-$event   = $payload['notification_status'] ?? '';
-$amount  = (float)($payload['amount_paid'] ?? $payload['settlement_amount'] ?? 0);
-$acct_no = $payload['receiver']['account_number'] ?? '';
-$tx_ref  = $payload['transaction_id'] ?? '';
-
-// Log the webhook
-db()->prepare(
-    "INSERT INTO webhook_logs (provider,event_type,transaction_ref,account_number,amount,payload,signature_valid,ip_address)
-     VALUES ('paymentpoint',?,?,?,?,?,?,?)"
-)->execute([$event,$tx_ref,$acct_no,$amount,$raw,(int)$valid,$ip]);
-
-if (!$valid) {
+if (empty($payload)) {
     http_response_code(400);
-    echo json_encode(['error'=>'Invalid signature']);
-    exit;
+    exit('Missing payload');
 }
 
-if (!$payload) {
+// Verify signature — docs say header PAYMENTPOINT-SIGNATURE, HMAC-SHA256
+$secret = setting('paymentpoint_webhook_secret');
+$signature = $_SERVER['HTTP_PAYMENTPOINT_SIGNATURE'] ?? '';
+
+if (empty($secret)) {
+    log_write('webhook_paymentpoint', 'ERROR', 'Webhook secret not configured — rejecting');
+    http_response_code(500);
+    exit('Webhook secret not configured');
+}
+if (empty($signature)) {
+    log_write('webhook_paymentpoint', 'ERROR', 'Missing signature header');
     http_response_code(400);
-    echo json_encode(['error'=>'Invalid JSON']);
-    exit;
+    exit('Missing signature');
+}
+$expected = hash_hmac('sha256', $payload, $secret);
+if (!hash_equals($expected, $signature)) {
+    log_write('webhook_paymentpoint', 'ERROR', 'Invalid signature');
+    http_response_code(400);
+    exit('Invalid signature');
 }
 
-if ($event !== 'payment_successful' || $amount <= 0 || empty($acct_no)) {
-    http_response_code(200);
-    echo json_encode(['status'=>'ignored']);
-    exit;
+$data = json_decode($payload, true);
+if (!$data) {
+    http_response_code(400);
+    exit('Invalid JSON');
 }
 
-// Duplicate check
-$dup = db()->prepare("SELECT id FROM transactions WHERE external_ref=? LIMIT 1");
-$dup->execute([$tx_ref]);
-if ($dup->fetch()) {
+$notification_status = $data['notification_status'] ?? $data['type'] ?? '';
+$transaction_status  = $data['transaction_status'] ?? '';
+
+// Support both documented format and legacy type+data format
+$is_success = ($notification_status === 'payment_successful' && $transaction_status === 'success')
+           || $data['type'] === 'collection.successful';
+
+if (!$is_success) {
     http_response_code(200);
-    echo json_encode(['status'=>'duplicate']);
-    exit;
+    exit('Unhandled event');
+}
+
+$ref = $data['transaction_id'] ?? $data['data']['reference'] ?? '';
+$amount = (float)($data['amount_paid'] ?? $data['data']['amount'] ?? 0);
+$settled = (float)($data['settlement_amount'] ?? $data['data']['settlementAmount'] ?? $amount);
+$accountNumber = $data['receiver']['account_number'] ?? $data['data']['accountNumber'] ?? null;
+
+if (empty($ref) || $amount <= 0 || empty($accountNumber)) {
+    log_write('webhook_paymentpoint', 'WARN', 'Missing required webhook fields', [
+        'ref' => $ref, 'amount' => $amount, 'account' => $accountNumber, 'rawKeys' => array_keys($data)
+    ]);
+    http_response_code(200);
+    exit('Missing fields');
+}
+
+// Check if already processed. credit_wallet() always mints its own MSJ... ref for
+// transaction_ref, so that column never equals PaymentPoint's $ref — checking it
+// here was a no-op. idempotency_key is what credit_wallet() actually stores this
+// value under, and (below) is also the atomic guard against a concurrent replay.
+$idem_key = 'paymentpoint:' . $ref;
+$stmt = db()->prepare("SELECT id FROM transactions WHERE idempotency_key = ? LIMIT 1");
+$stmt->execute([$idem_key]);
+if ($stmt->fetch()) {
+    http_response_code(200);
+    exit('Already processed');
 }
 
 // Find user by account number
-$va = db()->prepare("SELECT user_id, bank_name FROM virtual_accounts WHERE account_number=? AND is_active=1 LIMIT 1");
-$va->execute([$acct_no]);
-$va_row = $va->fetch();
+$stmt = db()->prepare("SELECT user_id, bank_name FROM virtual_accounts WHERE account_number = ? AND provider = 'paymentpoint' LIMIT 1");
+$stmt->execute([$accountNumber]);
+$acc = $stmt->fetch();
 
-if (!$va_row) {
-    db()->prepare("UPDATE webhook_logs SET error_message='No user found for account' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-       ->execute([$tx_ref]);
+if (!$acc) {
+    log_write('webhook_paymentpoint', 'ERROR', 'Account not found', ['account' => $accountNumber]);
     http_response_code(200);
-    echo json_encode(['status'=>'user_not_found']);
-    exit;
+    exit('Account not found');
 }
 
-$user_id   = (int)$va_row['user_id'];
-$bank_name = strtolower($va_row['bank_name'] ?? '');
-$sender    = $payload['sender']['name'] ?? 'Unknown';
+$user_id = (int)$acc['user_id'];
 
-// Fee Calculation
-$fee_type = 'flat';
-$fee_val  = 0;
-
-if (str_contains($bank_name, 'palmpay')) {
-    $fee_type = setting('paymentpoint_palmpay_fee_type', 'flat');
-    $fee_val  = (float)setting('paymentpoint_palmpay_fee_value', '0');
-} elseif (str_contains($bank_name, 'opay') || str_contains($bank_name, 'paycom')) {
-    $fee_type = setting('paymentpoint_opay_fee_type', 'flat');
-    $fee_val  = (float)setting('paymentpoint_opay_fee_value', '0');
+// Fee — per-bank fee settings with global fallback
+$bank_name = $acc['bank_name'] ?? '';
+$fee_type = '';
+$fee_value = 0;
+if (stripos($bank_name, 'palmpay') !== false) {
+    $fee_type = setting('paymentpoint_palmpay_fee_type', '');
+    $fee_value = (float)setting('paymentpoint_palmpay_fee_value', '0');
+} elseif (stripos($bank_name, 'opay') !== false) {
+    $fee_type = setting('paymentpoint_opay_fee_type', '');
+    $fee_value = (float)setting('paymentpoint_opay_fee_value', '0');
 }
-
-$fee = 0;
-if ($fee_val > 0) {
-    if ($fee_type === 'percent') {
-        $fee = ($amount * $fee_val) / 100;
+if (empty($fee_type)) {
+    $fee_type = setting('paymentpoint_charge_pct', '1');
+    $fee_value = (float)setting('paymentpoint_charge_cap', '50');
+    if (is_numeric($fee_type)) {
+        $fee = ($settled * (float)$fee_type) / 100;
+        if ($fee > $fee_value) $fee = $fee_value;
     } else {
-        $fee = $fee_val;
+        $fee = ($fee_type === 'flat') ? min($fee_value, $settled * 0.5) : ($settled * $fee_value) / 100;
     }
+} else {
+    $fee = ($fee_type === 'flat') ? min($fee_value, $settled * 0.5) : ($settled * $fee_value) / 100;
 }
-
-$credit_amount = max(0, $amount - $fee);
-
+$credit_amount = $settled - $fee;
 if ($credit_amount <= 0) {
-    db()->prepare("UPDATE webhook_logs SET error_message='Amount less than or equal to fee' WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-       ->execute([$tx_ref]);
     http_response_code(200);
-    echo json_encode(['status'=>'fee_too_high']);
-    exit;
+    exit('Amount too low after fees');
 }
 
-$desc = "Wallet funded via PaymentPoint ({$va_row['bank_name']}) - from {$sender}";
-if ($fee > 0) $desc .= " (Fee: ₦".number_format($fee,2).")";
+$res = credit_wallet($user_id, $credit_amount, 'wallet_funding', 'PaymentPoint Funding - ' . $ref, ['ref' => $ref], $idem_key);
 
-$result  = credit_wallet($user_id, $credit_amount, 'wallet_funding', $desc, [
-    'provider'       =>'paymentpoint',
-    'external_ref'   =>$tx_ref,
-    'sender'         =>$sender,
-    'account_number' =>$acct_no,
-]);
-
-if ($result['success']) {
-    // Tag with external ref
-    db()->prepare("UPDATE transactions SET external_ref=?, provider='paymentpoint' WHERE transaction_ref=? LIMIT 1")
-       ->execute([$tx_ref,$result['ref']]);
-    db()->prepare("UPDATE webhook_logs SET processed=1 WHERE transaction_ref=? ORDER BY id DESC LIMIT 1")
-       ->execute([$tx_ref]);
-
-    // Notify user
-    db()->prepare("INSERT INTO notifications (user_id,title,message,type) VALUES (?,?,?,?)")
-       ->execute([$user_id,'💰 Wallet Funded',"₦".number_format($credit_amount,2)." credited to your wallet.",'success']);
+if ($res['success']) {
+    notify_user($user_id, 'Wallet Funded', "Your wallet has been funded with \u20A6" . number_format($credit_amount, 2) . " via bank transfer", 'info', null, $res['balance_before'], $res['balance_after']);
+    http_response_code(200);
+    exit('Success');
 }
 
-http_response_code(200);
-echo json_encode(['status'=>'processed']);
+if (!empty($res['duplicate'])) {
+    http_response_code(200);
+    exit('Already processed');
+}
+
+log_write('webhook_paymentpoint', 'ERROR', 'Failed to credit', ['res' => $res]);
+http_response_code(500);
+exit('Failed to credit');
