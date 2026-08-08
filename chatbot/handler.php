@@ -303,6 +303,15 @@ function handle_message(string $phone, string $chat_id, string $msg): void {
             bot_send($chat_id, "❌ Invalid email. Try again or type *menu* to go back.");
             return;
         }
+        // Keyed by $phone (not IP, which is always the messaging provider's
+        // webhook IP for every user) — without this, an attacker could script
+        // conversation turns to mass-enumerate registered emails via the
+        // "No account found" / found-account branching below with no limit.
+        if (!rate_limit('chat_login_email_' . $phone, 8, 900)) {
+            bot_send($chat_id, "❌ Too many attempts. Please try again later.");
+            session_set($phone, 'menu', []);
+            return;
+        }
         $s2 = db()->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
         $s2->execute([$email]);
         $u = $s2->fetch();
@@ -316,16 +325,39 @@ function handle_message(string $phone, string $chat_id, string $msg): void {
         return;
     }
     if ($step === 'login_pass') {
+        // Shares the same login_attempts/login_locked_until lockout the website
+        // login already enforces on this account (user/core/auth.php login_user())
+        // — a raw password_verify() here with no throttling would let an attacker
+        // brute-force a known email's password over WhatsApp with zero rate limit.
         $email = $tmp['email'] ?? '';
-        $s2 = db()->prepare("SELECT id, password FROM users WHERE email = ? LIMIT 1");
+        $s2 = db()->prepare("SELECT id, password, login_attempts, login_locked_until FROM users WHERE email = ? LIMIT 1");
         $s2->execute([$email]);
         $u = $s2->fetch();
+
+        if ($u && !empty($u['login_locked_until']) && strtotime($u['login_locked_until']) > time()) {
+            bot_send($chat_id, "🔒 This account is temporarily locked due to too many failed attempts. Try again later, or reset your password on the website.");
+            session_set($phone, 'menu', []);
+            return;
+        }
+
         if ($u && password_verify($msg, $u['password'])) {
+            db()->prepare("UPDATE users SET login_attempts=0, login_locked_until=NULL WHERE id=?")->execute([$u['id']]);
             session_set_user($phone, (int)$u['id']);
             session_set($phone, 'menu', []);
             bot_send($chat_id, "✅ *Login successful!*\n\nWelcome back! Tap *Menu* below to continue.");
             show_menu($chat_id);
         } else {
+            if ($u) {
+                $att = (int)$u['login_attempts'] + 1;
+                if ($att >= 3) {
+                    $lock = date('Y-m-d H:i:s', time() + 600);
+                    db()->prepare("UPDATE users SET login_attempts=?, login_locked_until=? WHERE id=?")->execute([$att, $lock, $u['id']]);
+                    bot_send($chat_id, "🔒 Too many failed attempts. This account is locked for 10 minutes.");
+                    session_set($phone, 'menu', []);
+                    return;
+                }
+                db()->prepare("UPDATE users SET login_attempts=? WHERE id=?")->execute([$att, $u['id']]);
+            }
             bot_send($chat_id, "❌ Wrong password. Try again or type *menu* to go back.");
         }
         return;
@@ -345,6 +377,8 @@ function handle_message(string $phone, string $chat_id, string $msg): void {
     }
     if ($step === 'reg_email') {
         if (!filter_var(trim($msg), FILTER_VALIDATE_EMAIL)) { bot_send($chat_id, "❌ Invalid email. Try again or type *menu*."); return; }
+        // Same enumeration-throttling rationale as login_email above.
+        if (!rate_limit('chat_reg_email_' . $phone, 8, 900)) { bot_send($chat_id, "❌ Too many attempts. Please try again later."); session_set($phone, 'menu', []); return; }
         $s2 = db()->prepare("SELECT id FROM users WHERE email = ? LIMIT 1"); $s2->execute([trim($msg)]);
         if ($s2->fetch()) { bot_send($chat_id, "❌ Email already registered. Tap *Login* below or type *menu*."); show_menu($chat_id); return; }
         session_set($phone, 'reg_pass', ['name' => $tmp['name'], 'email' => trim($msg)]);
@@ -402,7 +436,7 @@ function handle_message(string $phone, string $chat_id, string $msg): void {
         $net = strtoupper(trim($msg));
         $valid = ['MTN', 'GLO', 'AIRTEL', '9MOBILE'];
         if (!in_array($net, $valid)) { bot_send($chat_id, "❌ Invalid network. Please tap a network from the list."); network_list($chat_id, 'data_network', "📶 *Buy Data*"); return; }
-        $plans = db()->prepare("SELECT id, data_size as `size`, selling_price as amount, data_type FROM data_plans WHERE network = ? AND is_active = 1 ORDER BY data_type, selling_price");
+        $plans = db()->prepare("SELECT id, data_size as `size`, selling_price as amount, data_type FROM data_plans WHERE network = ? AND is_active = 1 ORDER BY data_type, display_order, selling_price");
         $plans->execute([$net]); $rows = $plans->fetchAll();
         if (!$rows) { bot_send($chat_id, "❌ No plans available for {$net}."); show_menu($chat_id); return; }
         $by_type = [];

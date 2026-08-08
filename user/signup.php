@@ -6,8 +6,9 @@ if(!empty($_SESSION['user_id'])){header('Location: /user/dashboard');exit;}
 if(setting('registration_enabled','1')==='0'){echo'<div style="text-align:center;padding:60px;font-family:Inter,sans-serif"><h2>Registration is currently closed.</h2><a href="/user/login">Sign In</a></div>';exit;}
 $error='';
 if($_SERVER['REQUEST_METHOD']==='POST'){ 
-    if(!verify_csrf($_POST['csrf_token']??''))$error='Security error.'; 
-    elseif(detect_tamper($_POST))$error='Invalid input detected.'; 
+    if(!verify_csrf($_POST['csrf_token']??''))$error='Security error.';
+    elseif(detect_tamper($_POST))$error='Invalid input detected.';
+    elseif(!rate_limit('web_register',5,3600))$error='Too many registration attempts. Please try again later.';
     else{
         $r=register_user($_POST);
         if($r['success']){

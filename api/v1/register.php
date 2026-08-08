@@ -22,9 +22,9 @@ if (!rate_limit('api_register', 5, 3600)) {
 
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
-if (empty($input['phone']) || empty($input['password']) || empty($input['full_name'])) {
+if (empty($input['phone']) || empty($input['password']) || empty($input['full_name']) || empty($input['pin'])) {
     http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Missing required fields: full_name, phone, password']);
+    echo json_encode(['status' => 'error', 'message' => 'Missing required fields: full_name, phone, password, pin']);
     exit;
 }
 
@@ -33,6 +33,19 @@ $password = $input['password'];
 $full_name = trim($input['full_name']);
 $email = trim($input['email'] ?? '');
 $username = trim($input['username'] ?? '');
+$pin = trim($input['pin'] ?? '');
+
+if (strlen($password) < 8) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'Password must be at least 8 characters.']);
+    exit;
+}
+
+if (!preg_match('/^\d{4}$/', $pin)) {
+    http_response_code(400);
+    echo json_encode(['status' => 'error', 'message' => 'PIN must be exactly 4 digits.']);
+    exit;
+}
 
 $chk = db()->prepare("SELECT id FROM users WHERE phone = ? LIMIT 1");
 $chk->execute([$phone]);
@@ -52,6 +65,21 @@ if ($email) {
     }
 }
 
+if ($username) {
+    if (!preg_match('/^[a-zA-Z0-9_]{3,30}$/', $username)) {
+        http_response_code(400);
+        echo json_encode(['status' => 'error', 'message' => 'Username must be 3-30 characters (letters, numbers, underscore only).']);
+        exit;
+    }
+    $chk3 = db()->prepare("SELECT id FROM users WHERE username = ? LIMIT 1");
+    $chk3->execute([$username]);
+    if ($chk3->fetch()) {
+        http_response_code(409);
+        echo json_encode(['status' => 'error', 'message' => 'Username already taken.']);
+        exit;
+    }
+}
+
 $ref_code = $phone;
 $referred = null;
 if (!empty($input['referral_code'])) {
@@ -62,11 +90,18 @@ if (!empty($input['referral_code'])) {
     if ($rf) $referred = (int)$rf['id'];
 }
 
-$hashed = password_hash($password, PASSWORD_DEFAULT);
+// Explicit cost=12 to match every other password_hash() call site in the
+// codebase (user/core/auth.php's register_user(), change-password, PIN
+// flows, etc). PASSWORD_DEFAULT currently resolves to bcrypt cost=10, which
+// made api-registered accounts measurably cheaper to verify than the
+// DUMMY_PASSWORD_HASH used to equalize login timing — surfaced by the
+// Phase 2A timing side-channel test.
+$hashed = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+$pin_hashed = password_hash($pin, PASSWORD_BCRYPT, ['cost' => 12]);
 $token = 'msj_live_' . bin2hex(random_bytes(24));
 
-$stmt = db()->prepare("INSERT INTO users (full_name, phone, email, username, password, api_token, referral_code, referred_by, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())");
-$stmt->execute([$full_name, $phone, $email, $username ?: $phone, $hashed, $token, $ref_code, $referred]);
+$stmt = db()->prepare("INSERT INTO users (full_name, phone, email, username, password, transaction_pin, api_token, referral_code, referred_by, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW())");
+$stmt->execute([$full_name, $phone, $email, $username ?: $phone, $hashed, $pin_hashed, $token, $ref_code, $referred]);
 $user_id = (int)db()->lastInsertId();
 
 echo json_encode([
