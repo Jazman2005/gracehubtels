@@ -28,10 +28,16 @@ function process_cashback_withdrawal(int $user_id, array $post): array {
     if ($amount <= 0) return ['success' => false, 'message' => 'Invalid amount'];
     if ($amount < 100) return ['success' => false, 'message' => 'Minimum withdrawal is ₦100'];
     if (empty($pin)) return ['success' => false, 'message' => 'Transaction PIN is required'];
+    if (detect_tamper($post)) return ['success' => false, 'message' => 'Invalid input'];
 
     $user = get_user($user_id);
     if (!$user) return ['success' => false, 'message' => 'User not found'];
     if (!verify_pin($user_id, $pin)) return ['success' => false, 'message' => 'Invalid transaction PIN'];
+    // The FOR UPDATE locks below correctly prevent an overdraft, but they do
+    // not stop a double-click from completing two full, individually-valid
+    // withdrawals of the same amount in quick succession — this closes that
+    // gap before either withdrawal transaction begins.
+    if (!claim_purchase_lock($user_id, 'cashback_withdrawal', [$amount])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
 
     $cb_balance = (float)$user['cashback_balance'];
     if ($amount > $cb_balance) return ['success' => false, 'message' => 'Insufficient cashback balance'];

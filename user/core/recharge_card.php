@@ -4,7 +4,13 @@ class RechargeCardService {
     private function api_post(string $url, string $token,array $data): ?array {
         $headers = ['Content-Type: application/json'];
         $headers[] = 'Authorization: Token '.$token;
-        $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_HTTPHEADER=>$headers,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);$res=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);$d=$res?json_decode($res,true):null;if($d)$d['_http_code']=$code;log_api('recharge_card_api','recharge_card',$data,['response'=>$d,'curl_error'=>$err],in_array($code,[200,201]));return $d;}
+        $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_HTTPHEADER=>$headers,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);$res=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
+        // A cURL-level failure means we genuinely don't know whether the
+        // provider received/processed this request — not the same as an
+        // explicit decline. Flagged so the final purchase decision can avoid
+        // treating an uncertain outcome the same as a confirmed failure.
+        $d=$res?json_decode($res,true):($res===false?['_network_error'=>true,'message'=>"cURL Error: ".$err]:null);
+        if($d)$d['_http_code']=$code;log_api('recharge_card_api','recharge_card',$data,['response'=>$d,'curl_error'=>$err],in_array($code,[200,201]));return $d;}
     public function process(int $uid,array $input): array {
         // auto-migrate table columns to new schema
         try { db()->exec("CREATE TABLE IF NOT EXISTS recharge_cards (id INT AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,transaction_ref VARCHAR(60) NOT NULL,network VARCHAR(20) NOT NULL,denomination DECIMAL(10,2) NOT NULL,quantity TINYINT(2) NOT NULL DEFAULT 1,amount DECIMAL(15,2) NOT NULL DEFAULT 0,name_on_card VARCHAR(100) DEFAULT NULL,pins_data TEXT DEFAULT NULL,status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,KEY transaction_ref (transaction_ref))"); } catch (\Throwable $e) {}
@@ -21,7 +27,9 @@ class RechargeCardService {
         $pricing->execute([$net_names[$net_id],(string)$denom]);$price=$pricing->fetch();
         if(!$price)return['success'=>false,'message'=>'This card type is not available'];
         $unit_price=(float)($price['selling_price']?:$denom);$cost_price=(float)($price['cost_price']?:$denom);
-        $total=$unit_price*$qty;$debit=debit_wallet($uid,(float)$total,'recharge_card',"{$qty}x ₦{$denom} {$net_names[$net_id]} recharge card");if(!$debit['success'])return $debit;
+        $total=$unit_price*$qty;
+        if(!claim_purchase_lock($uid,'recharge_card',[$net_id,$denom,$qty]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
+        $debit=debit_wallet($uid,(float)$total,'recharge_card',"{$qty}x ₦{$denom} {$net_names[$net_id]} recharge card");if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('recharge_card');
         $success = false; $has_pending = false; $last_res = null; $last_prov = null;
@@ -50,14 +58,28 @@ class RechargeCardService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
-            update_tx_status($debit['ref'],'success');$pins=$res['data_pin']??$res['pin']??[];$resp_msg = $res['message'] ?? $res['msg'] ?? '';if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);$costTotal=$cost_price*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO recharge_cards (user_id,transaction_ref,network,denomination,quantity,amount,name_on_card,pins_data,status) VALUES (?,?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$net_names[$net_id],$denom,$qty,$total,$name,json_encode($pins)]);notify_user($uid,'o. Cards Ready',"{$qty}x {$denom} {$net_names[$net_id]} cards purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} card(s) ready",'pins'=>$pins,'ref'=>$debit['ref']];
+            if (update_tx_status($debit['ref'],'success')) {
+                $pins=$res['data_pin']??$res['pin']??[];$resp_msg = $res['message'] ?? $res['msg'] ?? '';if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);$costTotal=$cost_price*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO recharge_cards (user_id,transaction_ref,network,denomination,quantity,amount,name_on_card,pins_data,status) VALUES (?,?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$net_names[$net_id],$denom,$qty,$total,$name,json_encode($pins)]);notify_user($uid,'✅ Cards Ready',"{$qty}x {$denom} {$net_names[$net_id]} cards purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} card(s) ready",'pins'=>$pins,'ref'=>$debit['ref']];
+            }
+            return['success'=>true,'message'=>"{$qty} card(s) ready",'ref'=>$debit['ref']];
         }
+        if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name']??'System',$debit['ref']]);
         if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??'')); notify_user($uid,'Recharge Card Processing',"Your recharge card purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
-        
+
+        // A network-level failure on the final attempt means we don't
+        // actually know whether that provider processed the request — leave
+        // it 'processing' for the verification crons instead of refunding
+        // blindly.
+        if (!empty($last_res['_network_error'])) {
+            update_tx_status($debit['ref'],'processing');
+            notify_user($uid,'Recharge Card Processing',"We're confirming your recharge card purchase with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
+            return['success'=>true,'message'=>'We could not immediately confirm this purchase due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
+        }
+
         $err='Purchase failed. Wallet reversed.';
         if(!empty($last_res['message'])) $err=$last_res['message'];
         elseif(!empty($last_res['error'])) $err=is_array($last_res['error'])?json_encode($last_res['error']):$last_res['error'];
-        save_tx_response($debit['ref'], $err);
+        refund_failed_transaction($debit['ref'], $uid, $total, $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

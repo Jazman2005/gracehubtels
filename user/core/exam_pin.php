@@ -39,7 +39,8 @@ class ExamPinService {
             if($qty<1||$qty>5)return['success'=>false,'message'=>'Quantity must be 1-5'];
             if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input'];
             if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid transaction PIN'];
-            
+            if(!claim_purchase_lock($uid,'exam_pin',[$exam,$qty]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
+
             $user=get_user($uid);$ut=$user['user_type']??'subscriber';
             $pr=db()->prepare("SELECT * FROM service_pricing WHERE service='exam_pin' AND plan_name=? AND is_active=1 LIMIT 1");
             $pr->execute([$exam]);$p=$pr->fetch();
@@ -91,30 +92,53 @@ class ExamPinService {
             
             $prov=$this->get_provider();
             if(!$prov||empty($prov['api_key'])){
-                update_tx_status($debit['ref'],'failed');
-                credit_wallet($uid,$amount,'exam_pin','Exam PIN reversal');
+                refund_failed_transaction($debit['ref'],$uid,$amount,'Exam PIN service not configured or out of stock');
                 return['success'=>false,'message'=>'Exam PIN service not configured or Out of Stock'];
             }
-            
+
             $res=$this->api_post($prov['api_key'],['exam_name'=>$exam,'quantity'=>$qty]);
-            
+
             if($res&&in_array($res['_http_code']??0,[200,201])){
-                update_tx_status($debit['ref'],'success',(string)($res['id']??''));
-                db()->prepare("INSERT INTO exam_pins (user_id,transaction_ref,exam_name,quantity,amount,pins_data,status) VALUES (?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$exam,$qty,$amount,json_encode($res['pins']??[])]);
-                notify_user($uid,'o. Exam PINs Ready',"{$qty} {$exam} PIN(s) purchased.",'success');
+                // Guard against a duplicate/replayed resolution of this same
+                // ref (e.g. the catch block below firing after this branch
+                // already succeeded, on some later unrelated exception) —
+                // only proceed to record the pins/notify if we actually won
+                // the pending/processing -> success transition here.
+                if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
+                    db()->prepare("INSERT INTO exam_pins (user_id,transaction_ref,exam_name,quantity,amount,pins_data,status) VALUES (?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$exam,$qty,$amount,json_encode($res['pins']??[])]);
+                    notify_user($uid,'✅ Exam PINs Ready',"{$qty} {$exam} PIN(s) purchased.",'success');
+                }
                 return['success'=>true,'message'=>"{$qty} {$exam} PIN(s) purchased",'pins'=>$res['pins']??[],'ref'=>$debit['ref']];
             }
-            
-            update_tx_status($debit['ref'],'failed');
-            credit_wallet($uid,$amount,'exam_pin','Exam PIN reversal');
+
+            // Note: the exam-PIN provider exposes no status-verification
+            // endpoint, so a network timeout here ($res===null) cannot be
+            // distinguished from a confirmed decline the way other services
+            // in this codebase now do — refunding remains the pragmatic
+            // choice for this low-value, non-verifiable item type rather
+            // than leaving the transaction stuck in 'processing' forever
+            // with no mechanism to ever resolve it. refund_failed_transaction()
+            // atomically claims the transaction first, so this is still safe
+            // against being triggered more than once for the same ref.
+            refund_failed_transaction($debit['ref'],$uid,$amount,'Purchase failed');
             return['success'=>false,'message'=>'Purchase failed. Wallet reversed.'];
-            
+
         } catch (\Throwable $e) {
+            // refund_failed_transaction() atomically claims the transaction
+            // (WHERE status IN ('pending','processing')) before crediting
+            // anything — previously this called update_tx_status()+
+            // credit_wallet() directly with the return value ignored, so if
+            // the purchase had *already* succeeded (pins delivered/marked
+            // used) and a later statement in this same request threw (e.g. a
+            // DB hiccup in notify_user() or the exam_pins INSERT), this catch
+            // block would still refund on top of the delivered pins — a real
+            // double-credit. Now a second/late claim attempt here is a safe
+            // no-op if the transaction was already resolved.
             if (isset($debit) && isset($debit['success']) && $debit['success']) {
-                update_tx_status($debit['ref'], 'failed');
-                credit_wallet($uid, $amount, 'exam_pin', 'System error reversal');
+                refund_failed_transaction($debit['ref'], $uid, $amount, 'System error');
             }
-            return ['success' => false, 'message' => 'DEBUG ERROR: ' . $e->getMessage() . ' on line ' . $e->getLine()];
+            log_error('exam_pin', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+            return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
         }
     }
 }

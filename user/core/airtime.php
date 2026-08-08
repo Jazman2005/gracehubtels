@@ -40,7 +40,12 @@ class AirtimeService {
         
         $d = $res ? json_decode($res, true) : null;
         if ($res === false) {
-            $d = ['_http_code' => 500, 'message' => "cURL Error: " . $err];
+            // A cURL-level failure (timeout, connection reset, DNS, etc.) means
+            // we genuinely don't know whether the provider received/processed
+            // this request — it is NOT the same thing as the provider
+            // explicitly declining. Flagged so the caller can avoid treating
+            // an uncertain outcome the same as a confirmed failure.
+            $d = ['_http_code' => 500, '_network_error' => true, 'message' => "cURL Error: " . $err];
         } elseif ($d === null && !empty($res)) {
             $d = ['_http_code' => $code, 'message' => "HTTP " . $code . ": " . substr(strip_tags($res), 0, 200)];
         }
@@ -57,6 +62,7 @@ class AirtimeService {
         if(!in_array($network,['MTN','GLO','AIRTEL','9MOBILE']))return['success'=>false,'message'=>'Invalid network'];
         if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input detected'];
         if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid transaction PIN'];
+        if(!claim_purchase_lock($uid,'airtime',[$phone,$network,$amount]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
         $pr=db()->prepare("SELECT * FROM service_pricing WHERE service='airtime' AND network=? LIMIT 1");$pr->execute([$network]);$p=$pr->fetch();
         $user=get_user($uid);$ut=$user['user_type']??'subscriber';
         $discount=(float)($p['discount_percent']??0);
@@ -100,20 +106,38 @@ class AirtimeService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
-            update_tx_status($debit['ref'],'success',(string)($res['id']??''),$network);
-            $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-            if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
-            db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$cost,$charge_amount-$cost,$prov['provider_name'],$debit['ref']]);
-            $cb=apply_cashback($uid,$charge_amount,'airtime',$network);
-            notify_user($uid,'o. Airtime Sent',",{$amount} {$network} airtime sent to {$phone}",'success',null,$debit['balance_before'],$debit['balance_after']);
-            return['success'=>true,'message'=>",{$amount} {$network} airtime sent to {$phone}",'ref'=>$debit['ref'],'cashback'=>$cb];
+            // Guard against a duplicate/concurrent resolution of this same
+            // ref — only proceed to award cashback and notify success if we
+            // actually won the pending/processing -> success transition.
+            if (update_tx_status($debit['ref'],'success',(string)($res['id']??''),$network)) {
+                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
+                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
+                db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$cost,$charge_amount-$cost,$prov['provider_name'],$debit['ref']]);
+                $cb=apply_cashback($uid,$charge_amount,'airtime',$network);
+                notify_user($uid,'✅ Airtime Sent',"₦{$amount} {$network} airtime sent to {$phone}",'success',null,$debit['balance_before'],$debit['balance_after']);
+                return['success'=>true,'message'=>"₦{$amount} {$network} airtime sent to {$phone}",'ref'=>$debit['ref'],'cashback'=>$cb];
+            }
+            return['success'=>true,'message'=>"₦{$amount} {$network} airtime sent to {$phone}",'ref'=>$debit['ref']];
         }
-        
+
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
         if ($has_pending) {
             update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''),$network);
             notify_user($uid,'Airtime Processing',"Your {$amount} {$network} airtime purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
+        }
+        // A network-level failure (timeout/connection error) on the final
+        // attempt means we don't actually know whether that provider
+        // received/processed the request — it is NOT the same as every
+        // provider explicitly declining. Refunding here would risk giving the
+        // money back on top of airtime the provider still delivers. Leave it
+        // 'processing' for cron_check_vtu.php to resolve once the provider's
+        // real status can be confirmed, instead of refunding blindly.
+        if (!empty($last_res['_network_error'])) {
+            update_tx_status($debit['ref'],'processing');
+            if ($last_prov) log_error('airtime', 'Network error on final provider attempt — left processing pending verification', ['ref'=>$debit['ref'],'provider'=>$last_prov['provider_name']]);
+            notify_user($uid,'Airtime Processing',"We're confirming your {$amount} {$network} airtime purchase with the network. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
+            return['success'=>true,'message'=>'We could not immediately confirm this purchase due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
         }
         $err_msg = 'Purchase failed. Wallet reversed.';
         if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }

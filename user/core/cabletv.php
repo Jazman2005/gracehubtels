@@ -17,7 +17,13 @@ class CableTVService {
         } elseif (!empty($prov['api_token'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
         }
-        $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_HTTPHEADER=>$headers,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);$res=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);$d=$res?json_decode($res,true):null;if($d)$d['_http_code']=$code;log_api($prov['provider_name'] ?? 'cabletv_api','cabletv',$data,$d,in_array($code,[200,201]));return $d;
+        $ch=curl_init($url);curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_HTTPHEADER=>$headers,CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);$res=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
+        // A cURL-level failure means we genuinely don't know whether the
+        // provider received/processed this request — not the same as an
+        // explicit decline. Flagged so the final purchase decision can avoid
+        // treating an uncertain outcome the same as a confirmed failure.
+        $d=$res?json_decode($res,true):($res===false?['_network_error'=>true,'message'=>"cURL Error: ".$err]:null);
+        if($d)$d['_http_code']=$code;log_api($prov['provider_name'] ?? 'cabletv_api','cabletv',$data,$d,in_array($code,[200,201]));return $d;
     }
     public function validate_smartcard(int $cid,string $sc): array {
         $all = get_api_providers('cabletv'); $prov = $all[0] ?? null;
@@ -66,6 +72,7 @@ class CableTVService {
         if($ut==='vendor'&&$plan['vendor_price']>0)$price=(float)$plan['vendor_price'];
         $limit_err = check_daily_limit($uid, $price, 'cabletv');
         if($limit_err) return['success'=>false,'message'=>$limit_err];
+        if(!claim_purchase_lock($uid,'cabletv',[$plan_id,$sc]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
         $debit=debit_wallet($uid,$price,'cabletv',"{$plan['plan_name']} for {$sc}",['plan_id'=>$plan_id,'provider'=>$plan['provider'],'smartcard'=>$sc]);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('cabletv');
@@ -113,22 +120,36 @@ class CableTVService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
-            update_tx_status($debit['ref'],'success',(string)($res['id']??''));
-            $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-            if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
-            db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
-            $cb=apply_cashback($uid,$price,'cabletv',null);
-            notify_user($uid,'o. Cable TV Subscribed',"{$plan['plan_name']} activated on {$sc}",'success',null,$debit['balance_before'],$debit['balance_after']);
-            return['success'=>true,'message'=>"{$plan['plan_name']} subscription successful",'ref'=>$debit['ref'],'cashback'=>$cb];
+            if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
+                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
+                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
+                db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
+                $cb=apply_cashback($uid,$price,'cabletv',null);
+                notify_user($uid,'✅ Cable TV Subscribed',"{$plan['plan_name']} activated on {$sc}",'success',null,$debit['balance_before'],$debit['balance_after']);
+                return['success'=>true,'message'=>"{$plan['plan_name']} subscription successful",'ref'=>$debit['ref'],'cashback'=>$cb];
+            }
+            return['success'=>true,'message'=>"{$plan['plan_name']} subscription successful",'ref'=>$debit['ref']];
         }
-        
+
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
         if ($has_pending) {
             update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''));
             notify_user($uid,'Cable TV Processing',"Your {$plan['plan_name']} subscription is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
         }
-        
+
+        // A network-level failure on the final attempt means we don't
+        // actually know whether that provider processed the request —
+        // refunding here risks giving the money back on top of a
+        // subscription the provider still activates. Leave it 'processing'
+        // for cron_check_vtu.php/cron_refund.php to resolve once the
+        // provider's real status can be confirmed.
+        if (!empty($last_res['_network_error'])) {
+            update_tx_status($debit['ref'],'processing');
+            notify_user($uid,'Cable TV Processing',"We're confirming your {$plan['plan_name']} subscription with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
+            return['success'=>true,'message'=>'We could not immediately confirm this subscription due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
+        }
+
         $err_msg = 'Subscription failed. Wallet reversed.';
         if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
         refund_failed_transaction($debit['ref'], $uid, $price, $err_msg);

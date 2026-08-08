@@ -213,6 +213,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
 
     $pin = $post['pin'] ?? '';
     if (!verify_pin($user_id, $pin)) return ['success' => false, 'message' => 'Incorrect transaction PIN'];
+    if (!claim_purchase_lock($user_id, 'virtual_card_create', [$post['topup'] ?? 0])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
 
     $existing = db()->prepare("SELECT COUNT(*) FROM virtual_cards WHERE user_id=? AND status!='terminated'");
     $existing->execute([$user_id]);
@@ -245,8 +246,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
     $cw = new CashwyreAPI();
     $customerCode = create_cashwyre_customer_if_needed($user_id);
     if (!$customerCode) {
-        credit_wallet($user_id, $total, 'virtual_card', 'Refund: customer creation failed');
-        update_tx_status($debit['ref'], 'failed');
+        refund_failed_transaction($debit['ref'], $user_id, $total, 'Customer creation failed');
         return ['success' => false, 'message' => 'Could not create customer profile on card provider. You have been refunded.'];
     }
 
@@ -416,19 +416,53 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
     if ($action === 'withdraw') {
         $usd_amount = (float)($post['amount'] ?? 0);
         if ($usd_amount <= 0) return ['success' => false, 'message' => 'Invalid withdrawal amount'];
-        if ($usd_amount > (float)$card['balance']) return ['success' => false, 'message' => 'Withdrawal amount exceeds card balance'];
+        if (!claim_purchase_lock($user_id, 'virtual_card_withdraw', [$card_id, $usd_amount])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
+
+        // Atomically claim the withdrawal amount off the card's local balance
+        // ledger BEFORE calling Cashwyre's (external, irreversible) withdrawal
+        // API. $card['balance'] above was read with no lock, so two concurrent
+        // withdraw requests on the same card could both pass the sufficiency
+        // check against the same stale balance and both succeed at the
+        // provider — draining more than the card actually held. This row
+        // lock serializes concurrent requests: the second one only proceeds
+        // after the first commits, and then sees the already-reduced balance.
+        $db = db();
+        $db->beginTransaction();
+        try {
+            $lock = $db->prepare("SELECT balance FROM virtual_cards WHERE card_id=? AND user_id=? FOR UPDATE");
+            $lock->execute([$card_id, $user_id]);
+            $locked = $lock->fetch();
+            if (!$locked) { $db->rollBack(); return ['success' => false, 'message' => 'Card not found']; }
+            if ($usd_amount > (float)$locked['balance']) { $db->rollBack(); return ['success' => false, 'message' => 'Withdrawal amount exceeds card balance']; }
+            $db->prepare("UPDATE virtual_cards SET balance = balance - ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            log_error('virtual_card', 'Withdraw claim failed: ' . $e->getMessage(), ['card_id' => $card_id]);
+            return ['success' => false, 'message' => 'Could not process withdrawal. Please try again.'];
+        }
 
         $r = $cw->withdraw_card($card_id, $usd_amount, 'Withdrawal by user');
-        if (!$r['success']) return ['success' => false, 'message' => $r['message'] ?? 'Withdrawal from card failed'];
+        if (!$r['success']) {
+            // Provider declined/failed outright (not a network timeout — see
+            // the 'fund' branch below for how that uncertain case is handled
+            // differently) — release the local claim back onto the card.
+            db()->prepare("UPDATE virtual_cards SET balance = balance + ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
+            return ['success' => false, 'message' => $r['message'] ?? 'Withdrawal from card failed'];
+        }
 
         $rate = get_exchange_rate();
         $ngn_amount = $usd_amount * $rate;
 
-        db()->prepare("UPDATE virtual_cards SET balance = balance - ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
         $credit = credit_wallet($user_id, $ngn_amount, 'virtual_card', 'Withdraw $' . number_format($usd_amount, 2) . ' from virtual card ' . substr($card_id, -6));
         if (!$credit['success']) {
-            db()->prepare("UPDATE virtual_cards SET balance = balance + ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
-            return ['success' => false, 'message' => 'Failed to credit wallet'];
+            // The provider-side withdrawal already happened — the real money
+            // left the card at Cashwyre. Re-adding it to our local balance
+            // ledger here would desync it from the actual (now lower)
+            // Cashwyre balance, so we don't silently revert; this needs a
+            // human to reconcile and manually credit the user.
+            log_error('virtual_card', 'Withdraw succeeded at provider but wallet credit failed — manual reconciliation required', ['user_id' => $user_id, 'card_id' => $card_id, 'usd_amount' => $usd_amount]);
+            return ['success' => false, 'message' => 'Withdrawal was processed but crediting your wallet failed. Please contact support with card ref: ' . $card_id];
         }
         notify_user($user_id, 'Virtual Card Withdrawal', '₦' . number_format($ngn_amount) . ' withdrawn from virtual card to wallet', 'success', null, $credit['balance_before'], $credit['balance_after']);
         $baseRate = get_live_ngn_rate();
@@ -443,7 +477,8 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
     if ($action === 'fund') {
         $usd_amount = (float)($post['amount'] ?? 0);
         if ($usd_amount < 5) return ['success' => false, 'message' => 'Minimum funding is $5'];
-        
+        if (!claim_purchase_lock($user_id, 'virtual_card_fund', [$card_id, $usd_amount])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
+
         $rate = get_exchange_rate();
         $ngn_amount = $usd_amount * $rate;
         $funding_fee = get_funding_fee($usd_amount, $rate);
@@ -464,21 +499,38 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
                       || stripos($r['message'] ?? '', 'timed out') !== false
                       || empty($r['message']);
             if ($isOffline) {
-                db()->prepare("UPDATE virtual_cards SET balance = balance + ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
-                update_tx_status($debit['ref'], 'success');
-                $baseRate = get_live_ngn_rate();
-                if ($baseRate <= 0) $baseRate = $rate;
-                $costPrice = $usd_amount * $baseRate;
-                $profitVal = $total_ngn - $costPrice;
-                db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")
-                    ->execute([$costPrice, $profitVal, 'System', $debit['ref']]);
-                return ['success' => true, 'message' => "Card funded with $$usd_amount", 'ref' => $debit['ref'], 'fee' => $funding_fee];
+                // Network-level uncertainty talking to Cashwyre — we do NOT
+                // know whether the top-up actually landed on the card.
+                // Previously this branch assumed success outright: it
+                // credited the card balance and marked the wallet debit
+                // 'success' with zero confirmation from the provider — a
+                // direct free-money vector, since a user could force or
+                // simply wait for a timeout and get the card credited
+                // regardless of whether Cashwyre ever processed the top-up.
+                // Mark 'processing' instead (not refunded, not success) and
+                // require a human to confirm the real outcome with Cashwyre
+                // before this is ever resolved either way.
+                $check = $cw->get_card($card_id);
+                save_tx_response($debit['ref'], 'Uncertain outcome after fund_card() (network error) — manual verification required. Provider card check: ' . json_encode($check));
+                update_tx_status($debit['ref'], 'processing');
+                log_error('api_cashwyre', 'FUND_CARD_OUTCOME_UNKNOWN', ['user_id' => $user_id, 'card_id' => $card_id, 'usd_amount' => $usd_amount, 'ref' => $debit['ref']]);
+                notify_user($user_id, 'Card Funding Under Review', 'We could not confirm your card funding due to a network issue. Your request is being verified and will be resolved shortly — you have not been charged twice.', 'info');
+                return ['success' => true, 'message' => 'Your card funding is being verified due to a network issue. This can take a few minutes — check back shortly.', 'ref' => $debit['ref'], 'processing' => true];
             }
-            refund_failed_transaction($debit['ref'], $user_id, $total_ngn, $res['message'] ?? 'Failed to fund virtual card.');
+            refund_failed_transaction($debit['ref'], $user_id, $total_ngn, $r['message'] ?? 'Failed to fund virtual card.');
             return ['success' => false, 'message' => $r['message'] ?? 'Funding failed. You have been refunded.'];
         }
+        // Guard against a Cashwyre funding webhook (which independently
+        // credits virtual_cards.balance for the same top-up event under its
+        // own 'cashwyre:fund:<event_id>' idempotency key) resolving this same
+        // transaction concurrently with this synchronous request. Only the
+        // caller that actually wins the pending/processing -> success
+        // transition here touches the card balance and cost/profit fields.
+        if (!update_tx_status($debit['ref'], 'success')) {
+            log_info('wallet', 'virtual_card fund: transaction already resolved elsewhere, skipping duplicate balance credit', ['ref' => $debit['ref']]);
+            return ['success' => true, 'message' => "Card funding for $$usd_amount already processed.", 'ref' => $debit['ref'], 'fee' => $funding_fee];
+        }
         db()->prepare("UPDATE virtual_cards SET balance = balance + ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
-        update_tx_status($debit['ref'], 'success');
         $baseRate = get_live_ngn_rate();
         if ($baseRate <= 0) $baseRate = $rate;
         $costPrice = $usd_amount * $baseRate;

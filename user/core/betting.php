@@ -60,11 +60,18 @@ class BettingService {
         ]);
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
         curl_close($ch);
-        
+
         $d = $res ? json_decode($res, true) : null;
         if ($d) $d['_http_code'] = $code;
-        if (!$res) $d = ['_http_code' => $code, '_curl_error' => curl_error($ch)];
+        // A cURL-level failure means we genuinely don't know whether the
+        // provider received/processed this request — not the same as an
+        // explicit decline. Flagged (fixing a pre-existing bug where
+        // curl_error() was called *after* curl_close(), always returning an
+        // empty string) so the final purchase decision can avoid treating an
+        // uncertain outcome the same as a confirmed failure.
+        if (!$res) $d = ['_http_code' => $code, '_curl_error' => $err, '_network_error' => true];
         elseif (!$d) $d = ['_http_code' => $code, '_raw_response' => $res];
         
         log_api($prov['provider_name'] ?? 'betting_api', 'betting', $data, $d, in_array($code, [200, 201]) && !is_api_response_failure($d));
@@ -131,6 +138,7 @@ class BettingService {
         $limit_err = check_daily_limit($uid, $total, 'betting');
         if($limit_err) return['success'=>false,'message'=>$limit_err];
 
+        if (!claim_purchase_lock($uid, 'betting', [$plan_id, $customerId, $amount])) return ['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
         $desc = "₦{$amount} {$plan['platform_name']} funding for ID: {$customerId}";
         $debit = debit_wallet($uid, $total, 'betting', $desc, ['platform' => $plan['platform_name'], 'customer_id' => $customerId, 'charge' => $charge]);
         if (!$debit['success']) return $debit;
@@ -176,12 +184,14 @@ class BettingService {
 
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
-            update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? ''));
-            $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-            if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
-            notify_user($uid, 'Betting Funded', "{$plan['platform_name']} account ({$customerId}) funded with ₦{$amount}.", 'success', null, $debit['balance_before'], $debit['balance_after']);
-            $cb = apply_cashback($uid, $amount, 'betting', null);
-            return ['success'=>true, 'message'=>"Betting wallet funded successfully.", 'ref'=>$debit['ref'], 'cashback'=>$cb];
+            if (update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? ''))) {
+                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
+                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
+                notify_user($uid, 'Betting Funded', "{$plan['platform_name']} account ({$customerId}) funded with ₦{$amount}.", 'success', null, $debit['balance_before'], $debit['balance_after']);
+                $cb = apply_cashback($uid, $amount, 'betting', null);
+                return ['success'=>true, 'message'=>"Betting wallet funded successfully.", 'ref'=>$debit['ref'], 'cashback'=>$cb];
+            }
+            return ['success'=>true, 'message'=>"Betting wallet funded successfully.", 'ref'=>$debit['ref']];
         }
 
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'], $debit['ref']]);
@@ -190,6 +200,18 @@ class BettingService {
             update_tx_status($debit['ref'], 'pending', $prov_ref);
             notify_user($uid, 'Betting Processing', "Funding for {$plan['platform_name']} ({$customerId}) is processing.", 'info', null, $debit['balance_before'], $debit['balance_after']);
             return ['success'=>true, 'message'=>'Transaction is being processed. Check receipt for updates.', 'ref'=>$debit['ref'], 'pending'=>true];
+        }
+
+        // A network-level failure on the final attempt means we don't
+        // actually know whether that provider processed the request — leave
+        // it 'processing' pending verification instead of refunding blindly
+        // (betting platforms have no automated status-check integrated here,
+        // so this will need cron_refund.php's manual-review escalation or an
+        // admin to resolve it via Transaction Details).
+        if (!empty($last_res['_network_error'])) {
+            update_tx_status($debit['ref'], 'processing');
+            notify_user($uid, 'Betting Processing', "We're confirming your {$plan['platform_name']} funding with the provider. This can take a few minutes.", 'info', null, $debit['balance_before'], $debit['balance_after']);
+            return ['success'=>true, 'message'=>'We could not immediately confirm this funding due to a network issue. It is being verified — check your receipt shortly.', 'ref'=>$debit['ref'], 'pending'=>true];
         }
 
         $err = 'Funding failed. Wallet reversed.';

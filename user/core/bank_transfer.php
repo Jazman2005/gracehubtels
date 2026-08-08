@@ -11,9 +11,10 @@ class BankTransferService {
         $limit_err = check_daily_limit($uid, $amount, 'bank_transfer');
         if($limit_err) return['success'=>false,'message'=>$limit_err];
         if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input'];if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid transaction PIN'];
+        if(!claim_purchase_lock($uid,'bank_transfer',[$bank,$acct,$amount]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
         $charge=(float)setting('transfer_charge','25');$total=$amount+$charge;$user=get_user($uid);
         $debit=debit_wallet($uid,$total,'bank_transfer',"₦{$amount} to {$payee} ({$acct})",['bank_code'=>$bank,'account_number'=>$acct,'payee_name'=>$payee,'charge'=>$charge,'narration'=>$nar,'pending_approval'=>1]);if(!$debit['success'])return $debit;
-        notify_user($uid,'Withdrawal Submitted',"Your withdrawal of ,{$amount} to {$payee} ({$acct}) has been submitted for admin approval",'info',null,$debit['balance_before'],$debit['balance_after']);
+        notify_user($uid,'Withdrawal Submitted',"Your withdrawal of ₦{$amount} to {$payee} ({$acct}) has been submitted for admin approval",'info',null,$debit['balance_before'],$debit['balance_after']);
         send_whatsapp_alert("New Withdrawal Request!\nUser: " . ($user['full_name'] ?? 'Unknown') . " (" . ($user['email'] ?? $user['phone'] ?? '') . ")\nAmount: ₦" . number_format($amount, 2) . "\nBank: {$bank}\nAccount: {$acct}\nPayee: {$payee}\nRef: " . ($debit['ref'] ?? 'N/A'));
         try{notify_admin('Withdrawal Request',"
 <div style='text-align:center;padding:10px 0 16px;'>
@@ -35,7 +36,7 @@ class BankTransferService {
 </table>
 </td></tr>
 </table>");}catch(\Throwable$e){}
-        return['success'=>true,'message'=>"Withdrawal of ,{$amount} submitted for approval.",'ref'=>$debit['ref'],'pending'=>true];
+        return['success'=>true,'message'=>"Withdrawal of ₦{$amount} submitted for approval.",'ref'=>$debit['ref'],'pending'=>true];
     }
 }
 function process_bank_transfer(int $uid,array $input):array{return(new BankTransferService())->process($uid,$input);}

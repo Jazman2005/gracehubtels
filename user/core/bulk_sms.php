@@ -31,11 +31,16 @@ class BulkSMSService {
         
         $res = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
         curl_close($ch);
-        
-        $d = $res ? json_decode($res, true) : null;
+
+        // A cURL-level failure means we genuinely don't know whether the
+        // provider received/processed this request — not the same as an
+        // explicit decline. Flagged so the final decision can avoid treating
+        // an uncertain outcome the same as a confirmed failure.
+        $d = $res ? json_decode($res, true) : ($res === false ? ['_network_error' => true, 'message' => "cURL Error: " . $err] : null);
         if ($d) $d['_http_code'] = $code;
-        
+
         log_api($prov['provider_name'] ?? 'bulk_sms', 'send', $payload, $d, in_array($code, [200, 201]) && !is_api_response_failure($d));
         return $d;
     }
@@ -49,6 +54,7 @@ class BulkSMSService {
         if (empty($sender)) return ['success' => false, 'message' => 'Sender ID is required (Max 11 chars)'];
         if (empty($message)) return ['success' => false, 'message' => 'Message body is empty'];
         if (empty($recipients)) return ['success' => false, 'message' => 'Recipients are required'];
+        if (detect_tamper($input)) return ['success' => false, 'message' => 'Invalid input'];
         if (!verify_pin($uid, $pin)) return ['success' => false, 'message' => 'Invalid transaction PIN'];
 
         // Clean recipients
@@ -94,19 +100,29 @@ class BulkSMSService {
         $limit_err = check_daily_limit($uid, $total_amount, 'bulk_sms');
         if($limit_err) return['success'=>false,'message'=>$limit_err];
 
+        if (!claim_purchase_lock($uid, 'bulk_sms', [$sender, $message, $valid_recipients])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
+
         $debit = debit_wallet($uid, $total_amount, 'bulk_sms', "Bulk SMS ({$pages} pages to {$rec_count} numbers)", [
             'sender' => $sender,
             'pages' => $pages,
             'recipients' => $rec_count
         ]);
-        
+
         if (!$debit['success']) return $debit;
 
-        // Log to bulk_sms_history
-        $b_sql = "INSERT INTO bulk_sms_history (user_id, sender_id, message, recipients, recipient_count, page_count, total_cost) 
-                  VALUES (?, ?, ?, ?, ?, ?, ?)";
+        // Log to bulk_sms_history, keyed by transaction_ref — previously the
+        // later success/failure UPDATEs matched by "user_id + total_cost
+        // ORDER BY id DESC LIMIT 1" instead of the actual transaction_ref, so
+        // two campaigns from the same user with an identical computed cost
+        // racing close together could have their history rows
+        // cross-attributed (the wrong campaign gets marked success/failed) —
+        // a real audit-trail corruption risk, even though it never moved
+        // money incorrectly on its own.
+        try { db()->exec("ALTER TABLE bulk_sms_history ADD COLUMN transaction_ref VARCHAR(60) DEFAULT NULL"); } catch (\Throwable $e) {}
+        $b_sql = "INSERT INTO bulk_sms_history (user_id, transaction_ref, sender_id, message, recipients, recipient_count, page_count, total_cost)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         db()->prepare($b_sql)->execute([
-            $uid, $sender, $message, implode(',', $valid_recipients), $rec_count, $pages, $total_amount
+            $uid, $debit['ref'], $sender, $message, implode(',', $valid_recipients), $rec_count, $pages, $total_amount
         ]);
 
         // API Call with failover
@@ -156,25 +172,39 @@ class BulkSMSService {
 
         if ($success) {
             $prov = $last_prov; $res = $last_res;
-            update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? 'mocked'), 'SMS');
-            db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")
-                ->execute([$total_cost, $total_amount - $total_cost, $prov['provider_name'] ?? 'System', $debit['ref']]);
-            db()->prepare("UPDATE bulk_sms_history SET status='success', provider_response=? WHERE user_id=? AND total_cost=? ORDER BY id DESC LIMIT 1")
-                ->execute([json_encode($res), $uid, $total_amount]);
-            notify_user($uid, 'o. Bulk SMS Sent', "Campaign sent to {$rec_count} recipients", 'success', null, $debit['balance_before'], $debit['balance_after']);
+            if (update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? 'mocked'), 'SMS')) {
+                db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")
+                    ->execute([$total_cost, $total_amount - $total_cost, $prov['provider_name'] ?? 'System', $debit['ref']]);
+                db()->prepare("UPDATE bulk_sms_history SET status='success', provider_response=? WHERE transaction_ref=?")
+                    ->execute([json_encode($res), $debit['ref']]);
+                notify_user($uid, '✅ Bulk SMS Sent', "Campaign sent to {$rec_count} recipients", 'success', null, $debit['balance_before'], $debit['balance_after']);
+            }
             return ['success' => true, 'message' => "Bulk SMS scheduled successfully to {$rec_count} recipients.", 'ref' => $debit['ref']];
         }
 
         // Pending on async response
+        if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name']??'System',$debit['ref']]);
         if ($has_pending) {
             update_tx_status($debit['ref'], 'pending', (string)($last_res['id'] ?? ''));
             notify_user($uid, 'Bulk SMS Processing', 'Your bulk SMS campaign is being processed.', 'info', null, $debit['balance_before'], $debit['balance_after']);
             return ['success' => true, 'message' => 'Transaction is being processed. Check receipt for updates.', 'ref' => $debit['ref'], 'pending' => true];
         }
+
+        // A network-level failure on the final attempt means we don't
+        // actually know whether that provider processed the request — leave
+        // it 'processing' for the verification crons instead of refunding
+        // blindly.
+        if (!empty($last_res['_network_error'])) {
+            update_tx_status($debit['ref'], 'processing');
+            db()->prepare("UPDATE bulk_sms_history SET status='pending', provider_response=? WHERE transaction_ref=?")->execute([json_encode($last_res), $debit['ref']]);
+            notify_user($uid, 'Bulk SMS Processing', "We're confirming your bulk SMS campaign with the provider. This can take a few minutes.", 'info', null, $debit['balance_before'], $debit['balance_after']);
+            return ['success' => true, 'message' => 'We could not immediately confirm this campaign due to a network issue. It is being verified — check your receipt shortly.', 'ref' => $debit['ref'], 'pending' => true];
+        }
+
         // Refund on failure
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'] ?? 'System', $debit['ref']]);
-        db()->prepare("UPDATE bulk_sms_history SET status='failed', provider_response=? WHERE user_id=? AND total_cost=? ORDER BY id DESC LIMIT 1")
-            ->execute([json_encode($last_res), $uid, $total_amount]);
+        db()->prepare("UPDATE bulk_sms_history SET status='failed', provider_response=? WHERE transaction_ref=?")
+            ->execute([json_encode($last_res), $debit['ref']]);
         $err_msg = 'Campaign delivery failed. Wallet reversed.';
         if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
         refund_failed_transaction($debit['ref'], $uid, $total_amount, $err_msg);

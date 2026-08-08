@@ -37,11 +37,16 @@ class DataService {
         
         $d = $res ? json_decode($res, true) : null;
         if ($d) $d['_http_code'] = $code;
-        if (!$res) $d = ['_http_code' => $code, '_curl_errno' => $err_no, '_curl_error' => $err_msg];
+        // A cURL-level failure means we genuinely don't know whether the
+        // provider received/processed this request — not the same as an
+        // explicit decline. Flagged so the timeout-handling below (this file
+        // already distinguishes $is_timeout from a confirmed decline) has a
+        // consistent marker matching the other services.
+        if (!$res) $d = ['_http_code' => $code, '_curl_errno' => $err_no, '_curl_error' => $err_msg, '_network_error' => true];
         log_api($prov['provider_name'] ?? 'data_api', 'data/buy', $payload, $d, in_array($code, [200, 201]));
         return $d;
     }
-    public function get_plans(string $net='',string $type=''):array{$where='WHERE is_active=1';$p=[];if($net){$where.=' AND network=?';$p[]=$net;}if($type){$where.=' AND data_type=?';$p[]=$type;}$s=db()->prepare("SELECT * FROM data_plans $where ORDER BY data_type,selling_price");$s->execute($p);return $s->fetchAll();}
+    public function get_plans(string $net='',string $type=''):array{$where='WHERE is_active=1';$p=[];if($net){$where.=' AND network=?';$p[]=$net;}if($type){$where.=' AND data_type=?';$p[]=$type;}$s=db()->prepare("SELECT * FROM data_plans $where ORDER BY data_type,display_order,selling_price");$s->execute($p);return $s->fetchAll();}
     public function get_types(string $net=''):array{$where='WHERE is_active=1';$p=[];if($net){$where.=' AND network=?';$p[]=$net;}$s=db()->prepare("SELECT DISTINCT data_type,COALESCE(display_type_name,data_type) as label FROM data_plans $where ORDER BY data_type");$s->execute($p);return $s->fetchAll();}
     public function process(int $uid,array $input): array {
         $phone=sanitize_phone($input['phone']??'');$plan_id=(int)($input['plan_id']??0);$pin=trim((string)($input['pin']??''));
@@ -74,6 +79,7 @@ class DataService {
             }
         }
 
+        if(!claim_purchase_lock($uid,'data',[$plan_id,$phone]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
         $desc_label = strtoupper($plan['network']) . ' ' . ($plan['plan_name'] ?: $plan['data_size']);$debit=debit_wallet($uid,$price,'data',"{$desc_label} for {$phone}",['network'=>$plan['network'],'phone'=>$phone,'plan_id'=>$plan_id,'data_size'=>$plan['data_size'],'plan_name'=>$plan['plan_name']]);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('data', $plan['network'], $plan['data_type']);
@@ -118,14 +124,20 @@ class DataService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
-            update_tx_status($debit['ref'],'success',(string)($res['id']??''),$plan['network']);
-            $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-            if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
-            db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
-            $cb=apply_cashback($uid,$price,'data',$plan['network'],(int)$plan['id']);
-            if($promo_id > 0) { db()->prepare("INSERT INTO promo_usage (user_id, promo_id, transaction_ref, discount_applied) VALUES (?, ?, ?, ?)")->execute([$uid, $promo_id, $debit['ref'], $discount]); db()->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=?")->execute([$promo_id]); }
-            notify_user($uid,'o. Data Purchased',"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'success',null,$debit['balance_before'],$debit['balance_after']);
-            return['success'=>true,'message'=>"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'ref'=>$debit['ref'],'cashback'=>$cb];
+            // Guard against a duplicate/concurrent resolution of this same
+            // ref (e.g. cron_check_vtu.php already resolved it while this
+            // request was mid-flight) — only award cashback/promo usage and
+            // notify success if we actually won the transition here.
+            if (update_tx_status($debit['ref'],'success',(string)($res['id']??''),$plan['network'])) {
+                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
+                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
+                db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
+                $cb=apply_cashback($uid,$price,'data',$plan['network'],(int)$plan['id']);
+                if($promo_id > 0) { db()->prepare("INSERT INTO promo_usage (user_id, promo_id, transaction_ref, discount_applied) VALUES (?, ?, ?, ?)")->execute([$uid, $promo_id, $debit['ref'], $discount]); db()->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=?")->execute([$promo_id]); }
+                notify_user($uid,'✅ Data Purchased',"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'success',null,$debit['balance_before'],$debit['balance_after']);
+                return['success'=>true,'message'=>"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'ref'=>$debit['ref'],'cashback'=>$cb];
+            }
+            return['success'=>true,'message'=>"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'ref'=>$debit['ref']];
         }
         
         $is_timeout = $last_res && !empty($last_res['_curl_errno']);

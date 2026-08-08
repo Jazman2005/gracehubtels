@@ -32,8 +32,10 @@ function process_internal_transfer(int $uid, array $post): array {
     
     if($amount < 50) return ['success'=>false, 'message'=>'Minimum transfer is ₦50'];
     if(empty($pin)) return ['success'=>false, 'message'=>'Transaction PIN is required'];
+    if(detect_tamper($post)) return ['success'=>false, 'message'=>'Invalid input'];
     $limit_err = check_daily_limit($uid, $amount, 'internal_transfer');
     if($limit_err) return['success'=>false,'message'=>$limit_err];
+    if(!claim_purchase_lock($uid,'internal_transfer',[$identifier,$amount])) return ['success'=>false, 'message'=>'Duplicate request detected. Please wait a moment and try again.'];
     
     $rec_res = resolve_recipient($identifier, $uid);
     if(!$rec_res['success']) return $rec_res;
