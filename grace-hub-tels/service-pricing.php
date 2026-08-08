@@ -4,36 +4,27 @@ auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
 
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_pricing');
     $action=$_POST['action']??'';
-    if($action==='save_data_plan'){
-        $id=(int)($_POST['id']??0);
-        $f=['network'=>sanitize($_POST['network']??'',20),'network_id'=>(int)($_POST['network_id']??1),'plan_id'=>sanitize($_POST['plan_id']??'',100),'plan_name'=>sanitize($_POST['plan_name']??'',200),'display_name'=>sanitize($_POST['display_name']??'',200)?:null,'data_type'=>sanitize($_POST['data_type']??'SME',50),'display_type_name'=>sanitize($_POST['display_type_name']??'',100)?:null,'data_size'=>sanitize($_POST['data_size']??'',50),'validity'=>sanitize($_POST['validity']??'',50),'cost_price'=>(float)($_POST['cost_price']??0),'selling_price'=>(float)($_POST['selling_price']??0),'agent_price'=>(float)($_POST['agent_price']??0),'vendor_price'=>(float)($_POST['vendor_price']??0),'is_active'=>isset($_POST['is_active'])?1:0];
-        if($id){db()->prepare("UPDATE data_plans SET network=?,network_id=?,plan_id=?,plan_name=?,display_name=?,data_type=?,display_type_name=?,data_size=?,validity=?,cost_price=?,selling_price=?,agent_price=?,vendor_price=?,is_active=? WHERE id=?")->execute([...array_values($f),$id]);}
-        else{db()->prepare("INSERT INTO data_plans (network,network_id,plan_id,plan_name,display_name,data_type,display_type_name,data_size,validity,cost_price,selling_price,agent_price,vendor_price,is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute(array_values($f));}
-        json_response(['success'=>true,'message'=>'Data plan saved']);
-    }
-    if($action==='delete_data_plan'){db()->prepare("DELETE FROM data_plans WHERE id=?")->execute([(int)$_POST['id']]);json_response(['success'=>true,'message'=>'Deleted']);}
-    if($action==='toggle_data_plan'){db()->prepare("UPDATE data_plans SET is_active=NOT is_active WHERE id=?")->execute([(int)$_POST['id']]);json_response(['success'=>true]);}
-
-    if($action==='save_cable_plan'){
-        $id=(int)($_POST['id']??0);
-        $f=[sanitize($_POST['provider']??'',50),(int)($_POST['cable_id']??0),sanitize($_POST['plan_id']??'',100),sanitize($_POST['plan_name']??'',200),sanitize($_POST['display_name']??'',200)?:null,(float)($_POST['cost_price']??0),(float)($_POST['selling_price']??0),(float)($_POST['agent_price']??0),(float)($_POST['vendor_price']??0),isset($_POST['is_active'])?1:0];
-        if($id){db()->prepare("UPDATE cable_plans SET provider=?,cable_id=?,plan_id=?,plan_name=?,display_name=?,cost_price=?,selling_price=?,agent_price=?,vendor_price=?,is_active=? WHERE id=?")->execute([...$f,$id]);}
-        else{db()->prepare("INSERT INTO cable_plans (provider,cable_id,plan_id,plan_name,display_name,cost_price,selling_price,agent_price,vendor_price,is_active) VALUES (?,?,?,?,?,?,?,?,?,?)")->execute($f);}
-        json_response(['success'=>true,'message'=>'Cable plan saved']);
-    }
-    if($action==='delete_cable_plan'){db()->prepare("DELETE FROM cable_plans WHERE id=?")->execute([(int)$_POST['id']]);json_response(['success'=>true,'message'=>'Deleted']);}
-
-    if($action==='save_disco'){
-        $id=(int)($_POST['id']??0);
-        $f=[sanitize($_POST['disco_name']??'',100),(int)($_POST['disco_id']??0),sanitize($_POST['logo_key']??'',50),(float)($_POST['charge']??100),(float)($_POST['agent_charge']??0),(float)($_POST['vendor_charge']??0),isset($_POST['is_active'])?1:0];
-        if($id){db()->prepare("UPDATE electricity_discos SET disco_name=?,disco_id=?,logo_key=?,charge=?,agent_charge=?,vendor_charge=?,is_active=? WHERE id=?")->execute([...$f,$id]);}
-        else{db()->prepare("INSERT INTO electricity_discos (disco_name,disco_id,logo_key,charge,agent_charge,vendor_charge,is_active) VALUES (?,?,?,?,?,?,?)")->execute($f);}
-        json_response(['success'=>true,'message'=>'Disco saved']);
-    }
     if($action==='save_pricing'){
         $id=(int)($_POST['id']??0);
-        if($id){db()->prepare("UPDATE service_pricing SET cost_price=?,selling_price=?,agent_price=?,vendor_price=?,discount_percent=?,agent_discount=?,vendor_discount=?,is_active=? WHERE id=?")->execute([(float)($_POST['cost_price']??0),(float)$_POST['selling_price'],(float)($_POST['agent_price']??0),(float)($_POST['vendor_price']??0),(float)$_POST['discount_percent'],(float)($_POST['agent_discount']??0),(float)($_POST['vendor_discount']??0),isset($_POST['is_active'])?1:0,$id]);}
+        if($id){
+            $cost=(float)($_POST['cost_price']??0);$sell=(float)$_POST['selling_price'];
+            $agentP=(float)($_POST['agent_price']??0);$vendorP=(float)($_POST['vendor_price']??0);
+            $disc=(float)$_POST['discount_percent'];$agentD=(float)($_POST['agent_discount']??0);$vendorD=(float)($_POST['vendor_discount']??0);
+            // Negative prices/discounts are nonsensical; debit_wallet() itself
+            // already rejects a zero/negative selling_price at purchase time
+            // (making that specific case a self-inflicted "plan unusable" bug
+            // rather than a fund-drain), but there was no validation at all
+            // here, so an admin typo went live immediately with no floor.
+            foreach(['cost_price'=>$cost,'selling_price'=>$sell,'agent_price'=>$agentP,'vendor_price'=>$vendorP] as $label=>$val){
+                if($val<0)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' cannot be negative'],400);
+            }
+            foreach(['discount_percent'=>$disc,'agent_discount'=>$agentD,'vendor_discount'=>$vendorD] as $label=>$val){
+                if($val<0||$val>100)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' must be between 0 and 100'],400);
+            }
+            db()->prepare("UPDATE service_pricing SET cost_price=?,selling_price=?,agent_price=?,vendor_price=?,discount_percent=?,agent_discount=?,vendor_discount=?,is_active=? WHERE id=?")->execute([$cost,$sell,$agentP,$vendorP,$disc,$agentD,$vendorD,isset($_POST['is_active'])?1:0,$id]);
+        }
         else{json_response(['success'=>false,'message'=>'Missing ID']);}
         // Save plan API bindings
         $psvc=sanitize($_POST['service']??'',50);
@@ -58,6 +49,17 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if($action==='credit'){
         $ref=$_POST['ref']??'';$amount=(float)($_POST['amount']??0);
         if(!$ref||$amount<=0)json_response(['success'=>false,'message'=>'Invalid request'],400);
+        // The admin-entered cash amount was previously trusted with no
+        // ceiling at all — nothing tied it to the airtime actually claimed
+        // in this request, so a typo (or a forged/replayed AJAX call) could
+        // credit an amount wildly disproportionate to the submitted
+        // airtime. Cash payout is always some discount OFF the airtime's
+        // face value, so it can never legitimately exceed it.
+        $pre=db()->prepare("SELECT airtime_amount FROM airtime_to_cash WHERE transaction_ref=? AND status IN ('pending','processing') LIMIT 1");
+        $pre->execute([$ref]);
+        $preRow=$pre->fetch();
+        if(!$preRow)json_response(['success'=>false,'message'=>'Request not found or already processed'],400);
+        if($amount>(float)$preRow['airtime_amount'])json_response(['success'=>false,'message'=>'Amount cannot exceed the submitted airtime value (₦'.number_format((float)$preRow['airtime_amount'],2).')'],400);
         // Atomically claim this A2C request BEFORE crediting anything.
         // Previously this was a plain unlocked SELECT ... WHERE status IN
         // ('pending','processing') — unlike AirtimeToCashService::credit_confirmed()
@@ -89,7 +91,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         if($r)try{notify_admin('A2C Credited (Admin)',"
 <div style='text-align:center;padding:10px 0 16px;'>
 <span style='font-size:28px;line-height:1;font-weight:800;color:#16a34a;'>OK</span>
-<h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>A2C Credited by Admin</h3>
+<h3 style='color:#FF5A1F;font-size:18px;margin:8px 0 4px;'>A2C Credited by Admin</h3>
 <p style='color:#475569;font-size:13px;margin:0;'>An A2C request was approved by admin.</p>
 </div>
 <table style='width:100%;border-collapse:collapse;'>
@@ -114,7 +116,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         try{notify_admin('A2C Rejected',"
 <div style='text-align:center;padding:10px 0 16px;'>
 <span style='font-size:28px;line-height:1;font-weight:800;color:#dc2626;'>X</span>
-<h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>A2C Request Rejected</h3>
+<h3 style='color:#FF5A1F;font-size:18px;margin:8px 0 4px;'>A2C Request Rejected</h3>
 <p style='color:#475569;font-size:13px;margin:0;'>An A2C request was rejected by admin.</p>
 </div>
 <table style='width:100%;border-collapse:collapse;'>
@@ -130,9 +132,17 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     }
     if($action==='save_rates'){
         foreach(['MTN','GLO','AIRTEL','9MOBILE'] as $net){$lk=strtolower($net);
-            if(isset($_POST["rate_{$lk}"]))db()->prepare("UPDATE service_pricing SET discount_percent=? WHERE service='airtime_to_cash' AND network=?")->execute([(float)$_POST["rate_{$lk}"],$net]);
+            if(isset($_POST["rate_{$lk}"])){
+                $rate=(float)$_POST["rate_{$lk}"];
+                // This rate is the % cash payout for submitted airtime — a
+                // value above 100 would mean paying out MORE cash than the
+                // airtime is worth, and negative is nonsensical.
+                if($rate<0||$rate>100)json_response(['success'=>false,'message'=>"Rate for {$net} must be between 0 and 100"],400);
+                db()->prepare("UPDATE service_pricing SET discount_percent=? WHERE service='airtime_to_cash' AND network=?")->execute([$rate,$net]);
+            }
             if(isset($_POST["num_{$lk}"]))setting_set("autopilot_{$lk}_number", sanitize_phone($_POST["num_{$lk}"]));
         }
+        if(isset($_POST['autopilot_api_key']))setting_set('autopilot_api_key', trim($_POST['autopilot_api_key']));
         json_response(['success'=>true,'message'=>'Rates & numbers saved']);
     }
     if($action==='toggle_a2c'){
@@ -143,9 +153,6 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     json_response(['success'=>false],400);
 }
 $csrf=admin_csrf();
-$data_plans=db()->query("SELECT * FROM data_plans ORDER BY network,data_type,selling_price")->fetchAll();
-$cable_plans=db()->query("SELECT * FROM cable_plans ORDER BY provider,selling_price")->fetchAll();
-$discos=db()->query("SELECT * FROM electricity_discos ORDER BY disco_name")->fetchAll();
 // Deduplicate A2C rows — keep only the best row per network
 try {
     $dup=db()->query("SELECT service,network,COUNT(*) c FROM service_pricing WHERE service='airtime_to_cash' GROUP BY service,network HAVING c>1")->fetchAll();
@@ -155,9 +162,12 @@ try {
 } catch(\Throwable $e) {}
 $pricing=db()->query("SELECT * FROM service_pricing ORDER BY service,network")->fetchAll();
 $rc_pricing=db()->query("SELECT * FROM service_pricing WHERE service='recharge_card' ORDER BY network,plan_name")->fetchAll();
-$rc_networks=array_unique(array_map(function($r){return $r['network'];},$rc_pricing));
 $api_regs = db()->query("SELECT id, name FROM api_registry WHERE is_active=1 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
 function k(string $key):string{return htmlspecialchars(setting($key));}
+// Secret fields (API keys) must not render for viewers who can't act on them —
+// auth_admin() alone (no role/permission) lets any admin, including 'support',
+// load this page; only the manage_pricing-gated POST above can change these.
+function k_secret(string $key):string{return has_permission('manage_pricing')?htmlspecialchars(setting($key)):'';}
 try{
     $a2c_requests=db()->query("SELECT a.*,u.full_name,u.phone as user_phone FROM airtime_to_cash a LEFT JOIN users u ON a.user_id=u.id ORDER BY a.created_at DESC LIMIT 100")->fetchAll();
     $a2c_counts=db()->query("SELECT status,COUNT(*) c FROM airtime_to_cash GROUP BY status")->fetchAll();$a2c_cmap=[];foreach($a2c_counts as $c)$a2c_cmap[$c['status']]=$c['c'];
@@ -276,6 +286,11 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
       </div>
     </div>
     <?php endforeach; ?>
+    <div class="form-group" style="max-width:400px;margin-top:6px;">
+        <label>Autopilot Webhook Signing Key</label>
+        <input type="password" class="form-control" id="autopilot_api_key" value="<?=k_secret('autopilot_api_key')?>" placeholder="From your Autopilot NG dashboard">
+        <small class="text-muted">Without this, Autopilot's confirmation webhook (webhook/autopilot/index.php) fails its signature check and A2C requests never auto-confirm — they'd need manual approval below.</small>
+    </div>
     <button class="btn-primary" onclick="saveRates()" style="max-width:200px;">Save Rates & Numbers</button>
   </div>
 </div>
@@ -325,7 +340,7 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
         <div style="background:var(--primary); color:#fff; padding:16px 20px; font-weight:600; font-size:16px;">
             <span id="pricingModalTitle">Edit Pricing</span>
         </div>
-        <div class="modal-body" style="padding:24px; max-height:80vh; overflow-y:auto; background:#fff; display:flex; flex-direction:column; gap:16px;">
+        <div class="modal-body" style="padding:24px; max-height:80vh; overflow-y:auto; background:var(--surface); display:flex; flex-direction:column; gap:16px;">
             <input type="hidden" id="pr_id">
             <input type="hidden" id="pr_service">
             <div class="form-group">
@@ -376,91 +391,10 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
 <script>
 const CSRF='<?=$csrf?>';
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');}
-function showTab(t,btn){
-    document.querySelectorAll('[id^="tab-"]').forEach(e=>e.style.display='none');
-    document.getElementById('tab-'+t).style.display='block';
-    document.querySelectorAll('.filter-tab').forEach(b=>b.classList.remove('active'));
-    if(btn) btn.classList.add('active');
-    else {
-        // If btn not passed, find the tab and activate it
-        const tabs = document.querySelectorAll('.filter-tab');
-        if(t==='data') tabs[0].classList.add('active');
-        if(t==='cable') tabs[1].classList.add('active');
-        if(t==='disco') tabs[2].classList.add('active');
-        if(t==='pricing') tabs[3].classList.add('active');
-    }
-}
 
 document.addEventListener("DOMContentLoaded", () => {
-    const activeTab = sessionStorage.getItem('serviceTab');
-    if (activeTab) {
-        showTab(activeTab, null);
-        sessionStorage.removeItem('serviceTab');
-    }
     showA2CTab('pending');
 });
-
-// DATA PLANS
-function openDataModal(){
-    document.getElementById('dataModalTitle').innerHTML='Add New Plan';
-    ['d_id','d_plan_id','d_plan_name','d_data_type','d_validity','d_cost_price','d_selling_price','d_agent_price','d_vendor_price','d_network'].forEach(i=>{if(document.getElementById(i))document.getElementById(i).value=''});
-    document.getElementById('dataModal').style.display='flex';
-}
-function editDataPlan(p){
-    document.getElementById('dataModalTitle').innerHTML='Edit Data Plan';
-    document.getElementById('d_id').value=p.id;
-    document.getElementById('d_network').value=p.network;
-    document.getElementById('d_plan_id').value=p.plan_id;
-    document.getElementById('d_plan_name').value=p.plan_name;
-    document.getElementById('d_data_type').value=p.data_type;
-    document.getElementById('d_validity').value=p.validity||'';
-    document.getElementById('d_cost_price').value=p.cost_price;
-    document.getElementById('d_selling_price').value=p.selling_price;
-    document.getElementById('d_agent_price').value=p.agent_price||'0';
-    document.getElementById('d_vendor_price').value=p.vendor_price||'0';
-    document.getElementById('dataModal').style.display='flex';
-}
-async function saveDataPlan(){
-    const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_data_plan');
-    ['id','network','network_id','plan_id','plan_name','display_name','data_type','display_type_name','data_size','validity','cost_price','selling_price','agent_price','vendor_price'].forEach(k=>{
-        if(document.getElementById('d_'+k)) fd.append(k,document.getElementById('d_'+k).value);
-    });
-    fd.append('is_active','1');
-    const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
-    showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),900);
-}
-async function deleteDataPlan(id){if(!confirm('Delete this plan?'))return;const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','delete_data_plan');fd.append('id',id);const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),700);}
-async function toggleDataPlan(id){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','toggle_data_plan');fd.append('id',id);await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd});}
-
-// CABLE PLANS
-function openCableModal(){
-    document.getElementById('cableModalTitle').innerHTML='<i class="fas fa-plus"></i> Add Cable Plan';
-    ['c_id','c_cable_id','c_plan_id','c_plan_name','c_display_name','c_cost_price','c_selling_price','c_agent_price','c_vendor_price'].forEach(i=>document.getElementById(i).value='');
-    document.getElementById('c_is_active').checked=true;
-    document.getElementById('cableModal').style.display='flex';
-}
-function editCablePlan(p){
-    document.getElementById('cableModalTitle').innerHTML='<i class="fas fa-edit"></i> Edit Cable Plan';
-    document.getElementById('c_id').value=p.id;
-    document.getElementById('c_provider').value=p.provider;
-    document.getElementById('c_cable_id').value=p.cable_id;
-    document.getElementById('c_plan_id').value=p.plan_id;
-    document.getElementById('c_plan_name').value=p.plan_name;
-    document.getElementById('c_display_name').value=p.display_name||'';
-    document.getElementById('c_cost_price').value=p.cost_price;
-    document.getElementById('c_selling_price').value=p.selling_price;
-    document.getElementById('c_agent_price').value=p.agent_price||'0';
-    document.getElementById('c_vendor_price').value=p.vendor_price||'0';
-    document.getElementById('c_is_active').checked=p.is_active==1;
-    document.getElementById('cableModal').style.display='flex';
-}
-async function saveCablePlan(){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_cable_plan');['id','provider','cable_id','plan_id','plan_name','display_name','cost_price','selling_price','agent_price','vendor_price'].forEach(k=>fd.append(k,document.getElementById('c_'+k).value));if(document.getElementById('c_is_active').checked)fd.append('is_active','1');const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),900);}
-async function deleteCablePlan(id){if(!confirm('Delete?'))return;const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','delete_cable_plan');fd.append('id',id);const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),700);}
-
-// DISCOS
-function openDiscoModal(){document.getElementById('discoModalTitle').innerHTML='<i class="fas fa-plus"></i> Add Disco';['x_id','x_disco_id','x_disco_name','x_logo_key','x_charge','x_agent_charge','x_vendor_charge'].forEach(i=>document.getElementById(i).value='');document.getElementById('x_is_active').checked=true;document.getElementById('discoModal').style.display='flex';}
-function editDisco(d){document.getElementById('discoModalTitle').innerHTML='<i class="fas fa-edit"></i> Edit Disco';document.getElementById('x_id').value=d.id;document.getElementById('x_disco_name').value=d.disco_name;document.getElementById('x_disco_id').value=d.disco_id;document.getElementById('x_logo_key').value=d.logo_key||'';document.getElementById('x_charge').value=d.charge;document.getElementById('x_agent_charge').value=d.agent_charge||'0';document.getElementById('x_vendor_charge').value=d.vendor_charge||'0';document.getElementById('x_is_active').checked=d.is_active==1;document.getElementById('discoModal').style.display='flex';}
-async function saveDisco(){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_disco');['id','disco_name','disco_id','logo_key','charge','agent_charge','vendor_charge'].forEach(k=>fd.append(k,document.getElementById('x_'+k).value));if(document.getElementById('x_is_active').checked)fd.append('is_active','1');const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),900);}
 
 // PRICING
 function editPricing(p){
@@ -518,7 +452,7 @@ async function credit(ref,amount){const fd=new FormData();fd.append('csrf',CSRF)
 function creditPrompt(ref,suggested){const amt=prompt('Confirm cash amount to credit:',suggested);if(!amt||isNaN(amt))return;credit(ref,parseFloat(amt));}
 function rejectPrompt(ref){const reason=prompt('Reason for rejection:');if(!reason)return;reject(ref,reason);}
 async function reject(ref,reason){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','reject');fd.append('ref',ref);fd.append('reason',reason);const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),900);}
-async function saveRates(){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_rates');['mtn','glo','airtel','9mobile'].forEach(lk=>{fd.append('rate_'+lk,document.getElementById('rate_'+lk).value);fd.append('num_'+lk,document.getElementById('num_'+lk).value);});const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);}
+async function saveRates(){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_rates');['mtn','glo','airtel','9mobile'].forEach(lk=>{fd.append('rate_'+lk,document.getElementById('rate_'+lk).value);fd.append('num_'+lk,document.getElementById('num_'+lk).value);});fd.append('autopilot_api_key',document.getElementById('autopilot_api_key').value);const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);}
 
 async function toggleA2c(id,net){const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','toggle_a2c');fd.append('id',id);fd.append('network',net);const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());if(r.success)location.reload();}
 

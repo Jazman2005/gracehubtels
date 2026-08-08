@@ -9,7 +9,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     $action = $_POST['action']??'';
     if($action==='update_bonus'){
         $amt = (float)($_POST['amount']??0);
-        
+        if($amt<0){ echo json_encode(['success'=>false,'message'=>'Referral bonus cannot be negative']); exit; }
+
         setting_set('referral_bonus', (string)$amt);
         
         audit_log($_SESSION['admin_id'], 'UPDATE_REFERRAL_BONUS', "Updated referral bonus to $amt");
@@ -45,6 +46,7 @@ $tot_ref = db()->query("SELECT COUNT(*) FROM referral_rewards")->fetchColumn() ?
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>.two-col-page{display:grid;grid-template-columns:1fr 2fr;gap:24px;align-items:start}@media (max-width:1024px){.two-col-page{grid-template-columns:1fr}}</style>
 </head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
@@ -59,12 +61,12 @@ $tot_ref = db()->query("SELECT COUNT(*) FROM referral_rewards")->fetchColumn() ?
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:24px;align-items:start">
+<div class="two-col-page">
   
   <div class="data-panel">
     <div class="panel-title-bar" style="border-bottom:1px solid #E2E8F0; padding-bottom:16px; margin-bottom:16px;">
         <h3 style="display:flex; align-items:center; gap:8px;">
-            <div style="width:32px;height:32px;border-radius:8px;background:rgba(79,70,229,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,90,31,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;">
                 <i class="fas fa-gift"></i>
             </div>
             Referral Configuration

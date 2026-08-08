@@ -3,9 +3,13 @@ require_once __DIR__.'/core/auth.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_pricing');
     $action=$_POST['action']??'';
     if($action==='save_platform'){
         $id=(int)($_POST['id']??0);
+        foreach(['charge'=>(float)($_POST['charge']??0),'agent_charge'=>(float)($_POST['agent_charge']??0),'vendor_charge'=>(float)($_POST['vendor_charge']??0)] as $label=>$val){
+            if($val<0)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' cannot be negative'],400);
+        }
         $f=[sanitize($_POST['platform_name']??'',100),sanitize($_POST['provider_code']??'',100),(float)($_POST['charge']??0),(float)($_POST['agent_charge']??0),(float)($_POST['vendor_charge']??0),isset($_POST['is_active'])?1:0];
         if($id){db()->prepare("UPDATE betting_plans SET platform_name=?,provider_code=?,charge=?,agent_charge=?,vendor_charge=?,is_active=? WHERE id=?")->execute([...$f,$id]);}
         else{db()->prepare("INSERT INTO betting_plans (platform_name,provider_code,charge,agent_charge,vendor_charge,is_active) VALUES (?,?,?,?,?,?)")->execute($f);}
@@ -120,7 +124,7 @@ $platforms=db()->query("SELECT * FROM betting_plans ORDER BY platform_name")->fe
             </div>
             <div style="display:flex; justify-content:space-between; margin-top:8px;">
                 <button class="btn-primary" onclick="savePlatform()"><i class="fas fa-save" style="margin-right:6px;"></i> Save</button>
-                <button class="btn-ghost" onclick="document.getElementById('platformModal').style.display='none'">CLOSE</button>
+                <button class="btn-ghost" onclick="closePlatformModal()">CLOSE</button>
             </div>
         </div>
     </div>
@@ -150,14 +154,28 @@ function editPlatform(p){
     document.getElementById('p_is_active').checked=p.is_active==1;
     document.getElementById('platformModal').style.display='flex';
 }
+let platformsChanged=false;
 async function savePlatform(){
+    const wasNew=!document.getElementById('p_id').value;
     const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_platform');
     ['id','platform_name','provider_code','charge','agent_charge','vendor_charge'].forEach(k=>{
         fd.append(k,document.getElementById('p_'+k).value);
     });
     if(document.getElementById('p_is_active').checked) fd.append('is_active','1');
     const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
-    showToast(r.message,r.success);if(r.success)setTimeout(()=>location.reload(),700);
+    showToast(r.message,r.success);
+    if(r.success){
+        if(wasNew){
+            platformsChanged=true;
+            openPlatformModal();
+        } else {
+            setTimeout(()=>location.reload(),700);
+        }
+    }
+}
+function closePlatformModal(){
+    document.getElementById('platformModal').style.display='none';
+    if(platformsChanged) location.reload();
 }
 async function deletePlatform(id){
     if(!confirm('Delete this platform?'))return;

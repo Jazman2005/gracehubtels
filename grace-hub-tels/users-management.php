@@ -59,6 +59,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         $daily = $_POST['custom_daily'] !== '' ? (float)$_POST['custom_daily'] : null;
         $airtime = $_POST['custom_airtime'] !== '' ? (float)$_POST['custom_airtime'] : null;
         $transfer = $_POST['custom_transfer'] !== '' ? (float)$_POST['custom_transfer'] : null;
+        foreach(['custom_daily'=>$daily,'custom_airtime'=>$airtime,'custom_transfer'=>$transfer] as $label=>$val){
+            if($val!==null&&$val<0)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' limit cannot be negative']);
+        }
         db()->prepare("UPDATE users SET custom_daily_limit=?, custom_airtime_limit=?, custom_transfer_limit=? WHERE id=?")->execute([$daily, $airtime, $transfer, $uid]);
         json_response(['success'=>true,'message'=>'Custom limits updated successfully']);
     }

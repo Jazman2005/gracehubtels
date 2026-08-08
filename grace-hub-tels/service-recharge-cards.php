@@ -3,13 +3,21 @@ require_once __DIR__.'/core/auth.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_pricing');
     $action=$_POST['action']??'';
     if($action==='save_pricing'){
         $id=(int)($_POST['id']??0);
         if($id){
+            $cost=(float)$_POST['cost_price'];$sell=(float)$_POST['selling_price'];$agentP=(float)($_POST['agent_price']??0);$vendorP=(float)($_POST['vendor_price']??0);
+            $disc=(float)$_POST['discount_percent'];$agentD=(float)($_POST['agent_discount']??0);$vendorD=(float)($_POST['vendor_discount']??0);
+            foreach(['cost_price'=>$cost,'selling_price'=>$sell,'agent_price'=>$agentP,'vendor_price'=>$vendorP] as $label=>$val){
+                if($val<0)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' cannot be negative'],400);
+            }
+            foreach(['discount_percent'=>$disc,'agent_discount'=>$agentD,'vendor_discount'=>$vendorD] as $label=>$val){
+                if($val<0||$val>100)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' must be between 0 and 100'],400);
+            }
             db()->prepare("UPDATE service_pricing SET cost_price=?,selling_price=?,agent_price=?,vendor_price=?,discount_percent=?,agent_discount=?,vendor_discount=?,is_active=? WHERE id=?")->execute([
-                (float)$_POST['cost_price'],(float)$_POST['selling_price'],(float)($_POST['agent_price']??0),(float)($_POST['vendor_price']??0),
-                (float)$_POST['discount_percent'],(float)($_POST['agent_discount']??0),(float)($_POST['vendor_discount']??0),
+                $cost,$sell,$agentP,$vendorP,$disc,$agentD,$vendorD,
                 isset($_POST['is_active'])?1:0,$id
             ]);
             // Save plan API bindings

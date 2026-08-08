@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_cashback');
     $action=$_POST['action']??'';
     if($action==='save'){
         $id=(int)($_POST['id']??0);
@@ -10,6 +11,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         $type=in_array($_POST['cashback_type']??'',['percent','fixed'])?$_POST['cashback_type']:'percent';
         $value=(float)($_POST['cashback_value']??0);$min=(float)($_POST['min_amount']??0);$max=(float)($_POST['max_cashback']??9999);
         $label=sanitize($_POST['label']??'',100);$active=isset($_POST['is_active'])?1:0;
+        // cashback_balance is real, withdrawable money (process_cashback_withdrawal()
+        // moves it straight into wallet_balance) — apply_cashback() computes
+        // earned = min(amount * value/100, max_cashback) with no ceiling of
+        // its own, so an unbounded percent/max_cashback here turns ordinary
+        // purchases into a direct cash-out channel. A negative value/min/max
+        // is also nonsensical and would produce a negative "earned" credit.
+        if($value<0||$min<0||$max<0)json_response(['success'=>false,'message'=>'Value, minimum amount, and max cashback must not be negative']);
+        if($type==='percent'&&$value>100)json_response(['success'=>false,'message'=>'Percentage cashback cannot exceed 100%']);
         if($id){db()->prepare("UPDATE cashback_config SET service=?,network=?,cashback_type=?,cashback_value=?,min_amount=?,max_cashback=?,label=?,is_active=? WHERE id=?")->execute([$service,$network,$type,$value,$min,$max,$label,$active,$id]);}
         else{
             $chk=db()->prepare("SELECT id FROM cashback_config WHERE service=? AND (network=? OR (network IS NULL AND ? IS NULL)) LIMIT 1");$chk->execute([$service,$network,$network]);
