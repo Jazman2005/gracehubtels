@@ -23,6 +23,27 @@ function auth_admin(string $min_role=''):void{
         if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Session expired. Please log in again.']);exit;}
         header('Location: ' . ADMIN_URL . '/login.php');exit;
     }
+    // Single active session per admin account, enforced for every role
+    // (superadmin/admin/support alike). Each completed login overwrites
+    // admin.current_session_token, so any other device's session — which
+    // still carries the previous token in its own $_SESSION — no longer
+    // matches on its next request and gets force-logged-out here. The
+    // displaced device's "known device" record is also removed, so it has
+    // to pass through OTP again (not just its password) the next time it
+    // tries to log back in, rather than silently being trusted again.
+    try{
+        $tok=db()->prepare("SELECT current_session_token FROM admin WHERE id=?");
+        $tok->execute([$_SESSION['admin_id']]);
+        $current_tok=$tok->fetchColumn();
+        if($current_tok!==false && (empty($_SESSION['admin_session_token']) || !hash_equals((string)$current_tok,(string)$_SESSION['admin_session_token']))){
+            $aid=(int)$_SESSION['admin_id'];
+            try{db()->prepare("DELETE FROM admin_known_devices WHERE admin_id=? AND device_hash=?")->execute([$aid,get_device_hash()]);}catch(\Throwable$e){}
+            try{audit_log($aid,'SESSION_SUPERSEDED','Logged out — account signed in from another device');}catch(\Throwable$e){}
+            $_SESSION=[];session_destroy();
+            if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Your account was signed in from another device. Please log in again.']);exit;}
+            header('Location: ' . ADMIN_URL . '/login.php');exit;
+        }
+    }catch(\Throwable$e){}
     $_SESSION['admin_last_activity']=$now;
     if($min_role!==''){$r=['support'=>1,'admin'=>2,'superadmin'=>3];if(($r[$_SESSION['admin_role']??'']??0)<($r[$min_role]??0)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Access denied']);exit;}die('Access denied');}}
 }
@@ -77,6 +98,12 @@ function complete_admin_login(array $admin): void {
     $_SESSION['admin_permissions']=$admin['permissions']??'[]';
     $_SESSION['admin_login_ts']=time();
     $_SESSION['admin_last_activity']=time();
+    // Overwriting this on every completed login is what makes a new login
+    // anywhere immediately invalidate every other device's session — see
+    // the matching check in auth_admin().
+    $session_token=bin2hex(random_bytes(32));
+    $_SESSION['admin_session_token']=$session_token;
+    try{db()->prepare("UPDATE admin SET current_session_token=? WHERE id=?")->execute([$session_token,$admin['id']]);}catch(\Throwable$e){}
     audit_log($admin['id'],'LOGIN',"Admin logged in ({$admin['email']})");
     try{
         $ip=get_ip();$time=date('Y-m-d H:i:s');
@@ -109,6 +136,7 @@ function login_admin(string $email,string $password):array{
     
     try{db()->exec("ALTER TABLE admin ADD COLUMN login_attempts INT DEFAULT 0");}catch(\Throwable$e){}
     try{db()->exec("ALTER TABLE admin ADD COLUMN locked_until DATETIME DEFAULT NULL");}catch(\Throwable$e){}
+    try{db()->exec("ALTER TABLE admin ADD COLUMN current_session_token VARCHAR(64) DEFAULT NULL");}catch(\Throwable$e){}
     // is_known_device()/mark_known_device() below silently no-op (fail
     // closed / swallow the error) if this table is missing, which forces
     // OTP on every single login rather than ever remembering a device —
