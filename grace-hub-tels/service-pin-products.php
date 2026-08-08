@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 auth_admin();
+// Recharge cards, data cards, and exam PINs rendered on this page have real
+// resale value in plaintext — gate the whole page, not just mutations,
+// behind the same permission service-pricing.php/service-recharge-cards.php use.
+require_permission('manage_pricing');
 $csrf=admin_csrf();
 
 // Load data for each tab

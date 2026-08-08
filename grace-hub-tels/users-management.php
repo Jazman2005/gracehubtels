@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 auth_admin();
 if(isset($_GET['export']) && $_GET['export']==='csv'){
+    require_permission('manage_users');
     $search=trim($_GET['q']??'');$filter=$_GET['filter']??'';
     $data=get_users_list(1, 999999, $search, $filter);
     header('Content-Type: text/csv; charset=utf-8');
@@ -24,7 +25,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     $action=$_POST['action']??'';$uid=(int)($_POST['uid']??0);
     // Money-moving, credential-reset, impersonation and deletion actions require the
     // explicit "manage_users" permission — a bare admin session is not enough.
-    $sensitive_actions=['credit','debit','reset_pin','change_password','delete_user','login_as','bulk_action'];
+    $sensitive_actions=['credit','debit','reset_pin','change_password','delete_user','login_as','bulk_action','suspend','unsuspend','set_user_type','set_custom_limits','get_user_detail'];
     if(in_array($action,$sensitive_actions,true))require_permission('manage_users');
     if($action==='suspend'){db()->prepare("UPDATE users SET is_suspended=1,suspension_reason=? WHERE id=?")->execute([sanitize($_POST['reason']??'Policy violation',255),$uid]);json_response(['success'=>true,'message'=>'User suspended']);}
     if($action==='unsuspend'){db()->prepare("UPDATE users SET is_suspended=0,suspension_reason=NULL WHERE id=?")->execute([$uid]);json_response(['success'=>true,'message'=>'User reinstated']);}
@@ -103,18 +104,36 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     }
 
     if($action==='login_as'){
+        // Impersonation is full account takeover of the target user — require
+        // the acting admin to re-confirm their own password (same bar as
+        // delete_user/change_password below), not just permission+CSRF.
+        $admin_pw=$_POST['admin_password']??'';
+        $s=db()->prepare("SELECT password FROM admin WHERE id=?");$s->execute([(int)$_SESSION['admin_id']]);$admin=$s->fetch();
+        if(!$admin||!password_verify($admin_pw,$admin['password']))json_response(['success'=>false,'message'=>'Admin password is incorrect']);
+
+        $tu=db()->prepare("SELECT id FROM users WHERE id=?");$tu->execute([$uid]);
+        if(!$tu->fetch())json_response(['success'=>false,'message'=>'User not found']);
+
         $admin_id = $_SESSION['admin_id'];
         session_write_close();
-        
-        session_name('gracehubtels_user');
+
+        // Session name must match the real user-portal session (SESSION_NAME
+        // in user/core/auth.php) — the previous 'gracehubtels_user' name was
+        // never read anywhere else, so this cookie was never actually picked
+        // up by /user/dashboard.php. session_regenerate_id() is required here
+        // because writing an admin-controlled user_id into a session without
+        // rotating its ID is a session-fixation vector.
+        session_name('msjpay_user');
         session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>isset($_SERVER['HTTPS']),'httponly'=>true,'samesite'=>'Strict']);
         session_start();
+        session_regenerate_id(true);
         $_SESSION['user_id'] = $uid;
         $_SESSION['admin_impersonating'] = $admin_id;
         session_write_close();
-        
+
         session_name('gracehubtels_admin');
         session_start();
+        audit_log($admin_id, 'login_as', 'Impersonated user ID '.$uid);
         json_response(['success'=>true,'message'=>'Impersonating user...']);
     }
 
@@ -236,9 +255,12 @@ $stats = db()->query("
 
 <div class="data-panel">
   <form class="search-bar" method="GET">
-    <div class="search-input-wrap" style="position:relative; flex:1; min-width:200px;">
-        <svg class="search-icon" viewBox="0 0 24 24" style="position:absolute; left:16px; top:50%; transform:translateY(-50%); width:20px; height:20px; stroke:var(--text-muted); fill:none; stroke-width:2;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" name="q" placeholder="Search by name, phone, email or username..." value="<?=htmlspecialchars($search)?>" class="form-control" style="width:100%; padding-left:48px;">
+    <div class="search-input-wrap" style="position:relative; flex:1; min-width:200px; display:flex; gap:8px;">
+        <div style="position:relative; flex:1;">
+            <svg class="search-icon" viewBox="0 0 24 24" style="position:absolute; left:16px; top:50%; transform:translateY(-50%); width:20px; height:20px; stroke:var(--text-muted); fill:none; stroke-width:2;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" name="q" id="userSearchInput" placeholder="Search by name, phone, email or username..." value="<?=htmlspecialchars($search)?>" class="form-control" style="width:100%; padding-left:48px;" oninput="document.getElementById('userSearchBtn').style.display=this.value.trim()?'inline-flex':'none';">
+        </div>
+        <button type="submit" id="userSearchBtn" class="btn-primary" style="display:<?=$search!==''?'inline-flex':'none'?>; align-items:center; white-space:nowrap;">Search</button>
     </div>
     <div class="filter-tabs">
       <a href="?filter=" class="filter-tab <?=$filter===''?'active':''?>">All Customers</a>
@@ -262,7 +284,7 @@ $stats = db()->query("
       </tr></thead>
       <tbody>
       <?php foreach($data['data'] as $u):?>
-      <tr class="clickable-row" onclick="openDetailModal(<?=$u['id']?>)"">
+      <tr class="clickable-row" onclick="openDetailModal(<?=$u['id']?>)">
         <td style="text-align:center;" onclick="event.stopPropagation()"><input type="checkbox" class="u-checkbox" value="<?=$u['id']?>"></td>
         <td>
             <div class="user-cell">
@@ -366,7 +388,7 @@ function renderDetail(r){
   const u=r.user;curUser=u;
   document.getElementById('detailTitle').innerHTML = `
     <div class="flex items-center gap-3">
-        <div class="u-avatar" style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--primary) 0%,#4F46E5 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;box-shadow:0 4px 12px rgba(99,102,241,0.3);">${strToUpper(u.full_name).substring(0,1)}</div>
+        <div class="u-avatar" style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--primary) 0%,var(--primary) 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;box-shadow:0 4px 12px rgba(255,90,31,0.3);">${strToUpper(u.full_name).substring(0,1)}</div>
         <div>
             <div style="font-size:22px;font-weight:800;color:var(--navy-dark);">${esc(u.full_name)}</div>
             <div class="text-sm text-muted font-semibold" style="margin-top:2px;">ID: #${u.id} &bull; ${esc(u.username||'No Username')}</div>
@@ -556,7 +578,9 @@ function toggleAllCheckboxes(source) {
 
 async function loginAsUser() {
   if(!confirm('You are about to log in as ' + curUser.full_name + '. Continue?')) return;
-  const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','login_as');fd.append('uid',detailUserId);
+  const ap=prompt('Enter your admin password to confirm impersonation:');
+  if(!ap) return showToast('Admin password required to impersonate a user',false);
+  const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','login_as');fd.append('uid',detailUserId);fd.append('admin_password',ap);
   const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
   showToast(r.message,r.success);
   if(r.success) setTimeout(()=>window.location.href='/user/dashboard.php',1000);

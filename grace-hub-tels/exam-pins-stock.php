@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 auth_admin();
+// Mutations below were already gated on manage_pricing, but the page-load
+// rendering of plaintext exam PINs (real resale value) was not gated at all.
+require_permission('manage_pricing');
 
 try {
     db()->exec("CREATE TABLE IF NOT EXISTS exam_pins_stock (
@@ -19,6 +22,11 @@ try {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!verify_admin_csrf($_POST['csrf'] ?? '')) {
         json_response(['success' => false, 'message' => 'Invalid CSRF token'], 403);
+    }
+    // Exam PINs have real resale value and are shown in plaintext on this page —
+    // gate mutations behind the same permission as other pricing/stock pages.
+    if (!has_permission('manage_pricing')) {
+        json_response(['success' => false, 'message' => 'Missing permission: manage_pricing'], 403);
     }
 
     $action = $_POST['action'];
@@ -224,6 +232,8 @@ $pins = $pins->fetchAll(PDO::FETCH_ASSOC);
         .metric-card h4 { margin: 0 0 8px; font-size: 14px; color: #64748b; }
         .metric-card .available { font-size: 28px; font-weight: 800; color: var(--success); }
         .metric-card .used { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .two-col-page { display:grid; grid-template-columns: 1fr 2fr; gap: 24px; align-items: start; }
+        @media (max-width:1024px) { .two-col-page { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -262,7 +272,7 @@ $pins = $pins->fetchAll(PDO::FETCH_ASSOC);
                 <strong>Format:</strong> PIN, Serial (or just PIN if serial is not applicable).
             </p>
 
-            <form id="uploadForm" onsubmit="handleUpload(event)" style="display:grid; grid-template-columns: 1fr 2fr; gap: 24px; align-items: start;">
+            <form id="uploadForm" onsubmit="handleUpload(event)" class="two-col-page">
                 <input type="hidden" name="csrf" value="<?=$csrf?>">
                 <input type="hidden" name="action" value="upload_stock">
 

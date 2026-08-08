@@ -1,6 +1,24 @@
 <?php
 require_once __DIR__ . '/core/auth.php';
 auth_admin();
+require_permission('manage_transactions');
+
+// This bulk-rewrites cost_price/profit for every matching transaction —
+// permission alone doesn't stop a forced-browsing CSRF (e.g. an <img> tag
+// on another page silently GETing this URL in a logged-in admin's browser).
+// Require an explicit CSRF-protected POST confirmation before running it.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $csrf = admin_csrf();
+    echo '<form method="POST" style="font-family:sans-serif;padding:40px;">'
+        . '<h2>Backfill Virtual Card Profit</h2>'
+        . '<p>This will bulk-rewrite cost_price/profit for virtual card transactions missing that data.</p>'
+        . '<input type="hidden" name="csrf" value="' . htmlspecialchars($csrf) . '">'
+        . '<button type="submit">Run Backfill</button>'
+        . '</form>';
+    exit;
+}
+if (!verify_admin_csrf($_POST['csrf'] ?? '')) { http_response_code(403); die('Invalid CSRF token'); }
+
 $updated = 0; $skipped = 0; $errors = [];
 $rows = db()->prepare("SELECT transaction_ref, amount, description, charge FROM transactions WHERE category='virtual_card' AND type='debit' AND cost_price IS NULL");
 $rows->execute();

@@ -3,6 +3,9 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 
 auth_admin();
+// The staff-management.php permission checkbox for this page (view_apilogs)
+// existed but was never actually enforced anywhere.
+require_permission('view_apilogs');
 $csrf = admin_csrf();
 
 $log_dir = realpath(__DIR__ . '/../logs/');
@@ -149,24 +152,25 @@ if ($selected_path && file_exists($selected_path)) {
             flex-wrap: wrap;
             gap: 12px;
             align-items: center;
-            background: #fff;
+            background: var(--surface);
             padding: 16px 20px;
             border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
             margin-bottom: 24px;
         }
         .log-filter-bar select, .log-filter-bar input {
             padding: 10px 14px;
-            border: 1px solid #E2E8F0;
+            border: 1px solid var(--border);
             border-radius: 8px;
             font-size: 14px;
-            color: #334155;
-            background: #F8FAFC;
+            color: var(--text);
+            background: var(--bg);
         }
         .log-filter-bar select:focus, .log-filter-bar input:focus {
             outline: none;
             border-color: var(--primary);
-            background: #fff;
+            background: var(--surface);
         }
         .log-badge {
             display: inline-block;
@@ -176,9 +180,9 @@ if ($selected_path && file_exists($selected_path)) {
             font-weight: 700;
             letter-spacing: 0.5px;
         }
-        .log-badge.fail, .log-badge.error { background: #FEE2E2; color: #DC2626; }
-        .log-badge.success, .log-badge.ok { background: #D1FAE5; color: #059669; }
-        .log-badge.info { background: #E0E7FF; color: #4F46E5; }
+        .log-badge.fail, .log-badge.error { background: rgba(220,38,38,0.1); color: var(--danger); }
+        .log-badge.success, .log-badge.ok { background: rgba(5,150,105,0.1); color: var(--success); }
+        .log-badge.info { background: rgba(37,99,235,0.1); color: var(--info); }
         .code-block {
             background: #0F172A;
             color: #F8FAFC;
@@ -253,7 +257,7 @@ if ($selected_path && file_exists($selected_path)) {
 
 <form method="GET" class="log-filter-bar">
     <div>
-        <label style="font-weight:600; font-size:13px; margin-right:6px; color:#475569;">Select Log File:</label>
+        <label style="font-weight:600; font-size:13px; margin-right:6px; color:var(--text-muted);">Select Log File:</label>
         <select name="log" onchange="this.form.submit()">
             <?php if (empty($log_files)): ?>
             <option value="" disabled selected>No log files found</option>
@@ -265,7 +269,7 @@ if ($selected_path && file_exists($selected_path)) {
         </select>
     </div>
     <div>
-        <label style="font-weight:600; font-size:13px; margin-right:6px; color:#475569;">Filter Level:</label>
+        <label style="font-weight:600; font-size:13px; margin-right:6px; color:var(--text-muted);">Filter Level:</label>
         <select name="status" onchange="this.form.submit()">
             <option value="" <?=$filter_status === '' ? 'selected' : ''?>>All Statuses</option>
             <option value="FAIL" <?=$filter_status === 'FAIL' ? 'selected' : ''?>>Failures / Errors Only</option>
@@ -278,60 +282,58 @@ if ($selected_path && file_exists($selected_path)) {
             <i class="fas fa-search"></i>
         </button>
         <?php if ($search_query !== '' || $filter_status !== ''): ?>
-        <a href="api-logs.php?log=<?=urlencode($selected_log_key)?>" style="background:#E2E8F0; color:#475569; padding:10px 14px; border-radius:8px; text-decoration:none; display:flex; align-items:center;">
+        <a href="api-logs.php?log=<?=urlencode($selected_log_key)?>" class="btn-ghost" style="display:flex; align-items:center;">
             <i class="fas fa-times"></i>
         </a>
         <?php endif; ?>
     </div>
 </form>
 
-<div class="data-panel" style="padding:0; overflow:hidden;">
-    <div style="padding:20px; border-bottom:1px solid #E2E8F0; background:#F8FAFC;">
-        <h3 style="margin:0; font-size:16px; color:#1E293B;">Showing Latest Entries (Max 500)</h3>
-    </div>
-    <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse; text-align:left;">
+<div class="data-panel">
+    <div class="panel-title-bar"><h3>Showing Latest Entries (Max 500)</h3></div>
+    <div class="responsive-grid-wrapper">
+        <table class="data-table">
             <thead>
-                <tr style="background:#F1F5F9; color:#475569; font-size:13px; border-bottom:2px solid #E2E8F0;">
-                    <th style="padding:14px 20px; width:160px;">Timestamp</th>
-                    <th style="padding:14px 20px; width:100px;">Level</th>
-                    <th style="padding:14px 20px; width:220px;">Service / Action</th>
-                    <th style="padding:14px 20px;">Payload / Request Data</th>
-                    <th style="padding:14px 20px;">Response / Error Details</th>
+                <tr>
+                    <th style="width:160px;">Timestamp</th>
+                    <th style="width:100px;">Level</th>
+                    <th style="width:220px;">Service / Action</th>
+                    <th>Payload / Request Data</th>
+                    <th>Response / Error Details</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($entries)): ?>
                 <tr>
-                    <td colspan="5" style="padding:40px; text-align:center; color:#64748B;">
-                        <i class="fas fa-folder-open" style="font-size:32px; margin-bottom:10px; display:block; opacity:0.4;"></i>
+                    <td colspan="5" class="empty-state">
+                        <i class="fas fa-folder-open empty-state-icon"></i>
                         No matching log entries found in this file.
                     </td>
                 </tr>
                 <?php else: ?>
                 <?php foreach ($entries as $row): ?>
-                <tr style="border-bottom:1px solid #F1F5F9; vertical-align:top;">
-                    <td style="padding:16px 20px; font-size:13px; color:#64748B; font-weight:500;">
+                <tr style="vertical-align:top;">
+                    <td class="text-muted" style="font-size:13px;">
                         <i class="far fa-clock" style="margin-right:4px; opacity:0.7;"></i> <?=htmlspecialchars($row['time'])?>
                     </td>
-                    <td style="padding:16px 20px;">
+                    <td>
                         <span class="log-badge <?=strtolower($row['level'])?>"><?=htmlspecialchars($row['level'])?></span>
                     </td>
-                    <td style="padding:16px 20px; font-weight:600; color:#1E293B; font-size:14px;">
+                    <td style="font-weight:600; font-size:14px;">
                         <?=htmlspecialchars($row['title'])?>
                     </td>
-                    <td style="padding:16px 20px; width:30%;">
+                    <td style="width:30%;">
                         <?php if (!empty($row['payload'])): ?>
                         <div class="code-block"><?=htmlspecialchars($row['payload'])?></div>
                         <?php else: ?>
-                        <span style="color:#94A3B8; font-style:italic;">None</span>
+                        <span class="text-muted" style="font-style:italic;">None</span>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:16px 20px; width:35%;">
+                    <td style="width:35%;">
                         <?php if (!empty($row['response'])): ?>
-                        <div class="code-block" style="<?=in_array($row['level'], ['FAIL','ERROR']) ? 'border-left:3px solid #EF4444;' : ''?>"><?=htmlspecialchars($row['response'])?></div>
+                        <div class="code-block" style="<?=in_array($row['level'], ['FAIL','ERROR']) ? 'border-left:3px solid var(--danger);' : ''?>"><?=htmlspecialchars($row['response'])?></div>
                         <?php else: ?>
-                        <span style="color:#94A3B8; font-style:italic;">None</span>
+                        <span class="text-muted" style="font-style:italic;">None</span>
                         <?php endif; ?>
                     </td>
                 </tr>

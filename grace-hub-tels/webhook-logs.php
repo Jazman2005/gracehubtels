@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 auth_admin();
+// Exposes bank account numbers and payment references from every webhook
+// event received — restrict to the same technical-logs permission as
+// api-logs.php rather than any logged-in admin.
+require_permission('view_apilogs');
 $page=max(1,(int)($_GET['page']??1));$per=30;$offset=($page-1)*$per;
 $total=(int)db()->query("SELECT COUNT(*) FROM webhook_logs")->fetchColumn();
 $logs=db()->prepare("SELECT * FROM webhook_logs ORDER BY created_at DESC LIMIT ? OFFSET ?");$logs->execute([$per,$offset]);$logs=$logs->fetchAll();

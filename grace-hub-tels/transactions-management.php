@@ -3,8 +3,11 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 auth_admin();
 $csrf=admin_csrf();
-$is_staff = ($_SESSION['admin_role'] ?? '') === 'support';
-$hide_sensitive = $is_staff && setting('hide_sensitive_from_staff') === '1';
+// See dashboard.php — gate on the granular view_profit permission instead
+// of a role-string check, so this stays consistent with staff-management.php's
+// actual per-admin permissions array (including the CSV export below, which
+// already keys off $hide_sensitive).
+$hide_sensitive = !has_permission('view_profit');
 
 $tab = preg_replace('/[^a-z_]/', '', strtolower($_GET['tab'] ?? 'all'));
 

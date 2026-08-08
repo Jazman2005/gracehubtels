@@ -2,8 +2,13 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 auth_admin();$csrf=admin_csrf();$stats=admin_stats();$admin=get_admin();
-$is_staff = ($_SESSION['admin_role'] ?? '') === 'support';
-$hide_sensitive = $is_staff && setting('hide_sensitive_from_staff') === '1';
+// Gate on the granular view_profit permission (superadmin always passes)
+// rather than a role-string check — the old check only hid profit for
+// role==='support' and ignored the actual permissions array, so a plain
+// 'admin' role always saw profit regardless of whether view_profit was
+// granted, and a 'support' admin explicitly granted view_profit still had
+// it hidden unless the separate hide_sensitive_from_staff setting was off.
+$hide_sensitive = !has_permission('view_profit');
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -133,9 +138,9 @@ $hide_sensitive = $is_staff && setting('hide_sensitive_from_staff') === '1';
   <div class="data-panel">
     <div class="panel-title-bar"><h3>Today by Service</h3></div>
     <div class="cat-list" style="padding:8px">
-      <?php $cat_icons=['wallet_funding'=>'W','airtime'=>'A','data'=>'D','electricity'=>'E','cabletv'=>'C','airtime_to_cash'=>'X','exam_pin'=>'P','recharge_card'=>'R','data_card'=>'K','bank_transfer'=>'B','wallet_transfer'=>'T','cashback'=>'G','admin_credit'=>'+','admin_debit'=>'-'];
-      foreach($stats['categories'] as $c):$ic=$cat_icons[$c['category']]??'?';?>
-      <div class="cat-item"><span class="cat-icon"><?=$ic?></span><div class="cat-info"><span class="cat-name"><?=ucwords(str_replace('_',' ',$c['category']))?></span><span class="cat-cnt"><?=$c['cnt']?> txns<?=$hide_sensitive?'':', ₦'.number_format((float)$c['profit'],0).' profit'?></span></div><span class="cat-vol">₦<?=number_format((float)$c['vol'],0)?></span></div>
+      <?php $cat_icons=['wallet_funding'=>'fa-wallet','airtime'=>'fa-mobile-screen','data'=>'fa-wifi','electricity'=>'fa-bolt','cabletv'=>'fa-tv','airtime_to_cash'=>'fa-money-bill-transfer','exam_pin'=>'fa-graduation-cap','recharge_card'=>'fa-credit-card','data_card'=>'fa-sim-card','bank_transfer'=>'fa-building-columns','wallet_transfer'=>'fa-right-left','cashback'=>'fa-gift','admin_credit'=>'fa-circle-plus','admin_debit'=>'fa-circle-minus'];
+      foreach($stats['categories'] as $c):$ic=$cat_icons[$c['category']]??'fa-circle-question';?>
+      <div class="cat-item"><span class="cat-icon" style="color:var(--primary);"><i class="fas <?=$ic?>"></i></span><div class="cat-info"><span class="cat-name"><?=ucwords(str_replace('_',' ',$c['category']))?></span><span class="cat-cnt"><?=$c['cnt']?> txns<?=$hide_sensitive?'':', ₦'.number_format((float)$c['profit'],0).' profit'?></span></div><span class="cat-vol">₦<?=number_format((float)$c['vol'],0)?></span></div>
       <?php endforeach;if(empty($stats['categories'])):?><div class="empty-state">No transactions today</div><?php endif;?>
     </div>
   </div>
@@ -174,6 +179,6 @@ function toggleSidebar(){document.getElementById('sidebar').classList.toggle('op
 const chartData=<?=json_encode($stats['chart'])?>;
 const labels=chartData.map(d=>d.d);const vols=chartData.map(d=>parseFloat(d.vol));const profits=chartData.map(d=>parseFloat(d.profit));
 const hideProfit=<?=$hide_sensitive?'true':'false'?>;
-new Chart(document.getElementById('volChart'),{type:'bar',data:{labels,datasets:[{label:'Volume',data:vols,backgroundColor:'rgba(79,70,229,0.2)',borderColor:'#4F46E5',borderWidth:2},...(hideProfit?[]:[{label:'Profit',data:profits,backgroundColor:'rgba(5,150,105,0.4)',borderColor:'#059669',borderWidth:2}])]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{family:'Sora',size:11}}}},scales:{x:{grid:{display:false},ticks:{font:{family:'Sora',size:10}}},y:{grid:{color:'#F3F4F6'},ticks:{font:{family:'Sora',size:10},callback:v=>'₦'+v.toLocaleString()}}}}});
+new Chart(document.getElementById('volChart'),{type:'bar',data:{labels,datasets:[{label:'Volume',data:vols,backgroundColor:'rgba(255,90,31,0.18)',borderColor:'#FF5A1F',borderWidth:2},...(hideProfit?[]:[{label:'Profit',data:profits,backgroundColor:'rgba(5,150,105,0.4)',borderColor:'#059669',borderWidth:2}])]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',labels:{font:{family:'Sora',size:11}}}},scales:{x:{grid:{display:false},ticks:{font:{family:'Sora',size:10}}},y:{grid:{color:'#F3F4F6'},ticks:{font:{family:'Sora',size:10},callback:v=>'₦'+v.toLocaleString()}}}}});
 </script>
 </body></html>

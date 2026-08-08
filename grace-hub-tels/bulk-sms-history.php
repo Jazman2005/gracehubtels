@@ -3,6 +3,9 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 
 auth_admin();
+// Exposes recipient phone numbers and message content — same permission
+// used to gate the messaging-hub itself.
+require_permission('manage_messaging');
 
 $history = db()->query("
     SELECT h.*, u.full_name, u.email 
