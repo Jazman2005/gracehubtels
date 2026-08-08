@@ -41,6 +41,12 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
+if (!rate_limit('api_purchase_' . $user['id'], 30, 60)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'message' => 'Too many requests. Please slow down and try again shortly.']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $input['action'] ?? 'submit';
 

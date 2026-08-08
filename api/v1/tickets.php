@@ -45,6 +45,14 @@ if ($method === 'POST') {
     $action = $input['action'] ?? '';
 
     if ($action === 'create') {
+        // Each ticket creation fires an outbound WhatsApp alert to the
+        // support channel — with no throttle, a single account could script
+        // hundreds of tickets per minute and flood/spam that channel.
+        if (!rate_limit('ticket_create_' . $uid, 10, 600)) {
+            http_response_code(429);
+            echo json_encode(['status' => 'error', 'message' => 'Too many tickets created. Please try again later.']);
+            exit;
+        }
         $subject = trim($input['subject'] ?? '');
         $message = trim($input['message'] ?? '');
         $priority = in_array($input['priority'] ?? '', ['low', 'medium', 'high']) ? $input['priority'] : 'medium';

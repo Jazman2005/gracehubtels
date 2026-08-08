@@ -20,6 +20,14 @@ if ($action === 'claim') {
         exit;
     }
 
+    // No throttle here previously let an attacker script brute-force
+    // enumeration of valid promo codes against a single account.
+    if (!rate_limit('promo_claim_' . $user['id'], 10, 600)) {
+        http_response_code(429);
+        echo json_encode(['status' => 'error', 'message' => 'Too many attempts. Please try again later.']);
+        exit;
+    }
+
     try {
         $promo = db()->prepare("SELECT * FROM promo_codes WHERE code=?");
         $promo->execute([$code]);
@@ -54,9 +62,21 @@ if ($action === 'claim') {
                 exit;
             }
 
-            // Claim it
+            // Claim it. The used_count>=usage_limit check above ran before
+            // this transaction started, so it's stale the moment two claims
+            // for the same code race each other — gate the increment itself
+            // on the row still being under its limit so only as many
+            // concurrent claims as remaining slots can ever win, regardless
+            // of how many different accounts race this at once.
             $db->prepare("INSERT INTO promo_claims (user_id, promo_id) VALUES (?, ?)")->execute([$user['id'], $promo['id']]);
-            $db->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=?")->execute([$promo['id']]);
+            $claim = $db->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=? AND used_count < usage_limit");
+            $claim->execute([$promo['id']]);
+            if ($claim->rowCount() === 0) {
+                $db->rollBack();
+                http_response_code(400);
+                echo json_encode(['status' => 'error', 'message' => 'This promo code has reached its usage limit']);
+                exit;
+            }
 
             // Credit wallet
             $credit = credit_wallet($user['id'], (float)$promo['amount'], 'promo_claim', "Claimed Promo Code: $code");
@@ -76,8 +96,9 @@ if ($action === 'claim') {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
+            log_error('promo', 'claim failed: ' . $e->getMessage(), ['user_id' => $user['id'], 'code' => $code]);
             http_response_code(500);
-            echo json_encode(['status' => 'error', 'message' => 'An error occurred: ' . $e->getMessage()]);
+            echo json_encode(['status' => 'error', 'message' => 'An error occurred. Please try again.']);
             exit;
         }
     } catch (PDOException $e) {

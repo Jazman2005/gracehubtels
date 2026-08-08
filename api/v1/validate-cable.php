@@ -9,6 +9,16 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+
+// No throttle here previously let an attacker script mass enumeration of
+// smartcard/IUC numbers to harvest customer names at no cost to themselves,
+// and cost the platform per-lookup fees charged by the upstream biller API.
+if (!rate_limit('validate_lookup_' . $user['id'], 20, 300)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'success' => false, 'message' => 'Too many requests. Please try again later.']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 $cable_id = (int)($input['cable_id'] ?? $input['provider'] ?? 0);

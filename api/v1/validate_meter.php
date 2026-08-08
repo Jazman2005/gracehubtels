@@ -10,6 +10,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+
+// No throttle here previously let an attacker script mass enumeration of
+// meter numbers to harvest customer names/addresses at no cost to
+// themselves, and cost the platform per-lookup fees charged by the
+// upstream biller API.
+if (!rate_limit('validate_lookup_' . $user['id'], 20, 300)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'message' => 'Too many requests. Please try again later.']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 if (empty($input['disco_id']) || empty($input['meter_number']) || empty($input['meter_type'])) {

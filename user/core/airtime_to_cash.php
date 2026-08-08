@@ -39,8 +39,20 @@ class AirtimeToCashService {
         $network=strtoupper(trim($input['network']??''));$phone=sanitize_phone($input['sender_phone']??'');$amount=(float)($input['airtime_amount']??0);
         if(!in_array($network,['MTN','GLO','AIRTEL','9MOBILE']))return['success'=>false,'message'=>'Invalid network'];
         if(!validate_phone($phone))return['success'=>false,'message'=>'Invalid sender phone number'];
+        // Every other money-adjacent action in this app (airtime, data,
+        // cabletv, electricity, exam_pin, recharge_card, data_card,
+        // bank_transfer, internal_transfer, bulk_sms, virtual card
+        // create/fund/withdraw, cashback withdrawal) requires the
+        // transaction PIN before proceeding — this one didn't, so anyone
+        // holding a valid bearer token (without the PIN) could submit A2C
+        // requests as the victim.
+        if(!verify_pin($uid,trim($input['pin']??'')))return['success'=>false,'message'=>'Incorrect transaction PIN'];
+        // Nothing stopped rapid duplicate submissions creating multiple
+        // pending rows for one real airtime transfer, which risked a
+        // double-credit if an admin later approved more than one of them.
+        if(!claim_purchase_lock($uid,'airtime_to_cash',[$network,$phone,$amount]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
         $min=(float)setting('min_a2c_amount','500');$max=(float)setting('max_a2c_amount','50000');
-        if($amount<$min||$amount>$max)return['success'=>false,'message'=>"Amount must be ,{$min}–,{$max}"];
+        if($amount<$min||$amount>$max)return['success'=>false,'message'=>"Amount must be ₦{$min}–₦{$max}"];
         if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input detected'];
         $pr=db()->prepare("SELECT * FROM service_pricing WHERE service='airtime_to_cash' AND network=? AND is_active=1 LIMIT 1");$pr->execute([$network]);$p=$pr->fetch();
         if(!$p)return['success'=>false,'message'=>"A2C not available for {$network}"];
@@ -109,7 +121,7 @@ class AirtimeToCashService {
             try{
                 $lk=db()->prepare("SELECT id,status FROM airtime_to_cash WHERE transaction_ref=? AND status='processing' LIMIT 1 FOR UPDATE");$lk->execute([$ref]);$locked=$lk->fetch();
                 if(!$locked){$db->rollback();return['success'=>false,'message'=>'Transaction already completed'];}
-                $cr=credit_wallet((int)$req['user_id'],$actual,'airtime_to_cash',"A2C: N{$req['airtime_amount']} {$req['network']} → N{$actual}",['a2c_ref'=>$ref,'network'=>$req['network'],'api_ref'=>$api_ref]);
+                $cr=credit_wallet((int)$req['user_id'],$actual,'airtime_to_cash',"A2C: ₦{$req['airtime_amount']} {$req['network']} → ₦{$actual}",['a2c_ref'=>$ref,'network'=>$req['network'],'api_ref'=>$api_ref]);
                 if($cr['success']){
                     $pd['complete_response']=$res;db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,provider_response=?,updated_at=NOW() WHERE transaction_ref=?")->execute([$actual,json_encode($pd),$ref]);
                     $db->commit();
@@ -133,11 +145,11 @@ class AirtimeToCashService {
 </td></tr>
 </table>");
                     }catch(\Throwable$e){}
-                    return['success'=>true,'message'=>"N".number_format($actual,2)." credited to your wallet"];
+                    return['success'=>true,'message'=>"₦".number_format($actual,2)." credited to your wallet"];
                 }
                 $db->rollback();
                 return['success'=>false,'message'=>'Wallet credit failed: '.($cr['message']??'unknown')];
-            }catch(\Throwable$e){$db->rollback();return['success'=>false,'message'=>'Transaction error: '.$e->getMessage()];}
+            }catch(\Throwable$e){$db->rollback();log_error('airtime_to_cash','OTP confirm exception: '.$e->getMessage());return['success'=>false,'message'=>'Transaction error. Please try again or contact support.'];}
         }
         $err='Invalid OTP. Try again.';if(!empty($res['message']))$err=$res['message'];elseif(!empty($res['error']))$err=is_array($res['error'])?json_encode($res['error']):$res['error'];
         return['success'=>false,'message'=>$err];

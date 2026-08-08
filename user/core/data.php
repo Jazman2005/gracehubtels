@@ -60,7 +60,7 @@ class DataService {
         if($ut==='agent'&&$plan['agent_price']>0)$price=(float)$plan['agent_price'];
         if($ut==='vendor'&&$plan['vendor_price']>0)$price=(float)$plan['vendor_price'];
         
-        $promo_code = sanitize($_POST['promo_code']??'', 50);
+        $promo_code = sanitize($input['promo_code']??'', 50);
         $discount = 0;
         $promo_id = 0;
         

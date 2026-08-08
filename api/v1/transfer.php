@@ -11,6 +11,18 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $user = api_auth();
 $uid = (int)$user['id'];
+
+// Covers every action below, including validate_account/validate_internal
+// (which had no throttle at all — an unbounded name-lookup oracle) and
+// bank_transfer/internal_transfer (called directly here rather than through
+// api/v1/bank_transfer.php or internal_transfer.php, so their own rate
+// limits don't cover requests routed through this file).
+if (!rate_limit('api_purchase_' . $uid, 30, 60)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'success' => false, 'message' => 'Too many requests. Please slow down and try again shortly.']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $input['action'] ?? '';
 

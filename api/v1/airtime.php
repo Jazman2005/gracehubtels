@@ -10,6 +10,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+
+// claim_purchase_lock() below only blocks IDENTICAL repeated requests (same
+// signature within a short bucket) — it's not a substitute for a general
+// throughput limit, so a script varying phone/amount slightly on each call
+// could otherwise fire unlimited purchase attempts per second.
+if (!rate_limit('api_purchase_' . $user['id'], 30, 60)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'message' => 'Too many requests. Please slow down and try again shortly.']);
+    exit;
+}
+
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 if (empty($input['network']) || empty($input['phone']) || empty($input['amount'])) {
