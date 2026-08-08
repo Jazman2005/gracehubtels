@@ -192,3 +192,138 @@ function get_plan_bindings(string $service, int $plan_id): array {
     return [];
   }
 }
+
+// Providers whose actual delivery status can be independently confirmed via
+// a real status-check API call (used below in query_provider_status()).
+// Shared between cron_check_vtu.php (frequent polling of recent
+// pending/processing transactions) and cron_refund.php (which must NOT
+// blindly refund a merely-slow transaction without provider confirmation —
+// only providers listed here can ever be resolved automatically; everything
+// else requires a human to check and resolve manually via
+// transaction-details.php).
+const VERIFIABLE_PROVIDERS = ['autosyncng', 'msjdatasubs', 'telecomabode'];
+
+function provider_is_verifiable(string $provider_name): bool {
+    $pname = strtolower($provider_name);
+    foreach (VERIFIABLE_PROVIDERS as $vp) {
+        if (str_contains($pname, $vp)) return true;
+    }
+    return false;
+}
+
+// Queries a provider directly for the real current status of a specific
+// transaction. Returns null when the status is still genuinely unknown
+// (still processing at the provider, or the check itself failed/timed out)
+// — callers must treat null as "don't touch this transaction yet", never as
+// a confirmed outcome either way. Returns ['success'=>bool,'failed'=>bool,...]
+// only when the provider gave an explicit, confident answer.
+function query_provider_status(array $provider_config, array $tx): ?array {
+    $pname = strtolower($provider_config['provider_name'] ?? '');
+    $base = rtrim($provider_config['api_base_url'], '/');
+    $ref = $tx['transaction_ref'];
+    $category = $tx['category'];
+    $meta = json_decode($tx['meta'] ?? '{}', true);
+
+    $headers = ['Content-Type: application/json'];
+    if (!empty($provider_config['api_key'])) $headers[] = 'Authorization: Token ' . $provider_config['api_key'];
+    elseif (!empty($provider_config['api_token'])) $headers[] = 'Authorization: Bearer ' . $provider_config['api_token'];
+
+    // AutoSyncNG: GET /api/v1/status/{request_ref}
+    if (stripos($pname, 'autosyncng') !== false) {
+        $url = "$base/api/v1/status/$ref";
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data = $res ? json_decode($res, true) : null;
+        if (!$data || !in_array($code, [200, 201])) return null;
+
+        $s = strtolower((string)($data['status'] ?? ''));
+        $txStatus = $s;
+        $txStatusNested = $data['data']['transaction']['status'] ?? $data['data']['status'] ?? '';
+        if ($txStatusNested && in_array(strtolower((string)$txStatusNested), ['pending', 'processing', 'queued'])) $txStatus = strtolower((string)$txStatusNested);
+        elseif ($txStatusNested && in_array(strtolower((string)$txStatusNested), ['success', 'fulfilled', 'completed', 'delivered'])) $txStatus = strtolower((string)$txStatusNested);
+        elseif ($txStatusNested && in_array(strtolower((string)$txStatusNested), ['failed', 'error', 'declined', 'reversed'])) $txStatus = strtolower((string)$txStatusNested);
+        if ($txStatus === 'success' || $txStatus === 'fulfilled' || $txStatus === 'completed' || $txStatus === 'delivered') {
+            $d2 = $data['data'] ?? [];
+            $token = $data['token'] ?? $data['pin'] ?? $data['meter_token'] ?? ''
+                ?? $d2['token'] ?? $d2['pin'] ?? $d2['meter_token'] ?? $d2['vtoken']
+                ?? $d2['transaction']['token'] ?? $d2['transaction']['pin'] ?? $d2['transaction']['main_token'];
+            return ['success' => true, 'failed' => false, 'token' => $token, 'message' => $data['message'] ?? $data['msg'] ?? $d2['message'] ?? '', 'provider_ref' => $data['id'] ?? $d2['id'] ?? $d2['transaction']['reference'] ?? ''];
+        }
+        if ($txStatus === 'failed' || $txStatus === 'error' || $txStatus === 'declined' || $txStatus === 'reversed') {
+            return ['success' => false, 'failed' => true, 'token' => '', 'message' => $data['message'] ?? $data['error'] ?? $data['data']['transaction']['details'] ?? $data['data']['message'] ?? 'Provider declined', 'provider_ref' => ''];
+        }
+        return null; // Still pending
+    }
+
+    // MsjDataSubs: POST /api/status/ with ref
+    if (stripos($pname, 'msjdatasubs') !== false) {
+        $url = "$base/api/status/";
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode(['ref' => $ref, 'service' => $category]),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data = $res ? json_decode($res, true) : null;
+        if (!$data || !in_array($code, [200, 201])) return null;
+
+        $s = strtolower((string)($data['status'] ?? $data['success'] ?? ''));
+        if (in_array($s, ['success', 'true', '1', 'completed', 'fulfilled'])) {
+            $token = $data['token'] ?? $data['pin'] ?? $data['meter_token'] ?? '';
+            return ['success' => true, 'failed' => false, 'token' => $token, 'message' => $data['message'] ?? $data['msg'] ?? '', 'provider_ref' => $data['id'] ?? $data['ref'] ?? ''];
+        }
+        if (in_array($s, ['failed', 'false', '0', 'error', 'declined'])) {
+            return ['success' => false, 'failed' => true, 'token' => '', 'message' => $data['message'] ?? $data['error'] ?? 'Provider declined', 'provider_ref' => ''];
+        }
+        return null;
+    }
+
+    // TelecomAbode: POST /api/status/ with ref
+    if (stripos($pname, 'telecomabode') !== false) {
+        $url = "$base/api/status/";
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode(['ref' => $ref, 'transaction_ref' => $ref]),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data = $res ? json_decode($res, true) : null;
+        if (!$data || !in_array($code, [200, 201])) return null;
+
+        $s = strtolower((string)($data['status'] ?? $data['success'] ?? $data['message'] ?? ''));
+        if (in_array($s, ['success', 'true', '1', 'completed', 'fulfilled', 'delivered'])) {
+            $token = $data['token'] ?? $data['pin'] ?? $data['meter_token'] ?? '';
+            return ['success' => true, 'failed' => false, 'token' => $token, 'message' => $data['message'] ?? $data['msg'] ?? '', 'provider_ref' => $data['id'] ?? $data['ref'] ?? ''];
+        }
+        if (in_array($s, ['failed', 'false', '0', 'error', 'declined'])) {
+            return ['success' => false, 'failed' => true, 'token' => '', 'message' => $data['message'] ?? $data['error'] ?? 'Provider declined', 'provider_ref' => ''];
+        }
+        return null;
+    }
+
+    // Unknown provider - cannot check status
+    return null;
+}

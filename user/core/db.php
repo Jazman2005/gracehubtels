@@ -1,6 +1,15 @@
 <?php
 declare(strict_types=1);
 
+// Never leak error details (stack traces, file paths, SQL fragments) to
+// visitors on ANY request — the AJAX-only suppression below only covered
+// XHR/JSON requests, leaving every normal page load exposed to whatever
+// display_errors happens to be set to in php.ini. Errors are still written
+// to LOG_DIR/php_errors.log for debugging.
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+
 // Suppress errors for AJAX to prevent JSON corruption
 $is_ajax_req = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') || 
                (isset($_SERVER['HTTP_ACCEPT']) && strpos(strtolower($_SERVER['HTTP_ACCEPT']), 'application/json') !== false) || 
@@ -53,7 +62,7 @@ $log_channels = [
     'api_rechargecardapi', 'api_examapi', 'api_apicashwyre',
     'api_onesignalapi', 'api_gladtidings',
     'security', 'transactions', 'auth', 'wallet', 'notifications',
-    'cashback', 'kyc', 'email', 'palmpay_api', 'webhook_palmpay'
+    'cashback', 'kyc', 'email', 'palmpay_api', 'webhook_palmpay', 'contact'
 ];
 
 foreach ($log_channels as $channel) {
@@ -157,6 +166,26 @@ function claim_idempotency_key(string $key): bool
         log_error('db', 'claim_idempotency_key failed: ' . $e->getMessage(), ['key' => $key]);
         return false;
     }
+}
+
+// Guards every purchase entrypoint against double-click / client-retry
+// double-processing BEFORE any money moves — debit_wallet() itself accepts no
+// idempotency key, and none of the purchase services checked for an
+// already-in-flight identical request, so two near-simultaneous submissions
+// of the same purchase (double-click, a browser retrying a "failed" request
+// that actually just timed out, a replayed AJAX call) each independently
+// passed CSRF + rate_limit() and produced two real debits. Builds a key from
+// the user + category + the caller-supplied signature fields (e.g.
+// phone+network+amount), bucketed into a short time window: two submissions
+// of the *same* purchase within that window collide and the second is
+// rejected outright before debit_wallet() is ever called; a genuine repeat
+// purchase seconds later (different bucket) is unaffected. Call this as the
+// very first thing in a service's process(), right after input validation.
+function claim_purchase_lock(int $uid, string $category, array $signature_fields, int $window_seconds = 5): bool
+{
+    $bucket = (int) floor(time() / $window_seconds);
+    $key = 'purchase:' . $category . ':' . $uid . ':' . md5(json_encode($signature_fields)) . ':' . $bucket;
+    return claim_idempotency_key($key);
 }
 
 function sanitize(string $value, int $max = 500): string
@@ -547,10 +576,17 @@ function notify_user(int $user_id, string $title, string $message, string $type 
              VALUES (?, ?, ?, ?, ?)"
         )->execute([$user_id, $title, $message, $type, $url]);
         
-        // Also send email
+        // Also send email. $title/$message are plain text everywhere in this
+        // codebase (no caller embeds real HTML), but a few paths — the vtu webhook
+        // and cron_check_vtu.php's provider-status poll — forward a raw upstream
+        // provider "message"/"details" string here. Escape before it lands in the
+        // HTML email body so a malicious/spoofed provider response can't inject
+        // markup into a real customer's inbox. The in-app notifications feed and
+        // push payload are unaffected — both are stored/sent as plain text already
+        // and escape independently at their own render points.
         $user = get_user($user_id);
         if ($user && !empty($user['email'])) {
-            send_email($user['email'], $title, $message);
+            send_email($user['email'], htmlspecialchars($title, ENT_QUOTES), htmlspecialchars($message, ENT_QUOTES));
         }
         
         // Notify admin for funding events (covers webhooks, admin manual funding, etc.)
@@ -773,7 +809,13 @@ function check_transaction_limits(int $user_id, float $amount, string $category,
         $global_limit = (float)$custom_daily;
     } else {
         $role = $user_data['user_type'] ?? 'regular';
-        $global_limit = (float)setting("limit_daily_{$role}", $role === 'vendor' ? '1000000' : ($role === 'agent' ? '200000' : '50000'));
+        // Setting key uses 'user' for the regular tier (matches check_daily_limit()
+        // and the admin Settings/Transaction Limits UI) — 'regular' itself is never
+        // written anywhere, so using it here silently ignored the admin-configured
+        // limit for every non-bank_transfer/betting/bulk_sms/cabletv/internal_transfer
+        // debit (airtime, data, electricity, exam_pin, virtual cards, ...).
+        $setting_role = $role === 'regular' ? 'user' : $role;
+        $global_limit = (float)setting("limit_daily_{$setting_role}", $role === 'vendor' ? '1000000' : ($role === 'agent' ? '200000' : '50000'));
     }
     
     if ($global_limit > 0 && $proposed_spent > $global_limit) {
@@ -991,28 +1033,47 @@ function refund_failed_transaction(string $ref, int $uid, float $amount, string 
     if (!$in_transaction) {
         $db->beginTransaction();
     }
-    
+
     try {
+        // Atomically claim this transaction BEFORE touching the wallet at all —
+        // this used to credit the wallet unconditionally with no check on the
+        // transaction's current status, so two concurrent/duplicate calls for
+        // the same ref (a webhook and a cron timeout-sweep both firing for the
+        // same stuck transaction, or a retried request) would each credit the
+        // wallet separately: a real double-refund. This UPDATE is the single
+        // atomic gate — only the caller that actually flips the row from
+        // pending/processing to failed proceeds; everyone else sees
+        // rowCount()===0 and must treat it as already handled, exactly like
+        // update_tx_status()'s guard.
+        $claim = $db->prepare("UPDATE transactions SET status = 'failed', updated_at = NOW() WHERE transaction_ref = ? AND user_id = ? AND status IN ('pending','processing')");
+        $claim->execute([$ref, $uid]);
+        if ($claim->rowCount() === 0) {
+            if (!$in_transaction) $db->rollBack();
+            log_info('wallet', 'refund_failed_transaction: ref already resolved, skipping duplicate refund', ['ref' => $ref, 'uid' => $uid]);
+            return ['success' => false, 'duplicate' => true, 'message' => 'Transaction already resolved'];
+        }
+
         $stmt = $db->prepare("SELECT wallet_balance FROM users WHERE id = ? AND is_active = 1 FOR UPDATE");
         $stmt->execute([$uid]);
         $user = $stmt->fetch();
         if (!$user) throw new RuntimeException('User not found');
-        
-        $new_balance = (float)$user['wallet_balance'] + $amount;
+
+        $balance_before = (float)$user['wallet_balance'];
+        $new_balance = $balance_before + $amount;
         $db->prepare("UPDATE users SET wallet_balance = ? WHERE id = ?")->execute([$new_balance, $uid]);
-        
-        $sql = "UPDATE transactions SET status = 'failed', balance_after = ?, updated_at = NOW()";
+
+        $sql = "UPDATE transactions SET balance_after = ?, updated_at = NOW()";
         if ($err_msg !== '') {
             $sql .= ", meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?)";
             $db->prepare($sql . " WHERE transaction_ref = ?")->execute([$new_balance, $err_msg, $ref]);
         } else {
             $db->prepare($sql . " WHERE transaction_ref = ?")->execute([$new_balance, $ref]);
         }
-        
+
         if (!$in_transaction) $db->commit();
-        
+
         log_transaction($ref, $uid, 'SILENT_REFUND', ['amount' => $amount, 'reason' => 'Transaction failed']);
-        notify_user($uid, 'Transaction Failed', "Your transaction was unsuccessful and ₦".number_format($amount, 2)." has been refunded. Reason: " . ($err_msg ?: 'Failed'), 'danger', "/user/receipt.php?ref=$ref", (float)$user['wallet_balance'], $new_balance);
+        notify_user($uid, 'Transaction Failed', "Your transaction was unsuccessful and ₦".number_format($amount, 2)." has been refunded. Reason: " . ($err_msg ?: 'Failed'), 'danger', "/user/receipt.php?ref=$ref", $balance_before, $new_balance);
         return ['success' => true];
     } catch (\Throwable $e) {
         if (!$in_transaction) {
@@ -1105,18 +1166,19 @@ function apply_cashback(int $user_id, float $amount, string $service, ?string $n
                 if ($earned <= 0) return 0;
                 // Per-plan cashback has no cap — use value as-is
                 $db = db();
-                $db->beginTransaction();
+                $in_tx = $db->inTransaction();
+                if (!$in_tx) $db->beginTransaction();
                 $stmt = $db->prepare("SELECT cashback_balance FROM users WHERE id = ? FOR UPDATE");
                 $stmt->execute([$user_id]);
                 $user = $stmt->fetch();
-                if (!$user) { $db->rollBack(); return 0; }
+                if (!$user) { if (!$in_tx) $db->rollBack(); return 0; }
                 $balance_before = (float)$user['cashback_balance'];
                 $balance_after = $balance_before + $earned;
                 $db->prepare("UPDATE users SET cashback_balance = ? WHERE id = ?")->execute([$balance_after, $user_id]);
                 $ref = generate_ref('CB');
                 $description = "Cashback: {$service}" . ($network ? " ({$network})" : '') . " (plan)";
                 $db->prepare("INSERT INTO transactions (user_id, transaction_ref, type, category, amount, balance_before, balance_after, description, status, ip_address) VALUES (?, ?, 'credit', 'cashback', ?, ?, ?, ?, 'success', ?)")->execute([$user_id, $ref, $earned, $balance_before, $balance_after, $description, get_ip()]);
-                $db->commit();
+                if (!$in_tx) $db->commit();
                 notify_user($user_id, 'Cashback Earned', '₦' . number_format($earned, 2) . " cashback on your {$service}.", 'success');
                 return $earned;
             }
@@ -1148,52 +1210,54 @@ function apply_cashback(int $user_id, float $amount, string $service, ?string $n
         }
         
         $db = db();
-        $db->beginTransaction();
-        
+        $in_tx = $db->inTransaction();
+        if (!$in_tx) $db->beginTransaction();
+
         // Lock user record
         $stmt = $db->prepare("SELECT cashback_balance FROM users WHERE id = ? FOR UPDATE");
         $stmt->execute([$user_id]);
         $user = $stmt->fetch();
-        
+
         if (!$user) {
-            $db->rollBack();
+            if (!$in_tx) $db->rollBack();
             return 0;
         }
-        
+
         $balance_before = (float)$user['cashback_balance'];
         $balance_after = $balance_before + $earned;
-        
+
         // Update cashback balance
         $db->prepare("UPDATE users SET cashback_balance = ? WHERE id = ?")
            ->execute([$balance_after, $user_id]);
-        
+
         // Record transaction
         $ref = generate_ref('CB');
         $description = "Cashback: {$service}" . ($network ? " ({$network})" : '');
-        
+
         $db->prepare(
             "INSERT INTO transactions (
-                user_id, transaction_ref, type, category, amount, 
+                user_id, transaction_ref, type, category, amount,
                 balance_before, balance_after, description, status, ip_address
             ) VALUES (?, ?, 'credit', 'cashback', ?, ?, ?, ?, 'success', ?)"
         )->execute([
-            $user_id, $ref, $earned, $balance_before, 
+            $user_id, $ref, $earned, $balance_before,
             $balance_after, $description, get_ip()
         ]);
-        
-        $db->commit();
+
+        if (!$in_tx) $db->commit();
         
         // Notify user
         notify_user(
             $user_id,
             'Cashback Earned',
-            ',' . number_format($earned, 2) . " cashback on your {$service}.",
+            '₦' . number_format($earned, 2) . " cashback on your {$service}.",
             'success'
         );
         
         return $earned;
-        
+
     } catch (PDOException $e) {
+        try { if (db()->inTransaction()) db()->rollBack(); } catch (\Throwable $t) {}
         log_error('cashback', $e->getMessage());
         return 0;
     }
