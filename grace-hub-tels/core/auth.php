@@ -125,6 +125,22 @@ function login_admin(string $email,string $password):array{
         last_seen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uniq_admin_device (admin_id, device_hash)
     )");}catch(\Throwable$e){}
+    // generate_admin_otp()/verify_admin_otp() below require this table, which
+    // was never actually created anywhere — the new-device OTP flow was
+    // never exercised in practice until is_known_device() above started
+    // failing closed, at which point every login hit an uncaught
+    // "table doesn't exist" error. Auto-create it here, same pattern as
+    // admin_known_devices above.
+    try{db()->exec("CREATE TABLE IF NOT EXISTS admin_otps (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        admin_id INT NOT NULL,
+        otp_code VARCHAR(10) NOT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent VARCHAR(400) DEFAULT NULL,
+        used TINYINT(1) NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME NOT NULL
+    )");}catch(\Throwable$e){}
 
     $s=db()->prepare("SELECT * FROM admin WHERE email=? AND is_active=1 LIMIT 1");
     $s->execute([$email]);

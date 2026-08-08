@@ -753,6 +753,12 @@ function send_email(string $to, string $subject, string $body): bool
             try {
                 $mail = new PHPMailer\PHPMailer\PHPMailer(true);
                 $mail->isSMTP();
+                // Without a cap, an unreachable/slow SMTP host can hang this
+                // call for minutes (PHPMailer's own default), blocking
+                // whatever synchronous flow triggered the email — e.g. the
+                // admin OTP login step, which never reaches its redirect
+                // until send_email() returns.
+                $mail->Timeout = 8;
                 $mail->Host = $smtp_host; $mail->SMTPAuth = true;
                 $mail->Username = $smtp_user; $mail->Password = $smtp_pass;
                 $mail->SMTPSecure = $use_tls ? 'tls' : 'ssl';
