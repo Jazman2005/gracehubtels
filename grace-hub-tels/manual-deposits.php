@@ -11,25 +11,46 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     $id = (int)($_POST['id'] ?? 0);
     
     if($action === 'approve_deposit' || $action === 'reject_deposit'){
-        $req = db()->prepare("SELECT * FROM manual_funding_requests WHERE id=? AND status='pending'");
+        // Fetch for display/notify purposes only — the actual claim (below) is
+        // what makes this race-safe, not this read.
+        $req = db()->prepare("SELECT * FROM manual_funding_requests WHERE id=?");
         $req->execute([$id]);
         $row = $req->fetch();
-        if(!$row) json_response(['success'=>false,'message'=>'Request not found or already processed']);
-        
+        if(!$row) json_response(['success'=>false,'message'=>'Request not found']);
+
         $user = get_user((int)$row['user_id']);
-        
+        $new_status = $action === 'approve_deposit' ? 'approved' : 'rejected';
+
+        // Atomically claim this request BEFORE crediting anything. Previously
+        // the pending-check was a plain unlocked SELECT shared by both
+        // approve and reject, and the wallet credit fired before the row was
+        // ever marked non-pending — two concurrent approve clicks (or an
+        // approve racing a reject) could both pass the check and both credit
+        // the wallet / both act, leaving the request's final status
+        // inconsistent with what actually happened to the money. This UPDATE
+        // is the single atomic gate: only the request that flips
+        // pending -> approved/rejected here is allowed to proceed.
+        $claim = db()->prepare("UPDATE manual_funding_requests SET status=? WHERE id=? AND status='pending'");
+        $claim->execute([$new_status, $id]);
+        if ($claim->rowCount() === 0) {
+            json_response(['success'=>false,'message'=>'Request not found or already processed']);
+        }
+
         if($action === 'approve_deposit') {
-            $res = credit_wallet((int)$row['user_id'], (float)$row['amount'], 'wallet_funding', 'Manual Funding via Bank Transfer', ['manual_deposit_id'=>$id]);
+            $res = credit_wallet((int)$row['user_id'], (float)$row['amount'], 'wallet_funding', 'Manual Funding via Bank Transfer', ['manual_deposit_id'=>$id], 'manual_deposit:'.$id);
             if($res['success']) {
-                db()->prepare("UPDATE manual_funding_requests SET status='approved' WHERE id=?")->execute([$id]);
                 notify_user((int)$row['user_id'], 'Deposit Approved', 'Your manual deposit of ₦'.number_format($row['amount'], 2).' has been approved and credited', 'success', null, $res['balance_before'], $res['balance_after']);
                 send_whatsapp_alert("✅ *Manual Deposit Approved*\nUser: " . ($user['full_name'] ?? 'Unknown') . " (" . ($user['email'] ?? $user['phone'] ?? '') . ")\nAmount: ₦" . number_format((float)$row['amount'], 2) . "\nRef: " . ($res['ref'] ?? 'N/A'));
                 json_response(['success'=>true,'message'=>'Deposit approved and wallet credited']);
             } else {
-                json_response(['success'=>false,'message'=>'Failed to credit wallet']);
+                // Crediting failed (or the idempotency key was somehow already
+                // used) after we already claimed the request — release the
+                // claim back to pending so it can be retried/investigated
+                // rather than leaving it stuck 'approved' with no actual credit.
+                db()->prepare("UPDATE manual_funding_requests SET status='pending' WHERE id=?")->execute([$id]);
+                json_response(['success'=>false,'message'=>$res['duplicate'] ?? false ? 'This deposit was already credited' : 'Failed to credit wallet']);
             }
         } elseif($action === 'reject_deposit') {
-            db()->prepare("UPDATE manual_funding_requests SET status='rejected' WHERE id=?")->execute([$id]);
             notify_user((int)$row['user_id'], 'Deposit Rejected', 'Your manual deposit of ₦'.number_format($row['amount'], 2).' could not be verified. Please contact support.', 'danger');
             send_whatsapp_alert("❌ *Manual Deposit Rejected*\nUser: " . ($user['full_name'] ?? 'Unknown') . " (" . ($user['email'] ?? $user['phone'] ?? '') . ")\nAmount: ₦" . number_format((float)$row['amount'], 2) . "\nSender: " . ($row['sender_name'] ?? 'N/A'));
             json_response(['success'=>true,'message'=>'Deposit rejected']);

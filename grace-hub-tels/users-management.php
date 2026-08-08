@@ -28,8 +28,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if(in_array($action,$sensitive_actions,true))require_permission('manage_users');
     if($action==='suspend'){db()->prepare("UPDATE users SET is_suspended=1,suspension_reason=? WHERE id=?")->execute([sanitize($_POST['reason']??'Policy violation',255),$uid]);json_response(['success'=>true,'message'=>'User suspended']);}
     if($action==='unsuspend'){db()->prepare("UPDATE users SET is_suspended=0,suspension_reason=NULL WHERE id=?")->execute([$uid]);json_response(['success'=>true,'message'=>'User reinstated']);}
-    if($action==='credit'){$amt=(float)($_POST['amount']??0);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);$r=credit_wallet($uid,$amt,'admin_credit','Admin credit: '.sanitize($_POST['note']??'',200));json_response($r);}
-    if($action==='debit'){$amt=(float)($_POST['amount']??0);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);$r=debit_wallet($uid,$amt,'admin_debit','Admin debit: '.sanitize($_POST['note']??'',200));if($r['success'])update_tx_status($r['ref'],'success');json_response($r);}
+    // claim_purchase_lock() here guards against an admin double-clicking
+    // Credit/Debit (or a duplicated AJAX submit) firing the same amount
+    // twice in quick succession — credit_wallet()/debit_wallet() have no
+    // idempotency key of their own and this is a brand-new transaction each
+    // call, not a resolution of an existing pending one, so nothing else
+    // would have caught a duplicate here.
+    if($action==='credit'){$amt=(float)($_POST['amount']??0);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);if(!claim_purchase_lock($uid,'admin_credit',[$amt,sanitize($_POST['note']??'',200)]))json_response(['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.']);$r=credit_wallet($uid,$amt,'admin_credit','Admin credit: '.sanitize($_POST['note']??'',200));json_response($r);}
+    if($action==='debit'){$amt=(float)($_POST['amount']??0);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);if(!claim_purchase_lock($uid,'admin_debit',[$amt,sanitize($_POST['note']??'',200)]))json_response(['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.']);$r=debit_wallet($uid,$amt,'admin_debit','Admin debit: '.sanitize($_POST['note']??'',200));if($r['success'])update_tx_status($r['ref'],'success');json_response($r);}
     if($action==='reset_pin'){db()->prepare("UPDATE users SET transaction_pin=NULL,pin_attempts=0,pin_locked_until=NULL WHERE id=?")->execute([$uid]);notify_user($uid,'PIN Reset','Your transaction PIN has been reset by admin. Set a new PIN.','info');json_response(['success'=>true,'message'=>'PIN reset']);}
 
     if($action==='change_password'){
@@ -129,8 +135,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
             $id = (int)$id;
             if($b_action==='suspend') { db()->prepare("UPDATE users SET is_suspended=1, suspension_reason='Bulk suspension' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='unsuspend') { db()->prepare("UPDATE users SET is_suspended=0, suspension_reason=NULL WHERE id=?")->execute([$id]); $count++; }
-            if($b_action==='credit') { credit_wallet($id, (float)($_POST['amount']??0), 'admin_credit', 'Bulk admin credit'); $count++; }
-            if($b_action==='debit') { debit_wallet($id, (float)($_POST['amount']??0), 'admin_debit', 'Bulk admin debit'); $count++; }
+            if($b_action==='credit') { if(claim_purchase_lock($id,'admin_credit_bulk',[(float)($_POST['amount']??0)])){ credit_wallet($id, (float)($_POST['amount']??0), 'admin_credit', 'Bulk admin credit'); $count++; } }
+            if($b_action==='debit') { if(claim_purchase_lock($id,'admin_debit_bulk',[(float)($_POST['amount']??0)])){ debit_wallet($id, (float)($_POST['amount']??0), 'admin_debit', 'Bulk admin debit'); $count++; } }
             if($b_action==='upgrade_vendor') { db()->prepare("UPDATE users SET user_type='vendor' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='downgrade_regular') { db()->prepare("UPDATE users SET user_type='regular' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='delete') {

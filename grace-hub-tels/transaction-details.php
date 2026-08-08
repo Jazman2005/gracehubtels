@@ -14,7 +14,13 @@ $msg = '';
 
 // Handle Status Change
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'edit_tx_status') {
-    if (!verify_admin_csrf($_POST['csrf'] ?? '')) {
+    // Overriding a transaction's status — and, for fail_refund/success_debit,
+    // crediting or debiting the user's wallet directly — is real money movement
+    // on an arbitrary transaction. Requires the same permission Staff Management
+    // already defines for exactly this ("Edit/Refund Txns").
+    if (!has_permission('manage_transactions')) {
+        $msg = '<div class="save-toast err show">Missing permission: manage_transactions</div>';
+    } elseif (!verify_admin_csrf($_POST['csrf'] ?? '')) {
         $msg = '<div class="save-toast err show">Invalid CSRF token</div>';
     } else {
         $status_action = $_POST['status_action'] ?? '';
@@ -28,16 +34,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 $tx = $stmt->fetch();
                 
                 if (!$tx) throw new RuntimeException("Transaction not found.");
-                
+
+                // The SELECT ... FOR UPDATE above does serialize truly
+                // simultaneous submissions (the second blocks until the first
+                // commits), but without this check it would then still
+                // blindly re-apply the action once unblocked — e.g. two
+                // admin clicks on "Refund", or a click landing right after a
+                // webhook/cron already resolved this same ref, would credit
+                // the wallet a second time on top of the first. Only allow
+                // these transitions from a not-yet-final state.
+                if (!in_array($tx['status'], ['pending', 'processing'], true)) {
+                    throw new RuntimeException("Transaction already resolved (current status: {$tx['status']}) — refusing to re-apply.");
+                }
+
                 $uid = (int)$tx['user_id'];
                 $amt = (float)$tx['amount'];
-                
+
                 if ($status_action === 'fail_only') {
                     $db->prepare("UPDATE transactions SET status = 'failed' WHERE transaction_ref = ?")->execute([$ref]);
                     audit_log($_SESSION['admin_id'], 'UPDATE_TX', "Marked TX $ref as Failed.");
                 } elseif ($status_action === 'fail_refund') {
                     $db->prepare("UPDATE transactions SET status = 'failed' WHERE transaction_ref = ?")->execute([$ref]);
-                    $res = credit_wallet($uid, $amt, 'refund', 'Refund for failed transaction: ' . $ref);
+                    $res = credit_wallet($uid, $amt, 'refund', 'Refund for failed transaction: ' . $ref, [], 'admin_refund:'.$ref);
                     if (!$res['success']) throw new RuntimeException("Refund failed: " . $res['message']);
                     audit_log($_SESSION['admin_id'], 'UPDATE_TX', "Marked TX $ref as Failed and Refunded N$amt.");
                 } elseif ($status_action === 'success_only') {

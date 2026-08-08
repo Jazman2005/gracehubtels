@@ -58,8 +58,33 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if($action==='credit'){
         $ref=$_POST['ref']??'';$amount=(float)($_POST['amount']??0);
         if(!$ref||$amount<=0)json_response(['success'=>false,'message'=>'Invalid request'],400);
-        $s=db()->prepare("SELECT * FROM airtime_to_cash WHERE transaction_ref=? AND status IN ('pending','processing') LIMIT 1");$s->execute([$ref]);$req=$s->fetch();
-        $ok=false;if($req){$r=credit_wallet((int)$req['user_id'],$amount,'airtime_to_cash',"A2C: N{$req['airtime_amount']} {$req['network']} - N{$amount}",['a2c_ref'=>$ref,'network'=>$req['network']]);if($r['success']){db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,updated_at=NOW() WHERE transaction_ref=?")->execute([$amount,$ref]);notify_user((int)$req['user_id'],'A2C Credited',number_format($amount,2)." credited for your {$req['network']} airtime",'success',null,$r['balance_before'],$r['balance_after']);$ok=true;}}
+        // Atomically claim this A2C request BEFORE crediting anything.
+        // Previously this was a plain unlocked SELECT ... WHERE status IN
+        // ('pending','processing') — unlike AirtimeToCashService::credit_confirmed()
+        // (the webhook-driven path), which correctly locks the row inside a
+        // transaction, this admin action had no such guard: a double-click
+        // here, or this action landing at the same moment the Autopilot
+        // webhook resolves the very same ref, could both pass the check and
+        // both credit the wallet. This UPDATE is the single atomic gate.
+        $claim=db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,updated_at=NOW() WHERE transaction_ref=? AND status IN ('pending','processing')");
+        $claim->execute([$amount,$ref]);
+        $ok=false;
+        if($claim->rowCount()>0){
+            $s=db()->prepare("SELECT * FROM airtime_to_cash WHERE transaction_ref=? LIMIT 1");$s->execute([$ref]);$req=$s->fetch();
+            if($req){
+                $r=credit_wallet((int)$req['user_id'],$amount,'airtime_to_cash',"A2C: N{$req['airtime_amount']} {$req['network']} - N{$amount}",['a2c_ref'=>$ref,'network'=>$req['network']],'a2c:'.$ref);
+                if($r['success']){
+                    notify_user((int)$req['user_id'],'A2C Credited',number_format($amount,2)." credited for your {$req['network']} airtime",'success',null,$r['balance_before'],$r['balance_after']);
+                    $ok=true;
+                } else {
+                    // Crediting failed (or the idempotency key was already
+                    // used) after we already claimed the request — release
+                    // the claim back to pending rather than leaving it stuck
+                    // 'success' with no actual credit.
+                    db()->prepare("UPDATE airtime_to_cash SET status='pending' WHERE transaction_ref=?")->execute([$ref]);
+                }
+            }
+        }
         if($ok){$s=db()->prepare("SELECT a.*, u.full_name, u.email, u.phone FROM airtime_to_cash a JOIN users u ON a.user_id=u.id WHERE a.transaction_ref=? LIMIT 1");$s->execute([$ref]);$r=$s->fetch();if($r) send_whatsapp_alert("💰 *A2C Credited!*\nUser: ".($r['full_name']??'Unknown')." (".($r['email']??$r['phone']??'').")\nNetwork: {$r['network']}\nAmount Credited: ₦".number_format($amount,2)."\nRef: {$ref}");
         if($r)try{notify_admin('A2C Credited (Admin)',"
 <div style='text-align:center;padding:10px 0 16px;'>

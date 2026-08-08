@@ -26,17 +26,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
     $total = $amount + $charge;
 
     if ($action === 'approve') {
+        // Atomically claim this withdrawal BEFORE calling the live PalmPay
+        // transfer API. Previously the transfer fired first and
+        // update_tx_status() only ran (with its return value discarded)
+        // *after* a successful response came back — two concurrent approve
+        // requests for the same ref (double-click, two admin tabs, a
+        // duplicate AJAX retry) could both pass the initial unlocked SELECT
+        // and both execute a real bank transfer for the same withdrawal
+        // before either write landed. This UPDATE is the single atomic gate:
+        // only the request that flips pending -> processing here is allowed
+        // to call the transfer API at all; a loser sees rowCount()===0 and
+        // must not send anything.
+        $claim = db()->prepare("UPDATE transactions SET status='processing', updated_at=NOW() WHERE transaction_ref=? AND status='pending'");
+        $claim->execute([$ref]);
+        if ($claim->rowCount() === 0) {
+            json_response(['success'=>false,'message'=>'Transaction already processed']);
+        }
+
         // Execute the PalmPay transfer
         $api = new PalmPayAPI();
-        if (!$api->is_configured()) json_response(['success'=>false,'message'=>'PalmPay not configured']);
+        if (!$api->is_configured()) {
+            update_tx_status($ref, 'pending'); // release the claim — nothing was sent
+            json_response(['success'=>false,'message'=>'PalmPay not configured']);
+        }
         $notify = 'https://www.gracehubtels.com/webhook/palmpay/index.php';
         $res = $api->transfer($ref, $meta['payee_name'] ?? '', $meta['bank_code'], $meta['account_number'], $tx['phone'], $amount, $notify, $meta['narration'] ?? '');
         if ($res && ($res['respCode']??'') === '00000000') {
-            update_tx_status($ref, 'success', $res['data']['orderNo'] ?? null);
-            $cb = apply_cashback($tx['user_id'], $amount, 'bank_transfer', null);
-            notify_user($tx['user_id'], 'Transfer Successful', number_format($amount,2) . " sent to " . ($meta['bank_code']??'') . " - " . ($meta['account_number']??'') . ".", 'success');
-            send_whatsapp_alert("✅ *Withdrawal Approved & Sent!*\nUser: " . ($tx['full_name'] ?? 'Unknown') . " (" . ($tx['email'] ?? $tx['phone'] ?? '') . ")\nAmount: ₦" . number_format($amount, 2) . "\nRecipient: " . ($meta['payee_name'] ?? 'N/A') . " - " . ($meta['bank_code'] ?? '') . " " . ($meta['account_number'] ?? '') . "\nRef: {$ref}");
-            try{notify_admin('Withdrawal Approved',"
+            if (update_tx_status($ref, 'success', $res['data']['orderNo'] ?? null)) {
+                $cb = apply_cashback($tx['user_id'], $amount, 'bank_transfer', null);
+                notify_user($tx['user_id'], 'Transfer Successful', number_format($amount,2) . " sent to " . ($meta['bank_code']??'') . " - " . ($meta['account_number']??'') . ".", 'success');
+                send_whatsapp_alert("✅ *Withdrawal Approved & Sent!*\nUser: " . ($tx['full_name'] ?? 'Unknown') . " (" . ($tx['email'] ?? $tx['phone'] ?? '') . ")\nAmount: ₦" . number_format($amount, 2) . "\nRecipient: " . ($meta['payee_name'] ?? 'N/A') . " - " . ($meta['bank_code'] ?? '') . " " . ($meta['account_number'] ?? '') . "\nRef: {$ref}");
+                try{notify_admin('Withdrawal Approved',"
 <div style='text-align:center;padding:10px 0 16px;'>
 <span style='font-size:28px;line-height:1;font-weight:800;color:#16a34a;'>OK</span>
 <h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>Withdrawal Approved &amp; Sent</h3>
@@ -52,15 +72,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 </table>
 </td></tr>
 </table>");}catch(\Throwable$e){}
+            }
             json_response(['success'=>true,'message'=>'Transfer approved and executed successfully']);
         }
-        // API call failed — keep pending, don't auto-revert
+        if ($res === null) {
+            // Network-level uncertainty on the transfer call itself (cURL
+            // timeout/error — PalmPayAPI::request() returns null in that case,
+            // never a decoded response) — PalmPay may or may not have actually
+            // received and executed this transfer. We must NOT guess: resetting
+            // to 'pending' would let an admin retry and risk sending the money
+            // a second time; crediting a refund would risk giving the money
+            // back on top of an actual successful transfer. Query PalmPay's
+            // own status endpoint for the record and leave the transaction
+            // claimed at 'processing' (no longer shown with Approve/Reject
+            // buttons) until a human confirms the real outcome and resolves it
+            // via transaction-details.php.
+            $check = $api->query_transfer($ref);
+            save_tx_response($ref, 'Uncertain outcome after transfer call (network error) — manual verification required. Provider query result: ' . json_encode($check));
+            log_error('bank_transfer', 'Approval transfer outcome unknown after network error', ['ref'=>$ref, 'query_result'=>$check]);
+            json_response(['success'=>false,'message'=>'Transfer outcome unknown due to a network error. This transaction is now LOCKED for manual review — do not retry. Verify directly with PalmPay, then resolve it from Transaction Details.']);
+        }
+        // Clean, confirmed provider response with a non-success code — PalmPay
+        // explicitly did not execute this transfer, so it's safe to release
+        // the claim back to pending for a legitimate retry.
+        update_tx_status($ref, 'pending');
         $err = $res['respMsg'] ?? 'API error';
         log_error('bank_transfer', 'Approval transfer failed', ['ref'=>$ref,'response'=>$res]);
         json_response(['success'=>false,'message'=>'Transfer failed: ' . $err]);
     } elseif ($action === 'reject') {
-        update_tx_status($ref, 'failed');
-        $rej_res = credit_wallet($tx['user_id'], $total, 'bank_transfer', 'Reversal: withdrawal rejected', ['rejected_ref'=>$ref]);
+        // Atomic claim — same principle as approve: only the request that
+        // actually flips pending -> failed here proceeds to refund; a second
+        // concurrent/duplicate reject click sees update_tx_status() return
+        // false and must not credit the wallet again.
+        if (!update_tx_status($ref, 'failed')) {
+            json_response(['success'=>false,'message'=>'Transaction already processed']);
+        }
+        $rej_res = credit_wallet($tx['user_id'], $total, 'bank_transfer', 'Reversal: withdrawal rejected', ['rejected_ref'=>$ref], 'withdrawal_reject:'.$ref);
         notify_user($tx['user_id'], 'Withdrawal Rejected', "Your withdrawal of " . number_format($amount,2) . " has been rejected. " . number_format($total,2) . " has been refunded to your wallet", 'error', null, $rej_res['balance_before'], $rej_res['balance_after']);
         send_whatsapp_alert("❌ *Withdrawal Rejected*\nUser: " . ($tx['full_name'] ?? 'Unknown') . " (" . ($tx['email'] ?? $tx['phone'] ?? '') . ")\nAmount: ₦" . number_format($amount, 2) . "\nRef: {$ref}");
         try{notify_admin('Withdrawal Rejected',"

@@ -85,14 +85,19 @@ if (!$accountNumber) {
 // checking it here was a no-op. idempotency_key is what credit_wallet() actually
 // stores this under, and is also the atomic guard below against a concurrent
 // replay of the same webhook.
-$idem_key = $ref !== '' ? 'payvessel:' . $ref : null;
-if ($idem_key !== null) {
-    $stmt = db()->prepare("SELECT id FROM transactions WHERE idempotency_key = ? LIMIT 1");
-    $stmt->execute([$idem_key]);
-    if ($stmt->fetch()) {
-        http_response_code(200);
-        exit('Already processed');
-    }
+// When PayVessel's payload has neither a reference nor a sessionid, $ref is
+// empty — previously that made $idem_key null, which disables credit_wallet()'s
+// unique-constraint dedup entirely, so a duplicate delivery of a ref-less
+// payload could double-credit with no protection at all. Fall back to a hash
+// of the raw payload body: an identical retried delivery (same bytes) still
+// collides and gets blocked, while genuinely different transactions produce
+// different hashes.
+$idem_key = $ref !== '' ? 'payvessel:' . $ref : 'payvessel:hash:' . hash('sha256', $payload);
+$stmt = db()->prepare("SELECT id FROM transactions WHERE idempotency_key = ? LIMIT 1");
+$stmt->execute([$idem_key]);
+if ($stmt->fetch()) {
+    http_response_code(200);
+    exit('Already processed');
 }
 
 // Find user by account number
