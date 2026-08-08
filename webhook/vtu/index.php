@@ -4,6 +4,12 @@ require_once __DIR__ . '/../../user/core/api_router.php';
 
 header('Content-Type: application/json');
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['error' => 'Method Not Allowed']);
+    exit;
+}
+
 $ip = get_ip();
 
 // Shared-secret verification (same pattern as cron_secret in cron_check_vtu.php).
@@ -97,13 +103,13 @@ if ($is_success) {
     $claimed = update_tx_status($ref, 'success', $provider_ref);
     if ($claimed) {
         if ($token || $msg) {
-            $meta_updates = [];
-            if ($token) $meta_updates[] = "'$.token', " . db()->quote($token);
-            if ($msg) $meta_updates[] = "'$.response', " . db()->quote($msg);
-            if ($provider_ref) $meta_updates[] = "'$.provider_ref', " . db()->quote($provider_ref);
-            if ($meta_updates) {
-                $sql = "UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), " . implode(', ', $meta_updates) . ") WHERE transaction_ref=?";
-                db()->prepare($sql)->execute([$ref]);
+            $paths = []; $vals = [];
+            if ($token) { $paths[] = "'$.token', ?"; $vals[] = $token; }
+            if ($msg) { $paths[] = "'$.response', ?"; $vals[] = $msg; }
+            if ($provider_ref) { $paths[] = "'$.provider_ref', ?"; $vals[] = $provider_ref; }
+            if ($paths) {
+                $sql = "UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), " . implode(', ', $paths) . ") WHERE transaction_ref=?";
+                db()->prepare($sql)->execute(array_merge($vals, [$ref]));
             }
         }
         $cat = $tx_row['category'];

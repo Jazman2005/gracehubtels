@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/../../user/core/db.php';
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    exit('Method Not Allowed');
+}
+
 $payload = file_get_contents('php://input');
 log_write('webhook_paymentpoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 

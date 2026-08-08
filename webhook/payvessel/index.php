@@ -13,6 +13,11 @@ log_write('webhook_payvessel', 'INFO', 'Webhook received', [
     'uri' => $_SERVER['REQUEST_URI'] ?? ''
 ]);
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    exit('Method Not Allowed');
+}
+
 // IP whitelist – PayVessel
 $allowed_ips = ['3.255.23.38', '3.255.23.0/24'];
 $ok = false;

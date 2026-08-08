@@ -1,6 +1,11 @@
 <?php
 require_once __DIR__ . '/../../user/core/db.php';
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    exit('Method Not Allowed');
+}
+
 try {
     $payload = file_get_contents('php://input');
 
@@ -27,34 +32,40 @@ try {
         exit('success');
     }
 
-    // Signature verification using notify secret
+    // Signature verification using notify secret — MUST be fail-closed. This
+    // used to only verify "if a signature was present", meaning a forged
+    // payload that simply omitted the `sign` field entirely skipped
+    // verification altogether and went straight to crediting a wallet.
     $sign = $data['sign'] ?? '';
     $notify_secret = setting('palmpay_notify_secret', '');
-    if (!empty($sign)) {
-        if (empty($notify_secret)) {
-            log_write('webhook_palmpay', 'ERROR', 'Signature present but notify_secret not configured — rejecting');
-            http_response_code(400);
-            exit('Webhook secret not configured');
-        }
-        $verify_data = $data;
-        unset($verify_data['sign']);
-        ksort($verify_data);
-        $str = '';
-        foreach ($verify_data as $k => $v) {
-            if ($v !== '' && $v !== null && !is_array($v)) {
-                $str .= "{$k}={$v}&";
-            }
-        }
-        $str = rtrim($str, '&');
-
-        $expected = strtoupper(hash_hmac('sha256', $str, $notify_secret));
-        if (!hash_equals($expected, strtoupper($sign))) {
-            log_write('webhook_palmpay', 'ERROR', 'Invalid signature', ['expected' => $expected, 'received' => $sign]);
-            http_response_code(400);
-            exit('Invalid signature');
-        }
-        log_write('webhook_palmpay', 'INFO', 'Signature verified via HMAC');
+    if (empty($notify_secret)) {
+        log_write('webhook_palmpay', 'ERROR', 'notify_secret not configured — rejecting');
+        http_response_code(400);
+        exit('Webhook secret not configured');
     }
+    if (empty($sign)) {
+        log_write('webhook_palmpay', 'ERROR', 'Missing signature — rejecting');
+        http_response_code(400);
+        exit('Missing signature');
+    }
+    $verify_data = $data;
+    unset($verify_data['sign']);
+    ksort($verify_data);
+    $str = '';
+    foreach ($verify_data as $k => $v) {
+        if ($v !== '' && $v !== null && !is_array($v)) {
+            $str .= "{$k}={$v}&";
+        }
+    }
+    $str = rtrim($str, '&');
+
+    $expected = strtoupper(hash_hmac('sha256', $str, $notify_secret));
+    if (!hash_equals($expected, strtoupper($sign))) {
+        log_write('webhook_palmpay', 'ERROR', 'Invalid signature', ['expected' => $expected, 'received' => $sign]);
+        http_response_code(400);
+        exit('Invalid signature');
+    }
+    log_write('webhook_palmpay', 'INFO', 'Signature verified via HMAC');
 
     // Try orderNo (dynamic VA) or virtualAccountNo (permanent VA)
     $ref = $data['orderNo'] ?? $data['virtualAccountNo'] ?? $data['accountNumber'] ?? $data['orderId'] ?? '';
