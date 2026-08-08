@@ -6,10 +6,15 @@ $user = get_user($uid);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) { 
     if (!verify_csrf($_POST['csrf_token'] ?? '')) json_response(['success' => false, 'message' => 'Invalid token'], 403); 
-    $password = $_POST['password'] ?? ''; 
-    $confirm = $_POST['confirm'] ?? ''; 
-    
-    if (!password_verify($password, $user['password'])) json_response(['success' => false, 'message' => 'Incorrect password']); 
+    $password = $_POST['password'] ?? '';
+    $confirm = $_POST['confirm'] ?? '';
+
+    // Unlimited attempts to guess the current password were previously
+    // possible via this endpoint (e.g. from a hijacked session) with no
+    // lockout at all.
+    if (!rate_limit('delete_account_' . $uid, 5, 900)) json_response(['success' => false, 'message' => 'Too many attempts. Please try again in 15 minutes.']);
+
+    if (!password_verify($password, $user['password'])) json_response(['success' => false, 'message' => 'Incorrect password']);
     if ($confirm !== 'DELETE') json_response(['success' => false, 'message' => 'Type DELETE to confirm']); 
     
     $anon_email = 'deleted_' . $uid . '@gracehubtels.deleted'; 
@@ -94,7 +99,7 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <script>
-function deleteAccount(e) {
+async function deleteAccount(e) {
     if(e) e.preventDefault();
     
     const pwd = document.getElementById('delPwd').value;

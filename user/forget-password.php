@@ -11,10 +11,12 @@ $message = $error = '';
 
 // -- STEP 1: Request reset --------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 'request') { 
-    if (!verify_csrf($_POST['csrf_token'] ?? '')) { 
-        $error = 'Security error. Try again.'; 
-    } else { 
-        $identifier = strtolower(trim($_POST['identifier'] ?? '')); 
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) {
+        $error = 'Security error. Try again.';
+    } elseif (!rate_limit('forgot_pw', 5, 900)) {
+        $error = 'Too many attempts. Try again in 15 minutes.';
+    } else {
+        $identifier = strtolower(trim($_POST['identifier'] ?? ''));
         $stmt = db()->prepare("SELECT id, email, full_name FROM users WHERE (email=? OR phone=?) AND is_active=1 LIMIT 1"); 
         $stmt->execute([$identifier, $identifier]); 
         $user = $stmt->fetch(); 
@@ -25,11 +27,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 'request') {
             $expiry = date('Y-m-d H:i:s', strtotime('+1 hour')); 
             db()->prepare("UPDATE users SET reset_token=?, reset_token_expiry=? WHERE id=?")->execute([$reset_token, $expiry, $user['id']]); 
             
-            // Send reset email (using simple mail; replace with PHPMailer for production) 
-            $reset_url = 'https://www.gracehubtels.com/user/forget-password.php?step=reset&token=' . $reset_token; 
-            $subject = 'Gracehubtels Password Reset'; 
-            $body = "Hello {$user['full_name']},\n\nClick the link below to reset your Gracehubtels password:\n\n{$reset_url}\n\nThis link expires in 1 hour. If you didn't request this, ignore this email.\n\nGracehubtels Team"; 
-            @mail($user['email'], $subject, $body, 'From: noreply@gracehubtels.com'); 
+            // Send reset email via the site's configured SMTP (PHPMailer) — raw
+            // mail() is unreliable on shared hosting and gets silently dropped
+            // or spam-filtered by providers like Gmail, which most accounts use.
+            $reset_url = 'https://www.gracehubtels.com/user/forget-password.php?step=reset&token=' . $reset_token;
+            $subject = 'Gracehubtels Password Reset';
+            $body = "<p>Hello " . htmlspecialchars($user['full_name']) . ",</p>"
+                . "<p>Click the button below to reset your Gracehubtels password:</p>"
+                . "<p style='text-align:center;margin:24px 0;'><a href='{$reset_url}' style='background:#4F46E5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;display:inline-block;'>Reset Password</a></p>"
+                . "<p style='font-size:12px;color:#94a3b8;'>Or copy this link into your browser:<br>{$reset_url}</p>"
+                . "<p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>";
+            send_email($user['email'], $subject, $body);
         } 
         $message = 'If an account with that email/phone exists, a reset link has been sent.'; 
     }
@@ -48,30 +56,37 @@ if ($step === 'reset') {
 } 
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 'reset') { 
-    if (!verify_csrf($_POST['csrf_token'] ?? '')) { 
-        $error = 'Security error.'; 
-    } else { 
-        $token = trim($_POST['token'] ?? ''); 
-        $new_pwd = $_POST['new_password'] ?? ''; 
-        $confirm = $_POST['confirm_password'] ?? ''; 
-        
-        $stmt = db()->prepare("SELECT * FROM users WHERE reset_token=? AND reset_token_expiry > NOW() LIMIT 1"); 
-        $stmt->execute([$token]); 
-        $reset_user = $stmt->fetch(); 
-        
-        if (!$reset_user) { 
-            $error = 'Invalid or expired token.'; 
-        } elseif (strlen($new_pwd) < 8) { 
-            $error = 'Password must be at least 8 characters.'; 
-        } elseif ($new_pwd !== $confirm) { 
-            $error = 'Passwords do not match.'; 
-        } else { 
-            $hashed = password_hash($new_pwd, PASSWORD_BCRYPT, ['cost' => 12]); 
-            db()->prepare("UPDATE users SET password=?, reset_token=NULL, reset_token_expiry=NULL WHERE id=?")->execute([$hashed, $reset_user['id']]); 
-            $message = 'Password reset successfully! You can now log in.'; 
-            $step = 'done'; 
-        } 
-    } 
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) {
+        $error = 'Security error.';
+    } elseif (!rate_limit('reset_pw_submit', 10, 900)) {
+        // The token itself is a 256-bit random value (infeasible to brute
+        // force), but this POST handler had no throttle at all, unlike its
+        // API twin (api/v1/forgot-password.php) — throttle for consistency.
+        $error = 'Too many attempts. Try again in 15 minutes.';
+    } else {
+        $token = trim($_POST['token'] ?? '');
+        $new_pwd = $_POST['new_password'] ?? '';
+        $confirm = $_POST['confirm_password'] ?? '';
+
+        $stmt = db()->prepare("SELECT * FROM users WHERE reset_token=? AND reset_token_expiry > NOW() LIMIT 1");
+        $stmt->execute([$token]);
+        $reset_user = $stmt->fetch();
+
+        if (!$reset_user) {
+            $error = 'Invalid or expired token.';
+        } elseif (strlen($new_pwd) < 8) {
+            $error = 'Password must be at least 8 characters.';
+        } elseif ($new_pwd !== $confirm) {
+            $error = 'Passwords do not match.';
+        } else {
+            $hashed = password_hash($new_pwd, PASSWORD_BCRYPT, ['cost' => 12]);
+            // Rotate api_token so a previously leaked/stolen bearer token
+            // stops working once the account owner resets their password.
+            db()->prepare("UPDATE users SET password=?, reset_token=NULL, reset_token_expiry=NULL, api_token=NULL WHERE id=?")->execute([$hashed, $reset_user['id']]);
+            $message = 'Password reset successfully! You can now log in.';
+            $step = 'done';
+        }
+    }
 }
 
 $csrf = csrf_token();

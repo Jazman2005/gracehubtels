@@ -34,6 +34,15 @@ if ($new_password !== $confirm_password) {
     exit;
 }
 
+// Nothing previously rate-limited how many times "current_password" could be
+// guessed via this endpoint — a leaked/replayed API token had unlimited
+// attempts to brute-force the account's real password with no lockout.
+if (!rate_limit('change_password_' . $uid, 5, 900)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'success' => false, 'message' => 'Too many attempts. Please try again in 15 minutes.']);
+    exit;
+}
+
 $stmt = db()->prepare("SELECT password FROM users WHERE id = ?");
 $stmt->execute([$uid]);
 $row = $stmt->fetch();
@@ -45,7 +54,9 @@ if (!$row || !password_verify($current_password, $row['password'])) {
 }
 
 $hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => 12]);
-db()->prepare("UPDATE users SET password = ? WHERE id = ?")->execute([$hash, $uid]);
+// Rotate api_token so a previously leaked/stolen bearer token stops working
+// the moment the account owner changes their password.
+db()->prepare("UPDATE users SET password = ?, api_token = NULL WHERE id = ?")->execute([$hash, $uid]);
 
 echo json_encode([
     'status' => 'success',

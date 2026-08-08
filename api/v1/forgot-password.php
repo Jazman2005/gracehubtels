@@ -103,7 +103,9 @@ if ($step === 'reset') {
     }
 
     $hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => 12]);
-    db()->prepare("UPDATE users SET password=?, reset_token=NULL, reset_token_expiry=NULL WHERE id=?")->execute([$hash, $user['id']]);
+    // Rotate api_token so a previously leaked/stolen bearer token stops
+    // working once the account owner resets their password.
+    db()->prepare("UPDATE users SET password=?, reset_token=NULL, reset_token_expiry=NULL, api_token=NULL WHERE id=?")->execute([$hash, $user['id']]);
 
     echo json_encode(['status' => 'success', 'message' => 'Password reset successfully. You can now log in.']);
     exit;

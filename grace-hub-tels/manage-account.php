@@ -14,8 +14,16 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         
         if(!$current || !$new || !$confirm) json_response(['success'=>false,'message'=>'All fields are required']);
         if($new !== $confirm) json_response(['success'=>false,'message'=>'New passwords do not match']);
-        if(strlen($new) < 6) json_response(['success'=>false,'message'=>'Password must be at least 6 characters']);
-        
+        if(strlen($new) < 8) json_response(['success'=>false,'message'=>'Password must be at least 8 characters']);
+
+        // Nothing previously rate-limited how many times "current_password"
+        // could be guessed here — a hijacked admin session had unlimited
+        // attempts to brute-force this (higher-privilege) account's real
+        // password with no lockout at all.
+        if(!rate_limit('admin_change_password_'.$_SESSION['admin_id'], 5, 900)) {
+            json_response(['success'=>false,'message'=>'Too many attempts. Please try again in 15 minutes.']);
+        }
+
         $admin = get_admin($_SESSION['admin_id']);
         if(!password_verify($current, $admin['password'])) {
             json_response(['success'=>false,'message'=>'Incorrect current password']);
@@ -39,6 +47,7 @@ $admin = get_admin($_SESSION['admin_id']);
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>.two-col-page{display:grid;grid-template-columns:1fr 2fr;gap:24px;align-items:start}@media (max-width:1024px){.two-col-page{grid-template-columns:1fr}}</style>
 </head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
@@ -53,11 +62,11 @@ $admin = get_admin($_SESSION['admin_id']);
     </div>
 </div>
 
-<div style="display:grid; grid-template-columns:1fr 2fr; gap:24px; align-items:start;">
+<div class="two-col-page">
 
     <!-- PROFILE PREVIEW -->
     <div class="data-panel" style="display:flex; flex-direction:column; align-items:center; padding:32px 24px; text-align:center;">
-        <div style="width:80px; height:80px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:700; margin-bottom:16px; box-shadow:0 4px 15px rgba(79,70,229,0.3);">
+        <div style="width:80px; height:80px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:32px; font-weight:700; margin-bottom:16px; box-shadow:0 4px 15px rgba(255,90,31,0.3);">
             <?=strtoupper(substr($admin['username'],0,1))?>
         </div>
         <h3 style="margin:0 0 4px 0; color:var(--navy-dark); font-size:18px;"><?=htmlspecialchars($admin['username'])?></h3>

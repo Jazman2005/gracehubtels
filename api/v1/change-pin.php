@@ -34,6 +34,15 @@ if ($new_pin !== $confirm_pin) {
     exit;
 }
 
+// verify_pin() below already locks out repeated wrong current_pin guesses
+// once a PIN exists, but first-time PIN setup (no current_pin to check) had
+// no rate limit at all on this endpoint being hit repeatedly.
+if (!rate_limit('set_pin_' . $uid, 10, 900)) {
+    http_response_code(429);
+    echo json_encode(['status' => 'error', 'success' => false, 'message' => 'Too many attempts. Please try again in 15 minutes.']);
+    exit;
+}
+
 // Check if user already has a PIN
 $stmt = db()->prepare("SELECT transaction_pin FROM users WHERE id=?");
 $stmt->execute([$uid]);
