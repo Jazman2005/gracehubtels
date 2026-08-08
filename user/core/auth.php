@@ -43,24 +43,38 @@ function login_user(string $identifier, string $password): array {
     try{db()->exec("ALTER TABLE users ADD COLUMN login_attempts INT DEFAULT 0");}catch(\Throwable$e){}
     try{db()->exec("ALTER TABLE users ADD COLUMN login_locked_until DATETIME DEFAULT NULL");}catch(\Throwable$e){}
     
-    // Detect if identifier is phone or username
+    // Detect if identifier is phone, email, or username
     $phone = '';
     $username = '';
+    $email = '';
     if (preg_match('/^\d/', $identifier)) {
         $phone = sanitize_phone($identifier);
+        // Accept common alternate formats so a number typed with a +234
+        // country code, or missing its leading 0, still matches — phone
+        // numbers are stored normalized to the 0XXXXXXXXXX form.
+        if (strlen($phone) === 13 && str_starts_with($phone, '234')) {
+            $phone = '0' . substr($phone, 3);
+        } elseif (strlen($phone) === 10 && preg_match('/^[7-9]/', $phone)) {
+            $phone = '0' . $phone;
+        }
+    } elseif (filter_var($identifier, FILTER_VALIDATE_EMAIL)) {
+        $email = $identifier;
     } else {
         $username = $identifier;
     }
-    
-    $s = db()->prepare("SELECT * FROM users WHERE (phone=? OR username=?) AND is_active=1 LIMIT 1");
-    $s->execute([$phone ?: $username, $username ?: $phone]);
+
+    $s = db()->prepare("SELECT * FROM users WHERE (phone=? OR username=? OR email=?) AND is_active=1 LIMIT 1");
+    $s->execute([$phone, $username, $email]);
     $user = $s->fetch();
     
     if ($user && $user['login_locked_until'] && strtotime($user['login_locked_until']) > time()) {
         return ['success' => false, 'message' => 'Account locked. Try again after 10 minutes.'];
     }
     
-    if (!$user || !password_verify($password, $user['password'])) {
+    // Always run password_verify() even when no account matched — see
+    // DUMMY_PASSWORD_HASH in db.php for why this closes a timing side-channel.
+    $password_ok = password_verify($password, $user['password'] ?? DUMMY_PASSWORD_HASH);
+    if (!$user || !$password_ok) {
         if ($user) {
             $att = (int)$user['login_attempts'] + 1;
             if ($att >= 3) {
@@ -113,19 +127,24 @@ function register_user(array $data):array{
     $hash=password_hash($pwd,PASSWORD_BCRYPT,['cost'=>12]);
     db()->prepare("INSERT INTO users (full_name,username,phone,email,password,referral_code,referred_by) VALUES (?,?,?,?,?,?,?)")->execute([$name,$username,$phone,$email,$hash,$ref_code,$referred]);
     $uid=(int)db()->lastInsertId();log_info('auth','REGISTER',['uid'=>$uid,'phone'=>$phone]);
+    // full_name/username/phone/email are stored as plain text (every other render
+    // site in the app htmlspecialchars()'s them itself) — escape locally here since
+    // these two blocks build raw HTML email bodies, unlike normal page rendering.
+    $name_h=htmlspecialchars($name,ENT_QUOTES);$username_h=htmlspecialchars($username,ENT_QUOTES);
+    $phone_h=htmlspecialchars($phone,ENT_QUOTES);$email_h=htmlspecialchars($email,ENT_QUOTES);
     try{
         notify_user($uid,'Welcome to Gracehubtels!',"
 <div style='text-align:center;padding:10px 0 20px;'>
 <div style='width:64px;height:64px;background:#e8f5e9;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;'><span style='font-size:24px;font-weight:800;color:#16a34a;'>OK</span></div>
-<h3 style='color:#4F46E5;font-size:20px;margin:0 0 4px;'>Welcome, {$name}!</h3>
+<h3 style='color:#4F46E5;font-size:20px;margin:0 0 4px;'>Welcome, {$name_h}!</h3>
 <p style='color:#475569;font-size:14px;margin:0 0 20px;'>Your account has been created successfully.</p>
 </div>
 <table style='width:100%;border-collapse:collapse;margin-bottom:20px;'>
 <tr><td style='padding:10px 14px;background:#f8fafc;border-radius:8px;'>
 <table width='100%'>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Account</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$username}</td></tr>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Phone</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$phone}</td></tr>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Email</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$email}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Account</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$username_h}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Phone</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$phone_h}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Email</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$email_h}</td></tr>
 </table>
 </td></tr>
 </table>
@@ -147,6 +166,7 @@ function register_user(array $data):array{
 </div>",'success');
     }catch(\Throwable$e){}
     try{
+        $site_name = setting('site_name', 'Gracehubtels');
         notify_admin('New User Registration', "
 <div style='text-align:center;padding:10px 0 16px;'>
 <span style='font-size:36px;line-height:1;font-weight:800;color:#4F46E5;'>+1</span>
@@ -156,10 +176,10 @@ function register_user(array $data):array{
 <table style='width:100%;border-collapse:collapse;'>
 <tr><td style='padding:8px 12px;background:#f8fafc;border-radius:8px;'>
 <table width='100%'>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Name</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$name}</td></tr>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Username</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$username}</td></tr>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Phone</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$phone}</td></tr>
-<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Email</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$email}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Name</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$name_h}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Username</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$username_h}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Phone</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$phone_h}</td></tr>
+<tr><td style='padding:4px 0;color:#64748b;font-size:13px;'>Email</td><td style='padding:4px 0;text-align:right;font-weight:600;color:#0f172a;font-size:13px;'>{$email_h}</td></tr>
 </table>
 </td></tr>
 </table>");

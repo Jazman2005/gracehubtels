@@ -48,7 +48,37 @@ $stmt = db()->prepare("SELECT * FROM users WHERE (phone = ? OR username = ?) AND
 $stmt->execute([$phone ?: $username, $username ?: $phone]);
 $user = $stmt->fetch();
 
-if (!$user || !password_verify($password, $user['password'])) {
+// Per-account lockout — this endpoint previously relied only on the IP-keyed
+// rate_limit() above, unlike the main site login (user/core/auth.php) which
+// also locks the specific account after 3 failed attempts. Without this, an
+// attacker spreading requests across many source IPs could brute-force one
+// specific account's password via this API with no per-account limit ever
+// engaging.
+try { db()->exec("ALTER TABLE users ADD COLUMN login_attempts INT DEFAULT 0"); } catch (\Throwable $e) {}
+try { db()->exec("ALTER TABLE users ADD COLUMN login_locked_until DATETIME DEFAULT NULL"); } catch (\Throwable $e) {}
+
+if ($user && $user['login_locked_until'] && strtotime($user['login_locked_until']) > time()) {
+    http_response_code(423);
+    echo json_encode(['status' => 'error', 'message' => 'Account locked. Try again after 10 minutes.']);
+    exit;
+}
+
+// Always run password_verify() even when no account matched — closes the
+// timing side-channel where a nonexistent identifier returns instantly (no
+// bcrypt work done) while a real identifier with a wrong password takes
+// measurably longer, making account existence distinguishable by timing.
+$password_ok = password_verify($password, $user['password'] ?? DUMMY_PASSWORD_HASH);
+if (!$user || !$password_ok) {
+    if ($user) {
+        $att = (int)$user['login_attempts'] + 1;
+        if ($att >= 3) {
+            $lock = date('Y-m-d H:i:s', time() + 600);
+            db()->prepare("UPDATE users SET login_attempts=?, login_locked_until=? WHERE id=?")->execute([$att, $lock, $user['id']]);
+        } else {
+            db()->prepare("UPDATE users SET login_attempts=? WHERE id=?")->execute([$att, $user['id']]);
+        }
+        log_security('API_LOGIN_FAIL', ['identifier' => $identifier]);
+    }
     http_response_code(401);
     echo json_encode(['status' => 'error', 'message' => 'Invalid credentials or account not active.']);
     exit;
@@ -59,6 +89,8 @@ if (!empty($user['is_suspended'])) {
     echo json_encode(['status' => 'error', 'message' => 'Account suspended. Contact support.']);
     exit;
 }
+
+db()->prepare("UPDATE users SET login_attempts=0, login_locked_until=NULL WHERE id=?")->execute([$user['id']]);
 
 if (empty($user['api_token'])) {
     $token = 'msj_live_' . bin2hex(random_bytes(24));

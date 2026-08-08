@@ -5,7 +5,27 @@ if (!defined('ADMIN_URL')) {
     define('ADMIN_URL', '/' . basename(dirname(__DIR__)));
 }
 function admin_session():void{if(session_status()===PHP_SESSION_NONE){session_name(ADMIN_SESSION);session_set_cookie_params(['lifetime'=>0,'path'=>ADMIN_URL,'secure'=>isset($_SERVER['HTTPS']),'httponly'=>true,'samesite'=>'Strict']);session_start();}}
-function auth_admin(string $min_role=''):void{admin_session();if(empty($_SESSION['admin_id'])){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Session expired']);exit;}header('Location: ' . ADMIN_URL . '/login.php');exit;}if($min_role!==''){$r=['support'=>1,'admin'=>2,'superadmin'=>3];if(($r[$_SESSION['admin_role']??'']??0)<($r[$min_role]??0)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Access denied']);exit;}die('Access denied');}}}
+const ADMIN_IDLE_TIMEOUT = 1800;
+const ADMIN_ABSOLUTE_TIMEOUT = 43200;
+function auth_admin(string $min_role=''):void{
+    admin_session();
+    if(empty($_SESSION['admin_id'])){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Session expired']);exit;}header('Location: ' . ADMIN_URL . '/login.php');exit;}
+    // Idle + absolute session expiration. Admin cookies are session-lifetime
+    // (0), so without an app-level check a stolen/left-open admin session
+    // stayed valid indefinitely — the only backstop was PHP's own
+    // probabilistic session.gc_maxlifetime, which many hosts raise well past
+    // any sane admin-session lifetime.
+    $now=time();
+    $idle=$_SESSION['admin_last_activity']??$now;
+    $started=$_SESSION['admin_login_ts']??$now;
+    if(($now-$idle)>ADMIN_IDLE_TIMEOUT||($now-$started)>ADMIN_ABSOLUTE_TIMEOUT){
+        $_SESSION=[];session_destroy();
+        if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(401);header('Content-Type: application/json');echo json_encode(['success'=>false,'message'=>'Session expired. Please log in again.']);exit;}
+        header('Location: ' . ADMIN_URL . '/login.php');exit;
+    }
+    $_SESSION['admin_last_activity']=$now;
+    if($min_role!==''){$r=['support'=>1,'admin'=>2,'superadmin'=>3];if(($r[$_SESSION['admin_role']??'']??0)<($r[$min_role]??0)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Access denied']);exit;}die('Access denied');}}
+}
 function has_permission(string $perm):bool{admin_session();if(($_SESSION['admin_role']??'')==='superadmin')return true;$p=json_decode($_SESSION['admin_permissions']??'[]',true)?:[];return in_array($perm,$p);}
 function require_permission(string $perm):void{if(!has_permission($perm)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Missing permission: '.$perm]);exit;}die('Access denied - Missing permission: '.$perm);}}
 function audit_log(int $admin_id, string $action, string $details):void{db()->prepare("INSERT INTO admin_activity_logs (admin_id, action, details, ip_address) VALUES (?, ?, ?, ?)")->execute([$admin_id, $action, $details, get_ip()]);}
@@ -16,7 +36,11 @@ function get_device_hash(): string {
     return hash('sha256', (get_ip()?:'0.0.0.0') . '|' . (get_ua()?:'unknown'));
 }
 function is_known_device(int $admin_id, string $hash): bool {
-    try{$s=db()->prepare("SELECT 1 FROM admin_known_devices WHERE admin_id=? AND device_hash=? LIMIT 1");$s->execute([$admin_id,$hash]);return (bool)$s->fetchColumn();}catch(\Throwable$e){return true;}
+    // Fail CLOSED: any DB error here must still require the OTP step, not
+    // silently skip 2FA. Returning true on exception previously meant any
+    // hiccup querying admin_known_devices (missing table, DB blip) let a
+    // login from an unrecognized device bypass the new-device OTP entirely.
+    try{$s=db()->prepare("SELECT 1 FROM admin_known_devices WHERE admin_id=? AND device_hash=? LIMIT 1");$s->execute([$admin_id,$hash]);return (bool)$s->fetchColumn();}catch(\Throwable$e){log_error('admin_auth','is_known_device query failed: '.$e->getMessage());return false;}
 }
 function mark_known_device(int $admin_id, string $hash): void {
     try{db()->prepare("INSERT INTO admin_known_devices (admin_id,device_hash,ip_address,user_agent) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE last_seen=NOW()")->execute([$admin_id,$hash,get_ip(),get_ua()]);}catch(\Throwable$e){}
@@ -51,6 +75,8 @@ function complete_admin_login(array $admin): void {
     $_SESSION['admin_role']=$admin['role'];
     $_SESSION['admin_email']=$admin['email'];
     $_SESSION['admin_permissions']=$admin['permissions']??'[]';
+    $_SESSION['admin_login_ts']=time();
+    $_SESSION['admin_last_activity']=time();
     audit_log($admin['id'],'LOGIN',"Admin logged in ({$admin['email']})");
     try{
         $ip=get_ip();$time=date('Y-m-d H:i:s');
@@ -83,7 +109,23 @@ function login_admin(string $email,string $password):array{
     
     try{db()->exec("ALTER TABLE admin ADD COLUMN login_attempts INT DEFAULT 0");}catch(\Throwable$e){}
     try{db()->exec("ALTER TABLE admin ADD COLUMN locked_until DATETIME DEFAULT NULL");}catch(\Throwable$e){}
-    
+    // is_known_device()/mark_known_device() below silently no-op (fail
+    // closed / swallow the error) if this table is missing, which forces
+    // OTP on every single login rather than ever remembering a device —
+    // safe, but means the "skip OTP for known devices" feature silently
+    // never worked if this table was never created. Auto-create it here so
+    // the intended behavior actually takes effect.
+    try{db()->exec("CREATE TABLE IF NOT EXISTS admin_known_devices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        admin_id INT NOT NULL,
+        device_hash VARCHAR(64) NOT NULL,
+        ip_address VARCHAR(45) DEFAULT NULL,
+        user_agent VARCHAR(400) DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_admin_device (admin_id, device_hash)
+    )");}catch(\Throwable$e){}
+
     $s=db()->prepare("SELECT * FROM admin WHERE email=? AND is_active=1 LIMIT 1");
     $s->execute([$email]);
     $admin=$s->fetch();
@@ -92,7 +134,12 @@ function login_admin(string $email,string $password):array{
         return['success'=>false,'message'=>'Account locked. Try again after 10 minutes.'];
     }
     
-    if(!$admin||!password_verify($password,$admin['password'])){
+    // Always run password_verify() even when no account matched — closes the
+    // timing side-channel where a nonexistent email returns instantly (no
+    // bcrypt work done) while a real email with a wrong password takes
+    // measurably longer, making account existence distinguishable by timing.
+    $password_ok=password_verify($password,$admin['password']??DUMMY_PASSWORD_HASH);
+    if(!$admin||!$password_ok){
         if($admin){
             $att=(int)$admin['login_attempts']+1;
             if($att>=3){
@@ -136,7 +183,7 @@ function login_admin(string $email,string $password):array{
         admin_session();
         $_SESSION['pending_otp_admin_id']=$admin['id'];
         $_SESSION['pending_otp_device_hash']=$dhash;
-        $_SESSION['pending_otp_admin_data']=serialize($admin);
+        $_SESSION['pending_otp_admin_data']=json_encode($admin);
         return['success'=>true,'otp_required'=>true];
     }
     
@@ -144,7 +191,7 @@ function login_admin(string $email,string $password):array{
     complete_admin_login($admin);
     return['success'=>true,'admin'=>$admin];
 }
-function logout_admin():void{admin_session();$admin_id=(int)($_SESSION['admin_id']??0);$email=$_SESSION['admin_email']??'';$_SESSION=[];session_destroy();if($admin_id){try{db()->prepare("INSERT INTO admin_activity_logs (admin_id, action, details, ip_address) VALUES (?,'LOGOUT',?,?)")->execute([$admin_id,"Admin logged out",get_ip()]);}catch(Throwable$e){}}header('Location: ' . ADMIN_URL . '/login.php');exit;}
+function logout_admin():void{admin_session();$admin_id=(int)($_SESSION['admin_id']??0);$email=$_SESSION['admin_email']??'';$_SESSION=[];if(ini_get('session.use_cookies')){$p=session_get_cookie_params();setcookie(session_name(),'',time()-42000,$p['path'],$p['domain'],$p['secure'],$p['httponly']);}session_destroy();if($admin_id){try{db()->prepare("INSERT INTO admin_activity_logs (admin_id, action, details, ip_address) VALUES (?,'LOGOUT',?,?)")->execute([$admin_id,"Admin logged out",get_ip()]);}catch(Throwable$e){}}header('Location: ' . ADMIN_URL . '/login.php');exit;}
 function require_superadmin():void{auth_admin();if(($_SESSION['admin_role']??'')!=='superadmin'){http_response_code(403);die('Access denied — Superadmin only');}};
 function admin_csrf():string{admin_session();if(empty($_SESSION['admin_csrf']))$_SESSION['admin_csrf']=bin2hex(random_bytes(32));return $_SESSION['admin_csrf'];}
 function verify_admin_csrf(string $t):bool{admin_session();return isset($_SESSION['admin_csrf'])&&hash_equals($_SESSION['admin_csrf'],$t);}

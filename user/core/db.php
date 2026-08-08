@@ -48,6 +48,16 @@ define('APP_VERSION', '2.1.0');
 // / X-Real-IP itself. Left false, get_ip() ignores those client-settable headers.
 if (!defined('TRUST_FORWARDED_IP')) define('TRUST_FORWARDED_IP', false);
 
+// A pre-computed bcrypt hash of an unguessable, never-used password. Every
+// login endpoint runs password_verify() against this when no matching account
+// is found, so a request for a nonexistent identifier takes the same amount
+// of time as a request for a real one with a wrong password — without this,
+// the `!$user || !password_verify(...)` short-circuit skips the (slow)
+// bcrypt check entirely for nonexistent identifiers, making "no such account"
+// distinguishable from "wrong password" purely by response time, a classic
+// account-enumeration side channel.
+define('DUMMY_PASSWORD_HASH', '$2y$12$IYTJDG2gpLbdGJvY9YyC1uWowi1o5FT7s86wEldd4hrXcUVxXs9HW');
+
 date_default_timezone_set('Africa/Lagos');
 
 // Create log directory and files
@@ -521,23 +531,56 @@ function rate_limit(string $key, int $max_requests, int $time_window): bool
     $ip = get_ip();
     $cache_file = sys_get_temp_dir() . '/rl_' . md5($key . '_' . $ip);
     $now = time();
-    
-    $data = @file_get_contents($cache_file);
-    
+
+    // Read-check-write on the counter file must happen under a single
+    // exclusive lock — without it, concurrent/parallel requests within the
+    // same window all read the same pre-increment count before any of them
+    // writes back, letting an attacker burst past $max_requests by firing
+    // requests in parallel instead of serially.
+    $fh = @fopen($cache_file, 'c+');
+    if (!$fh) {
+        return true;
+    }
+
+    if (!flock($fh, LOCK_EX)) {
+        fclose($fh);
+        return true;
+    }
+
+    $data = stream_get_contents($fh);
+    $allowed = true;
+
     if ($data) {
         list($count, $reset_time) = explode('|', $data . '|0');
-        
-        if ($now < (int)$reset_time) {
-            if ((int)$count >= $max_requests) {
-                return false;
+        $count = (int)$count;
+        $reset_time = (int)$reset_time;
+
+        if ($now < $reset_time) {
+            if ($count >= $max_requests) {
+                $allowed = false;
+            } else {
+                $count++;
             }
-            @file_put_contents($cache_file, ($count + 1) . '|' . $reset_time);
-            return true;
+        } else {
+            $count = 1;
+            $reset_time = $now + $time_window;
         }
+    } else {
+        $count = 1;
+        $reset_time = $now + $time_window;
     }
-    
-    @file_put_contents($cache_file, '1|' . ($now + $time_window));
-    return true;
+
+    if ($allowed) {
+        rewind($fh);
+        ftruncate($fh, 0);
+        fwrite($fh, $count . '|' . $reset_time);
+        fflush($fh);
+    }
+
+    flock($fh, LOCK_UN);
+    fclose($fh);
+
+    return $allowed;
 }
 
 // ============================================
