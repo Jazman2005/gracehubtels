@@ -77,6 +77,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
                 $r=credit_wallet((int)$req['user_id'],$amount,'airtime_to_cash',"A2C: N{$req['airtime_amount']} {$req['network']} - N{$amount}",['a2c_ref'=>$ref,'network'=>$req['network']],'a2c:'.$ref);
                 if($r['success']){
                     notify_user((int)$req['user_id'],'A2C Credited',number_format($amount,2)." credited for your {$req['network']} airtime",'success',null,$r['balance_before'],$r['balance_after']);
+                    audit_log($_SESSION['admin_id'],'CREDIT_A2C',"Credited A2C $ref for user #{$req['user_id']}, N$amount ({$req['network']})");
                     $ok=true;
                 } else {
                     // Crediting failed (or the idempotency key was already
@@ -110,7 +111,15 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         $ref=$_POST['ref']??'';if(!$ref)json_response(['success'=>false,'message'=>'Missing ref'],400);
         $s=db()->prepare("SELECT a.*, u.full_name, u.email, u.phone FROM airtime_to_cash a JOIN users u ON a.user_id=u.id WHERE a.transaction_ref=? LIMIT 1");$s->execute([$ref]);$req=$s->fetch();
         if(!$req)json_response(['success'=>false,'message'=>'Not found']);
-        db()->prepare("UPDATE airtime_to_cash SET status='failed',admin_note=? WHERE transaction_ref=?")->execute([sanitize($_POST['reason']??'Rejected by admin',300),$ref]);
+        // Same atomic guard as the credit action above — without this, a
+        // reject landing after the request was already credited (a race, or
+        // simply an admin clicking Reject on a stale page) silently overwrote
+        // status to 'failed' even though the wallet had genuinely been paid,
+        // leaving the record permanently misleading with no way to tell the
+        // money was actually sent.
+        $rejClaim=db()->prepare("UPDATE airtime_to_cash SET status='failed',admin_note=? WHERE transaction_ref=? AND status IN ('pending','processing')");
+        $rejClaim->execute([sanitize($_POST['reason']??'Rejected by admin',300),$ref]);
+        if($rejClaim->rowCount()===0)json_response(['success'=>false,'message'=>'Request already resolved — cannot reject']);
         notify_user((int)$req['user_id'],'❌ A2C Rejected','Your airtime to cash request was rejected. Contact support if you sent the airtime.','danger');
         send_whatsapp_alert("❌ *A2C Rejected*\nUser: ".($req['full_name']??'Unknown')." (".($req['email']??$req['phone']??'').")\nNetwork: {$req['network']}\nAirtime: ₦".number_format((float)$req['airtime_amount'],0)."\nRef: {$ref}");
         try{notify_admin('A2C Rejected',"
@@ -128,6 +137,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
 </table>
 </td></tr>
 </table>");}catch(\Throwable$e){}
+        audit_log($_SESSION['admin_id'],'REJECT_A2C',"Rejected A2C $ref for user #{$req['user_id']}");
         json_response(['success'=>true,'message'=>'Rejected']);
     }
     if($action==='save_rates'){

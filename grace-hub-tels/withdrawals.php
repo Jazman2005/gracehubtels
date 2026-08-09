@@ -86,6 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 </td></tr>
 </table>");}catch(\Throwable$e){}
             }
+            audit_log($_SESSION['admin_id'], 'APPROVE_WITHDRAWAL', "Approved withdrawal $ref for user #{$tx['user_id']}, N$amount sent to " . ($meta['bank_code']??'') . ' ' . ($meta['account_number']??''));
             json_response(['success'=>true,'message'=>'Transfer approved and executed successfully']);
         }
         if ($res === null) {
@@ -139,6 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 </table>
 </td></tr>
 </table>");}catch(\Throwable$e){}
+        audit_log($_SESSION['admin_id'], 'REJECT_WITHDRAWAL', "Rejected withdrawal $ref for user #{$tx['user_id']}, N$total refunded to wallet");
         json_response(['success'=>true,'message'=>'Withdrawal rejected and wallet refunded']);
     }
     json_response(['success'=>false,'message'=>'Unknown action']);
