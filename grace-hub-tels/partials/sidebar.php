@@ -55,6 +55,9 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
       <a href="<?= ADMIN_URL ?>/transactions-management.php?tab=failed" class="nav-sub-item <?=($cur==='transactions-management.php'&&isset($_GET['tab'])&&$_GET['tab']==='failed')?'active':''?>">Failed</a>
       <a href="<?= ADMIN_URL ?>/transactions-management.php?tab=sales" class="nav-sub-item <?=($cur==='transactions-management.php'&&isset($_GET['tab'])&&$_GET['tab']==='sales')?'active':''?>">Sales Analysis</a>
       <a href="<?= ADMIN_URL ?>/transactions-management.php?tab=users" class="nav-sub-item <?=($cur==='transactions-management.php'&&isset($_GET['tab'])&&$_GET['tab']==='users')?'active':''?>">Users Analysis</a>
+      <?php if(_has_perm('manage_transactions')):?>
+      <a href="<?= ADMIN_URL ?>/reconciliation.php" class="nav-sub-item <?=$cur==='reconciliation.php'?'active':''?>">Reconciliation</a>
+      <?php endif;?>
     </div>
     <?php endif;?>
     <?php if(_has_perm('manage_withdrawals')):?>
@@ -201,9 +204,10 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
       <span class="nav-text">API Setup</span>
       <span class="nav-chevron"><i class="fas fa-chevron-down"></i></span>
     </div>
-    <div class="nav-sub<?=($cur==='api-registry'||$cur==='api-registry.php'||$cur==='api-providers'||$cur==='api-providers.php')?' open':''?>">
+    <div class="nav-sub<?=($cur==='api-registry'||$cur==='api-registry.php'||$cur==='api-providers'||$cur==='api-providers.php'||$cur==='data-plan-mapping'||$cur==='data-plan-mapping.php')?' open':''?>">
       <a href="<?= ADMIN_URL ?>/api-registry" class="nav-sub-item <?=$cur==='api-registry'||$cur==='api-registry.php'?'active':''?>">API Registry</a>
       <a href="<?= ADMIN_URL ?>/api-providers" class="nav-sub-item <?=$cur==='api-providers'||$cur==='api-providers.php'?'active':''?>">API Routes</a>
+      <a href="<?= ADMIN_URL ?>/data-plan-mapping" class="nav-sub-item <?=$cur==='data-plan-mapping'||$cur==='data-plan-mapping.php'?'active':''?>">Plan ID Mapping</a>
     </div>
     <?php endif;?>
     <?php if(_has_perm('manage_gateways')):?>
