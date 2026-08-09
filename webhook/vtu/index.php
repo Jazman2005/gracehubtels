@@ -11,26 +11,58 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $ip = get_ip();
+$raw = file_get_contents('php://input');
 
-// Shared-secret verification (same pattern as cron_secret in cron_check_vtu.php).
-// Configure the secret once via site_settings and append ?key=<secret> to the
-// webhook URL registered on each VTU provider's dashboard.
+// Auth: this endpoint is shared by whichever VTU aggregator(s) are currently
+// configured (see the many provider-specific field-name fallbacks below), and
+// most of those only support a plain "callback URL" with no way to configure
+// a signing secret — so a static shared secret is the only scheme guaranteed
+// to work here, and requiring HMAC unconditionally would silently break
+// confirmation delivery for any provider that can't send a signature header
+// (falling back to cron_check_vtu.php's polling sweep only). What we CAN do
+// safely, without risking that breakage, is layer HMAC on top as an optional
+// upgrade: if a provider sends X-Webhook-Signature, it must be valid — this
+// lets any provider that DOES support signing opt into the stronger check
+// with zero config-side changes for everyone else. The static key is checked
+// via the header first (query strings routinely end up in access/proxy logs;
+// prefer the safer channel when both are present).
 $webhook_secret = setting('vtu_webhook_secret', '');
-$provided_key = $_GET['key'] ?? ($_SERVER['HTTP_X_WEBHOOK_SECRET'] ?? '');
+$provided_key = $_SERVER['HTTP_X_WEBHOOK_SECRET'] ?? ($_GET['key'] ?? '');
 if (empty($webhook_secret)) {
     log_write('webhook_vtu', 'ERROR', 'Webhook secret not configured — rejecting', ['ip' => $ip]);
     http_response_code(500);
     echo json_encode(['error' => 'Webhook secret not configured']);
     exit;
 }
-if (empty($provided_key) || !hash_equals($webhook_secret, (string)$provided_key)) {
+$key_valid = !empty($provided_key) && hash_equals($webhook_secret, (string)$provided_key);
+
+$hmac_secret = setting('vtu_webhook_hmac_secret', '');
+$signature = $_SERVER['HTTP_X_WEBHOOK_SIGNATURE'] ?? '';
+$hmac_valid = null;
+if (!empty($signature)) {
+    if (empty($hmac_secret)) {
+        log_write('webhook_vtu', 'ERROR', 'Signature header present but no HMAC secret configured — rejecting', ['ip' => $ip]);
+        http_response_code(400);
+        echo json_encode(['error' => 'HMAC not configured']);
+        exit;
+    }
+    $expected_sig = hash_hmac('sha256', $raw, $hmac_secret);
+    $hmac_valid = hash_equals($expected_sig, $signature);
+    if (!$hmac_valid) {
+        log_write('webhook_vtu', 'ERROR', 'Invalid HMAC signature', ['ip' => $ip]);
+        http_response_code(403);
+        echo json_encode(['error' => 'Invalid signature']);
+        exit;
+    }
+}
+
+if (!$key_valid) {
     log_write('webhook_vtu', 'ERROR', 'Invalid or missing webhook key', ['ip' => $ip]);
     http_response_code(403);
     echo json_encode(['error' => 'Invalid or missing webhook key']);
     exit;
 }
 
-$raw = file_get_contents('php://input');
 $payload = json_decode($raw, true);
 if (!$payload) {
     http_response_code(400);
@@ -55,9 +87,9 @@ $service_type = $payload['service'] ?? $payload['type'] ?? $payload['category'] 
 
 $log = db()->prepare(
     "INSERT INTO webhook_logs (provider,event_type,transaction_ref,amount,payload,signature_valid,ip_address)
-     VALUES ('vtu_webhook',?,?,?,?,1,?)"
+     VALUES ('vtu_webhook',?,?,?,?,?,?)"
 );
-$log->execute([$status_raw, $ref, $amount, $raw, $ip]);
+$log->execute([$status_raw, $ref, $amount, $raw, $hmac_valid === true ? 1 : 0, $ip]);
 $log_id = (int)db()->lastInsertId();
 
 if (!$ref) {

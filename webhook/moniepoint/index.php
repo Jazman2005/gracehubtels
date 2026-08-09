@@ -60,23 +60,23 @@ if ($data['eventType'] === 'SUCCESSFUL_TRANSACTION') {
         exit('Already processed');
     }
 
-    // Find user by account reference
-    $stmt = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_reference = ? AND provider = 'moniepoint' LIMIT 1");
-    $stmt->execute([$accountReference]);
-    $acc = $stmt->fetch();
-
-    if (!$acc) {
-        // Fallback to checking by account number if accountReference is not reliable
-        $accountNumber = $eventData['destinationAccountInformation']['accountNumber'] ?? null;
-        if ($accountNumber) {
-            $stmt = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number = ? AND provider = 'moniepoint' LIMIT 1");
-            $stmt->execute([$accountNumber]);
-            $acc = $stmt->fetch();
-        }
+    // Find user by account number. This used to try an `account_reference`
+    // column first — that column has never existed on virtual_accounts (the
+    // Monnify onboarding flow in virtual-account.php builds an
+    // 'account_reference' array key but save_account() never persists it),
+    // so that query threw an uncaught PDOException on every single delivery,
+    // crashing the handler before it ever reached this account-number match.
+    // In effect every Moniepoint funding webhook has been failing outright.
+    $accountNumber = $eventData['destinationAccountInformation']['accountNumber'] ?? null;
+    $acc = null;
+    if ($accountNumber) {
+        $stmt = db()->prepare("SELECT user_id FROM virtual_accounts WHERE account_number = ? AND provider = 'moniepoint' LIMIT 1");
+        $stmt->execute([$accountNumber]);
+        $acc = $stmt->fetch();
     }
 
     if (!$acc) {
-        log_write('webhook_moniepoint', 'ERROR', 'Account not found', ['ref' => $accountReference]);
+        log_write('webhook_moniepoint', 'ERROR', 'Account not found', ['ref' => $accountReference, 'account_number' => $accountNumber]);
         http_response_code(404);
         exit('Account not found');
     }

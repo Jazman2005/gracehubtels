@@ -103,24 +103,27 @@ if (preg_match('/fund|credit|deposit/i', $event)) {
     }
 }
 
-elseif (preg_match('/freeze/i', $event)) {
+elseif (preg_match('/freeze|unfreeze|activate|terminate|close|delete/i', $event)) {
     $cardId = $data['cardId'] ?? $data['card_id'] ?? '';
-    if ($cardId) {
-        db()->prepare("UPDATE virtual_cards SET status='frozen' WHERE card_id=?")->execute([$cardId]);
-    }
-}
-
-elseif (preg_match('/unfreeze|activate/i', $event)) {
-    $cardId = $data['cardId'] ?? $data['card_id'] ?? '';
-    if ($cardId) {
-        db()->prepare("UPDATE virtual_cards SET status='active' WHERE card_id=?")->execute([$cardId]);
-    }
-}
-
-elseif (preg_match('/terminate|close|delete/i', $event)) {
-    $cardId = $data['cardId'] ?? $data['card_id'] ?? '';
-    if ($cardId) {
-        db()->prepare("UPDATE virtual_cards SET status='terminated' WHERE card_id=?")->execute([$cardId]);
+    // These status-change events had no replay guard at all — the HMAC check above
+    // proves the request came from Cashwyre (or someone holding the secret) at some
+    // point, but not that this specific event is being seen for the first time. A
+    // captured valid request (or Cashwyre's own retry) replayed later could flip a
+    // card's status back to a stale value — e.g. re-freezing after an admin/user
+    // legitimately unfroze it. Dedup on the event id (falling back to a hash of the
+    // raw body when Cashwyre doesn't send one) the same way the funding branch does.
+    $event_id = $data['id'] ?? $data['transactionId'] ?? $data['eventId'] ?? hash('sha256', $raw);
+    $idem_key = 'cashwyre:status:' . $event . ':' . $event_id;
+    if ($cardId && claim_idempotency_key($idem_key)) {
+        if (preg_match('/freeze/i', $event) && !preg_match('/unfreeze/i', $event)) {
+            db()->prepare("UPDATE virtual_cards SET status='frozen' WHERE card_id=?")->execute([$cardId]);
+        } elseif (preg_match('/unfreeze|activate/i', $event)) {
+            db()->prepare("UPDATE virtual_cards SET status='active' WHERE card_id=?")->execute([$cardId]);
+        } elseif (preg_match('/terminate|close|delete/i', $event)) {
+            db()->prepare("UPDATE virtual_cards SET status='terminated' WHERE card_id=?")->execute([$cardId]);
+        }
+    } else {
+        log_write('webhook_cashwyre', 'INFO', 'Duplicate or unresolvable status event ignored', ['event' => $event, 'card_id' => $cardId, 'idem_key' => $idem_key]);
     }
 }
 
