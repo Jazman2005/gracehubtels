@@ -15,6 +15,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
     $ref = $_POST['ref'] ?? '';
     if (!$ref) json_response(['success'=>false,'message'=>'Missing ref'],400);
 
+    // The atomic pending->processing claim below is the real gate against a
+    // concurrent double-approve, but a clean/fast rejection from PalmPay (or
+    // it simply being unconfigured) resets the claim straight back to
+    // 'pending' with no delay — a tight burst of concurrent clicks can each
+    // in turn claim, get an instant local/fast-fail response, and release,
+    // meaning several of them can genuinely reach the live transfer call
+    // rather than being turned away with "already processed". This lock
+    // closes that window without touching the legitimate retry-after-a-
+    // real-failure flow, which still works fine after it expires.
+    if (!claim_purchase_lock((int)$_SESSION['admin_id'], 'withdrawal_' . $action, [$ref], 10)) {
+        json_response(['success'=>false,'message'=>'Please wait a moment before retrying this action.']);
+    }
+
     $tx = db()->prepare("SELECT t.*, u.full_name, u.email, u.phone, u.wallet_balance FROM transactions t JOIN users u ON t.user_id=u.id WHERE t.transaction_ref=? AND t.category='bank_transfer' AND t.status='pending' LIMIT 1");
     $tx->execute([$ref]);
     $tx = $tx->fetch();
@@ -59,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
                 try{notify_admin('Withdrawal Approved',"
 <div style='text-align:center;padding:10px 0 16px;'>
 <span style='font-size:28px;line-height:1;font-weight:800;color:#16a34a;'>OK</span>
-<h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>Withdrawal Approved &amp; Sent</h3>
+<h3 style='color:#FF5A1F;font-size:18px;margin:8px 0 4px;'>Withdrawal Approved &amp; Sent</h3>
 <p style='color:#475569;font-size:13px;margin:0;'>A withdrawal has been approved and paid out.</p>
 </div>
 <table style='width:100%;border-collapse:collapse;'>
@@ -113,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         try{notify_admin('Withdrawal Rejected',"
 <div style='text-align:center;padding:10px 0 16px;'>
 <span style='font-size:28px;line-height:1;font-weight:800;color:#dc2626;'>X</span>
-<h3 style='color:#4F46E5;font-size:18px;margin:8px 0 4px;'>Withdrawal Rejected</h3>
+<h3 style='color:#FF5A1F;font-size:18px;margin:8px 0 4px;'>Withdrawal Rejected</h3>
 <p style='color:#475569;font-size:13px;margin:0;'>A withdrawal request has been rejected and refunded.</p>
 </div>
 <table style='width:100%;border-collapse:collapse;'>
@@ -168,16 +181,16 @@ foreach($txs as $t) {
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .tab-bar{display:flex;gap:4px;background:#F1F5F9;padding:4px;border-radius:10px;margin-bottom:20px;flex-wrap:wrap}
-        .tab-btn{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:transparent;color:#64748B;transition:all .15s}
-        .tab-btn.active{background:#fff;color:var(--navy-dark);box-shadow:0 1px 3px rgba(0,0,0,.08)}
-        .tab-btn .badge{display:inline-block;background:#E2E8F0;color:#475569;padding:1px 8px;border-radius:99px;font-size:11px;margin-left:6px}
+        .tab-bar{display:flex;gap:4px;background:var(--bg);padding:4px;border-radius:10px;margin-bottom:20px;flex-wrap:wrap;border:1px solid var(--border)}
+        .tab-btn{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:transparent;color:var(--text-muted);transition:all .15s}
+        .tab-btn.active{background:var(--surface);color:var(--primary);box-shadow:var(--shadow-sm)}
+        .tab-btn .badge{display:inline-block;background:var(--border);color:var(--text-muted);padding:1px 8px;border-radius:99px;font-size:11px;margin-left:6px}
         .tab-btn.active .badge{background:var(--primary-light);color:var(--primary)}
         .action-group{display:flex;gap:6px}
-        .btn-approve{background:#D1FAE5;color:#065F46;border:1px solid #A7F3D0;padding:6px 14px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;transition:all .15s}
-        .btn-approve:hover{background:#065F46;color:#fff}
-        .btn-reject{background:#FEE2E2;color:#991B1B;border:1px solid #FECACA;padding:6px 14px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;transition:all .15s}
-        .btn-reject:hover{background:#991B1B;color:#fff}
+        .btn-approve{background:rgba(5,150,105,0.1);color:var(--success);border:1px solid rgba(5,150,105,0.25);padding:6px 14px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;transition:all .15s}
+        .btn-approve:hover{background:var(--success);color:#fff}
+        .btn-reject{background:rgba(220,38,38,0.1);color:var(--danger);border:1px solid rgba(220,38,38,0.25);padding:6px 14px;border-radius:8px;font-weight:600;font-size:12px;cursor:pointer;transition:all .15s}
+        .btn-reject:hover{background:var(--danger);color:#fff}
     </style>
 </head>
 <body>

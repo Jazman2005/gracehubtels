@@ -50,6 +50,17 @@ if ($action === 'claim') {
         }
 
         $db = db();
+        // Many different accounts racing the same popular promo code all
+        // contend for the same promo_codes row (the UPDATE below) and the
+        // same FK-checked parent row (the promo_claims INSERT) -- proven via
+        // load testing to genuinely trigger InnoDB deadlocks (error 1213),
+        // which previously surfaced as a raw "an error occurred" failure
+        // even for a claim that should have cleanly succeeded or been told
+        // the limit was reached. A deadlock aborts the whole transaction
+        // atomically (nothing partially applies), so it's safe to just
+        // retry the same logic a few times before giving up.
+        $maxAttempts = 3;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
         $db->beginTransaction();
         try {
             // Check if already claimed
@@ -96,10 +107,16 @@ if ($action === 'claim') {
             if ($db->inTransaction()) {
                 $db->rollBack();
             }
-            log_error('promo', 'claim failed: ' . $e->getMessage(), ['user_id' => $user['id'], 'code' => $code]);
+            $isDeadlock = $e instanceof PDOException && (int)($e->errorInfo[1] ?? 0) === 1213;
+            if ($isDeadlock && $attempt < $maxAttempts) {
+                usleep(random_int(20000, 80000)); // 20-80ms jitter before retrying
+                continue;
+            }
+            log_error('promo', 'claim failed: ' . $e->getMessage(), ['user_id' => $user['id'], 'code' => $code, 'attempt' => $attempt]);
             http_response_code(500);
             echo json_encode(['status' => 'error', 'message' => 'An error occurred. Please try again.']);
             exit;
+        }
         }
     } catch (PDOException $e) {
         http_response_code(500);
