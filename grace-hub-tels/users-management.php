@@ -35,8 +35,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     // idempotency key of their own and this is a brand-new transaction each
     // call, not a resolution of an existing pending one, so nothing else
     // would have caught a duplicate here.
-    if($action==='credit'){$amt=(float)($_POST['amount']??0);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);if(!claim_purchase_lock($uid,'admin_credit',[$amt,sanitize($_POST['note']??'',200)]))json_response(['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.']);$r=credit_wallet($uid,$amt,'admin_credit','Admin credit: '.sanitize($_POST['note']??'',200));json_response($r);}
-    if($action==='debit'){$amt=(float)($_POST['amount']??0);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);if(!claim_purchase_lock($uid,'admin_debit',[$amt,sanitize($_POST['note']??'',200)]))json_response(['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.']);$r=debit_wallet($uid,$amt,'admin_debit','Admin debit: '.sanitize($_POST['note']??'',200));if($r['success'])update_tx_status($r['ref'],'success');json_response($r);}
+    if($action==='credit'){$amt=(float)($_POST['amount']??0);$note=sanitize($_POST['note']??'',200);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);if(!claim_purchase_lock($uid,'admin_credit',[$amt,$note]))json_response(['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.']);$r=credit_wallet($uid,$amt,'admin_credit','Admin credit: '.$note);if($r['success'])audit_log($_SESSION['admin_id'],'ADMIN_CREDIT',"Credited user #$uid with N$amt (note: $note) ref={$r['ref']}");json_response($r);}
+    if($action==='debit'){$amt=(float)($_POST['amount']??0);$note=sanitize($_POST['note']??'',200);if($amt<=0)json_response(['success'=>false,'message'=>'Invalid amount']);if(!claim_purchase_lock($uid,'admin_debit',[$amt,$note]))json_response(['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.']);$r=debit_wallet($uid,$amt,'admin_debit','Admin debit: '.$note);if($r['success']){update_tx_status($r['ref'],'success');audit_log($_SESSION['admin_id'],'ADMIN_DEBIT',"Debited user #$uid by N$amt (note: $note) ref={$r['ref']}");}json_response($r);}
     if($action==='reset_pin'){db()->prepare("UPDATE users SET transaction_pin=NULL,pin_attempts=0,pin_locked_until=NULL WHERE id=?")->execute([$uid]);notify_user($uid,'PIN Reset','Your transaction PIN has been reset by admin. Set a new PIN.','info');json_response(['success'=>true,'message'=>'PIN reset']);}
 
     if($action==='change_password'){
@@ -153,15 +153,30 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         }
         
         $count = 0;
+        $bulk_amt = (float)($_POST['amount']??0);
+        $blocked_nonzero_balance = 0;
         foreach($uids as $id) {
             $id = (int)$id;
             if($b_action==='suspend') { db()->prepare("UPDATE users SET is_suspended=1, suspension_reason='Bulk suspension' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='unsuspend') { db()->prepare("UPDATE users SET is_suspended=0, suspension_reason=NULL WHERE id=?")->execute([$id]); $count++; }
-            if($b_action==='credit') { if(claim_purchase_lock($id,'admin_credit_bulk',[(float)($_POST['amount']??0)])){ credit_wallet($id, (float)($_POST['amount']??0), 'admin_credit', 'Bulk admin credit'); $count++; } }
-            if($b_action==='debit') { if(claim_purchase_lock($id,'admin_debit_bulk',[(float)($_POST['amount']??0)])){ debit_wallet($id, (float)($_POST['amount']??0), 'admin_debit', 'Bulk admin debit'); $count++; } }
+            if($b_action==='credit') { if($bulk_amt>0 && claim_purchase_lock($id,'admin_credit_bulk',[$bulk_amt])){ $r=credit_wallet($id, $bulk_amt, 'admin_credit', 'Bulk admin credit'); if($r['success'])$count++; } }
+            if($b_action==='debit') { if($bulk_amt>0 && claim_purchase_lock($id,'admin_debit_bulk',[$bulk_amt])){ $r=debit_wallet($id, $bulk_amt, 'admin_debit', 'Bulk admin debit'); if($r['success']){update_tx_status($r['ref'],'success');$count++;} } }
             if($b_action==='upgrade_vendor') { db()->prepare("UPDATE users SET user_type='vendor' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='downgrade_regular') { db()->prepare("UPDATE users SET user_type='regular' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='delete') {
+                // A hard delete here cascades to the user's own `transactions` rows
+                // (below) with no ledger trace left behind — deleting a user who
+                // still holds a nonzero wallet or cashback balance would make that
+                // money simply vanish with no record of where it went. Require it
+                // to be zeroed out (refunded, withdrawn, or explicitly written off
+                // via the single-user Credit/Debit action, which IS audited) first.
+                $bal = db()->prepare("SELECT wallet_balance, cashback_balance FROM users WHERE id=?");
+                $bal->execute([$id]);
+                $bal = $bal->fetch();
+                if ($bal && (abs((float)$bal['wallet_balance']) > 0.01 || abs((float)$bal['cashback_balance']) > 0.01)) {
+                    $blocked_nonzero_balance++;
+                    continue;
+                }
                 try {
                     db()->prepare("DELETE FROM virtual_accounts WHERE user_id=?")->execute([$id]);
                     db()->prepare("DELETE FROM transactions WHERE user_id=?")->execute([$id]);
@@ -180,7 +195,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
                 }
             }
         }
-        json_response(['success'=>true,'message'=>"Bulk action completed on $count users"]);
+        audit_log($_SESSION['admin_id'], 'BULK_'.strtoupper($b_action), "Bulk $b_action on ".count($uids)." selected users — $count succeeded".($bulk_amt>0?" (amount: N$bulk_amt)":'').($blocked_nonzero_balance>0?"; $blocked_nonzero_balance delete(s) blocked — nonzero balance":''));
+        $msg = "Bulk action completed on $count users";
+        if ($blocked_nonzero_balance > 0) $msg .= " ($blocked_nonzero_balance skipped — nonzero wallet/cashback balance, resolve that first)";
+        json_response(['success'=>true,'message'=>$msg]);
     }
 
     json_response(['success'=>false],400);

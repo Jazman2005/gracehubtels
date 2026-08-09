@@ -41,6 +41,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
             if($res['success']) {
                 notify_user((int)$row['user_id'], 'Deposit Approved', 'Your manual deposit of ₦'.number_format($row['amount'], 2).' has been approved and credited', 'success', null, $res['balance_before'], $res['balance_after']);
                 send_whatsapp_alert("✅ *Manual Deposit Approved*\nUser: " . ($user['full_name'] ?? 'Unknown') . " (" . ($user['email'] ?? $user['phone'] ?? '') . ")\nAmount: ₦" . number_format((float)$row['amount'], 2) . "\nRef: " . ($res['ref'] ?? 'N/A'));
+                audit_log($_SESSION['admin_id'], 'APPROVE_MANUAL_DEPOSIT', "Approved manual deposit #$id for user #{$row['user_id']}, N{$row['amount']} credited, ref={$res['ref']}");
                 json_response(['success'=>true,'message'=>'Deposit approved and wallet credited']);
             } else {
                 // Crediting failed (or the idempotency key was somehow already
@@ -53,6 +54,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         } elseif($action === 'reject_deposit') {
             notify_user((int)$row['user_id'], 'Deposit Rejected', 'Your manual deposit of ₦'.number_format($row['amount'], 2).' could not be verified. Please contact support.', 'danger');
             send_whatsapp_alert("❌ *Manual Deposit Rejected*\nUser: " . ($user['full_name'] ?? 'Unknown') . " (" . ($user['email'] ?? $user['phone'] ?? '') . ")\nAmount: ₦" . number_format((float)$row['amount'], 2) . "\nSender: " . ($row['sender_name'] ?? 'N/A'));
+            audit_log($_SESSION['admin_id'], 'REJECT_MANUAL_DEPOSIT', "Rejected manual deposit #$id for user #{$row['user_id']}, N{$row['amount']}");
             json_response(['success'=>true,'message'=>'Deposit rejected']);
         }
     }
