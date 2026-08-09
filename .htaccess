@@ -20,17 +20,45 @@ RewriteRule ^(.+)$ $1.php [L]
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set X-XSS-Protection "1; mode=block"
-    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'"
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.tailwindcss.com https://code.jquery.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; frame-ancestors 'none'"
+    # Restricts browser-feature access this app never uses; harmless to same-origin
+    # features it does use (e.g. clipboard-write for copy-to-clipboard buttons),
+    # which are left at their default (unlisted = not restricted).
+    Header always set Permissions-Policy "geolocation=(), camera=(), microphone=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), payment=()"
+    # Only ever sent by Apache/mod_ssl over an actual HTTPS connection (the
+    # `env=HTTPS` condition is unset on plain HTTP, so this is a no-op locally
+    # and on any non-TLS request) — tells browsers that have ever seen this
+    # site over HTTPS to refuse plain-HTTP connections to it for the given
+    # duration. Does not itself force HTTP->HTTPS redirection; see deployment
+    # notes for that (a server/hosting-level concern, not something safe to
+    # blanket-enable here without knowing the production vhost/proxy setup).
+    Header always set Strict-Transport-Security "max-age=15768000" env=HTTPS
 </IfModule>
 
 # Prevent directory listing
 Options -Indexes
 
-# Protect sensitive files
-<FilesMatch "^(error_log|\.env|\.sql|\.md|composer\.(json|lock))">
+# Protect sensitive files. Anchored with $ (or an exact name) so this
+# actually matches by extension/exact-filename — the previous pattern
+# (`^(error_log|\.env|\.sql|\.md|composer\.(json|lock))` with no end anchor)
+# only matched filenames that LITERALLY START with ".sql" or ".md", e.g. a
+# hidden file named ".sql" — it did not match any normal *.sql or *.md
+# filename (confirmed: CLAUDE.md, a real tracked file at this same webroot
+# level, was never actually covered by it). database/*.sql is separately
+# covered by database/.htaccess, but this is the general-purpose net for
+# any such file dropped anywhere else in the webroot.
+<FilesMatch "(^\.env|\.sql$|\.md$|^composer\.(json|lock)$|^error_log$|\.(bak|backup|old|orig|swp|sql~)$)">
     Order Allow,Deny
     Deny from all
 </FilesMatch>
+
+# Block access to the .git directory entirely — it was being served as plain
+# static files (confirmed live: .git/config and .git/HEAD both returned real
+# repo data over HTTP), letting anyone dump the full repo/history with a tool
+# like git-dumper. No legitimate request ever needs this directory.
+# (<Directory>/<DirectoryMatch> are NOT valid inside .htaccess — only in the
+# main server/vhost config — so this has to be done via RewriteRule instead.)
+RewriteRule "(^|/)\.git/" - [F,L]
 
 # Block debug/test files from public access
 <FilesMatch "^(testdebug|test_debug2|test_cashwyre_check|test_simple|debug_notifications)\.php$">

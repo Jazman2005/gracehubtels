@@ -3,3 +3,12 @@ user/core/db_config.php
 
 # Environment files
 .env
+
+# Local full-data DB exports/snapshots — these have been observed to contain
+# real, live-looking provider API keys/secrets/tokens (webhook secrets, a
+# PalmPay private key, VTU provider tokens) baked into the site_settings /
+# api_registry / api_providers row data, unlike the schema-only migration_v*.sql
+# files above which are safe to ship. Never commit a file like this.
+database/msjdkjef_api.sql
+database/*.sql.bak
+*.sql.bak
