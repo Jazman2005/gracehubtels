@@ -12,3 +12,9 @@ user/core/db_config.php
 database/msjdkjef_api.sql
 database/*.sql.bak
 *.sql.bak
+
+# Runtime log output — generated operational data, not application source.
+# Was previously tracked (a pre-existing mistake), which meant every log
+# write showed up as a diff and the repo grew unboundedly over time. Untracked
+# via `git rm --cached`; the files themselves are untouched on disk.
+logs/*.log
