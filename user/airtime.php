@@ -77,25 +77,6 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
         <?php endif;?>
 
-        <!-- Network Selection -->
-        <div class="mb-6">
-            <label class="block text-sm font-semibold text-slate-700 mb-3">Select Network</label>
-            <div class="grid grid-cols-4 gap-3">
-                <?php foreach($nets as $name=>[$bg,$color]):?>
-                <button type="button" class="net-btn flex flex-col items-center justify-center p-3 rounded-xl border-2 <?= $prefill_net===$name?'border-brand-orange bg-brand-orangeLight':'border-slate-100 bg-slate-50 hover:border-brand-orange/50' ?> transition-all relative overflow-hidden" onclick="selectNet(this,'<?=$name?>')" data-net="<?=$name?>">
-                    <div class="w-12 h-12 rounded-full mb-2 overflow-hidden bg-white shadow-sm flex items-center justify-center <?= $bg ?> <?= $color ?> font-bold">
-                        <?php $logo_url = "https://api.msjpay.ng/assets/logos/" . strtolower($name) . ".png"; ?>
-                        <img src="<?=$logo_url?>" alt="<?=$name?>" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.innerHTML='<?=substr($name,0,1)?>'">
-                    </div>
-                    <span class="text-xs font-semibold text-slate-700"><?=$name?></span>
-                    <div class="absolute top-2 right-2 text-brand-orange opacity-0 check-icon <?= $prefill_net===$name?'!opacity-100':'' ?>">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                </button>
-                <?php endforeach;?>
-            </div>
-        </div>
-
         <!-- Phone Number -->
         <div class="mb-6">
             <label class="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
@@ -111,6 +92,29 @@ include __DIR__ . '/includes/sidebar.php';
                 </button>
             </div>
         </div>
+
+        <!-- Network Selection — hidden until a phone number is typed; auto-highlights
+             the detected network, but stays fully clickable so a ported number can
+             be pointed at a different network. -->
+        <div id="networkSection" class="mb-6 <?= empty($prefill_net) ? 'hidden' : '' ?>">
+            <label class="block text-sm font-semibold text-slate-700 mb-3">Select Network</label>
+            <div class="grid grid-cols-4 gap-3">
+                <?php foreach($nets as $name=>[$bg,$color]):?>
+                <button type="button" class="net-btn flex flex-col items-center justify-center p-3 rounded-xl border-2 <?= $prefill_net===$name?'border-brand-orange bg-brand-orangeLight':'border-slate-100 bg-slate-50 hover:border-brand-orange/50' ?> transition-all relative overflow-hidden" onclick="selectNet(this,'<?=$name?>',true)" data-net="<?=$name?>">
+                    <div class="w-12 h-12 rounded-full mb-2 overflow-hidden bg-white shadow-sm flex items-center justify-center <?= $bg ?> <?= $color ?> font-bold">
+                        <?php $logo_url = "https://api.msjpay.ng/assets/logos/" . strtolower($name) . ".png"; ?>
+                        <img src="<?=$logo_url?>" alt="<?=$name?>" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.innerHTML='<?=substr($name,0,1)?>'">
+                    </div>
+                    <span class="text-xs font-semibold text-slate-700"><?=$name?></span>
+                    <div class="absolute top-2 right-2 text-brand-orange opacity-0 check-icon <?= $prefill_net===$name?'!opacity-100':'' ?>">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </button>
+                <?php endforeach;?>
+            </div>
+        </div>
+
+        <p id="networkWarn" class="text-red-500 text-xs font-semibold mt-1.5 mb-6 hidden"></p>
 
         <!-- Amount -->
         <div class="mb-6">
@@ -147,7 +151,10 @@ include __DIR__ . '/includes/sidebar.php';
 
 <!-- Scripts for UI logic -->
 <script>
-function selectNet(btn, net) {
+let manualNetSelection = <?= !empty($prefill_net) ? 'true' : 'false' ?>;
+
+function selectNet(btn, net, isManual = false) {
+    document.getElementById('networkSection').classList.remove('hidden');
     document.querySelectorAll('.net-btn').forEach(b => {
         b.classList.remove('border-brand-orange', 'bg-brand-orangeLight');
         b.classList.add('border-slate-100', 'bg-slate-50');
@@ -157,12 +164,13 @@ function selectNet(btn, net) {
     btn.classList.add('border-brand-orange', 'bg-brand-orangeLight');
     btn.querySelector('.check-icon').classList.add('!opacity-100');
     document.getElementById('netF').value = net;
+    if (isManual) manualNetSelection = true;
 }
 
 function useBenef(phone, net, id) {
     document.getElementById('phoneF').value = phone;
     const btn = document.querySelector(`.net-btn[data-net="${net}"]`);
-    if(btn) selectNet(btn, net);
+    if(btn) selectNet(btn, net, true);
 }
 
 function setAmt(amt, btn) {
@@ -200,36 +208,60 @@ function detectNetwork(phone) {
     return null;
 }
 
-document.getElementById('phoneF').addEventListener('input', function(e) {
-    let phone = this.value.replace(/[^0-9]/g, "");
+function resetNetSelection() {
+    manualNetSelection = false;
+    document.getElementById('netF').value = '';
+    document.querySelectorAll('.net-btn').forEach(b => {
+        b.classList.remove('border-brand-orange', 'bg-brand-orangeLight');
+        b.classList.add('border-slate-100', 'bg-slate-50');
+        b.querySelector('.check-icon').classList.remove('!opacity-100');
+    });
+    document.getElementById('networkSection').classList.add('hidden');
+    document.getElementById('networkWarn').classList.add('hidden');
+}
+
+function handlePhoneInput() {
+    let phone = document.getElementById('phoneF').value.replace(/[^0-9]/g, "");
+
+    // Erased back below the detection threshold — drop whatever network was
+    // selected (auto or manual) so the next number typed gets its own fresh
+    // detection instead of inheriting the previous number's network.
+    if (phone.length < 4) {
+        resetNetSelection();
+        return;
+    }
+
     let detected = detectNetwork(phone);
     let warnEl = document.getElementById("networkWarn");
-    
+    let netSection = document.getElementById("networkSection");
     let currentNet = document.getElementById('netF').value;
-    
+
+    if (!manualNetSelection) {
+        netSection.classList.remove('hidden');
+    }
+
     if (detected) {
-        if (!currentNet) {
-            // Auto select visually
+        if (!currentNet || !manualNetSelection) {
+            // No manual choice yet (or a prior auto-pick) — safe to auto-select.
             let btn = document.querySelector(`.net-btn[data-net="${detected}"]`);
-            if (btn) {
-                selectNet(btn, detected);
-                warnEl.classList.add("hidden");
-            }
+            if (btn) selectNet(btn, detected);
+            warnEl.classList.add("hidden");
         } else if (currentNet !== detected) {
+            // A manually/beneficiary-selected network differs from the detected one
+            // (e.g. a ported number) — warn, but don't override the user's choice.
             warnEl.textContent = `Note: This looks like an ${detected} number, but ${currentNet} is selected.`;
             warnEl.classList.replace("text-brand-orange", "text-red-500");
             warnEl.classList.remove("hidden");
-            
-            // If they keep typing, we shouldn't force change it unless they finish typing
-            // But for airtime, it's instant client-side. We can just change it.
-            let btn = document.querySelector(`.net-btn[data-net="${detected}"]`);
-            if (btn) selectNet(btn, detected);
         } else {
             warnEl.classList.add("hidden");
         }
     } else {
         warnEl.classList.add("hidden");
     }
+}
+document.getElementById('phoneF').addEventListener('input', handlePhoneInput);
+window.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('phoneF').value) { handlePhoneInput(); }
 });
 
 function openConfirm() {

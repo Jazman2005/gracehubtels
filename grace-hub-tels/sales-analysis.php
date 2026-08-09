@@ -2,6 +2,7 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 auth_admin();
+require_permission('view_profit');
 
 $range = preg_replace('/[^a-z0-9_]/', '', strtolower($_GET['range'] ?? 'this_month'));
 $custom_from = preg_replace('/[^0-9\-]/', '', $_GET['from'] ?? '');
@@ -65,7 +66,7 @@ $cats = [
   'exam_pin' => ['label'=>'Exam PINs', 'icon'=>'fa-graduation-cap', 'color'=>'#14B8A6', 'unit'=>'PINs'],
   'airtime_to_cash' => ['label'=>'Airtime to Cash', 'icon'=>'fa-arrows-rotate', 'color'=>'#EC4899', 'unit'=>'transactions'],
   'recharge_card' => ['label'=>'Airtime PINs', 'icon'=>'fa-ticket', 'color'=>'#16A34A', 'unit'=>'PINs'],
-  'data_card' => ['label'=>'Data Cards', 'icon'=>'fa-sd-card', 'color'=>'#4F46E5', 'unit'=>'cards'],
+  'data_card' => ['label'=>'Data Cards', 'icon'=>'fa-sd-card', 'color'=>'#FF5A1F', 'unit'=>'cards'],
   'wallet_funding' => ['label'=>'Wallet Funding', 'icon'=>'fa-wallet', 'color'=>'#10B981', 'unit'=>'fundings'],
   'bank_transfer' => ['label'=>'Bank Transfers', 'icon'=>'fa-building-columns', 'color'=>'#3B82F6', 'unit'=>'transfers'],
   'wallet_transfer' => ['label'=>'Wallet Transfers', 'icon'=>'fa-arrow-right-arrow-left', 'color'=>'#8B5CF6', 'unit'=>'transfers'],
@@ -125,7 +126,7 @@ $date_display = $start->format('M d, Y').' — '.$end->format('M d, Y');
     .analytics-bar .date-nav{display:flex;gap:4px;flex-wrap:wrap}
     .analytics-bar .date-nav a{padding:7px 14px;font-size:12px;font-weight:600;border-radius:8px;color:var(--text-muted);text-decoration:none;transition:all .2s;white-space:nowrap}
     .analytics-bar .date-nav a:hover{background:var(--bg);color:var(--navy-dark)}
-    .analytics-bar .date-nav a.active{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(79,70,229,.25)}
+    .analytics-bar .date-nav a.active{background:var(--primary);color:#fff;box-shadow:0 2px 8px rgba(255,90,31,.25)}
     .analytics-bar .date-range{display:flex;align-items:center;gap:8px;margin-left:auto}
     .analytics-bar .date-range input{height:36px;padding:0 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;background:var(--bg);outline:none}
     .analytics-bar .date-range input:focus{border-color:var(--primary)}
@@ -252,7 +253,7 @@ $date_display = $start->format('M d, Y').' — '.$end->format('M d, Y');
   <!-- Virtual Cards -->
   <div class="cat-card">
     <div class="cat-head">
-      <div class="cat-icon" style="background:rgba(99,102,241,0.1);color:#6366F1"><i class="fas fa-credit-card"></i></div>
+      <div class="cat-icon" style="background:rgba(255,90,31,0.1);color:#FF5A1F"><i class="fas fa-credit-card"></i></div>
       <div class="cat-label">Virtual Cards</div>
     </div>
     <div class="cat-amount">₦<?=number_format($vc_total,2)?></div>

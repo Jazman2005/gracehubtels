@@ -48,10 +48,18 @@ $csrf = csrf_token();
 $cat_icons=['wallet_funding'=>'<i class="fas fa-wallet"></i>','airtime'=>'<i class="fas fa-mobile-alt"></i>','data'=>'<i class="fas fa-wifi"></i>','electricity'=>'<i class="fas fa-bolt"></i>','cabletv'=>'<i class="fas fa-tv"></i>','airtime_to_cash'=>'<i class="fas fa-exchange-alt"></i>','exam_pin'=>'<i class="fas fa-graduation-cap"></i>','recharge_card'=>'<i class="fas fa-print"></i>','data_card'=>'<i class="fas fa-credit-card"></i>','bank_transfer'=>'<i class="fas fa-university"></i>','cashback'=>'<i class="fas fa-gift"></i>','admin_credit'=>'<i class="fas fa-arrow-down"></i>','admin_debit'=>'<i class="fas fa-arrow-up"></i>'];
 $cat_colors=['wallet_funding'=>'text-green-500 bg-green-100','airtime'=>'text-blue-500 bg-blue-100','data'=>'text-emerald-500 bg-emerald-100','electricity'=>'text-yellow-500 bg-yellow-100','cabletv'=>'text-purple-500 bg-purple-100','airtime_to_cash'=>'text-orange-500 bg-orange-100','exam_pin'=>'text-teal-500 bg-teal-100','recharge_card'=>'text-pink-500 bg-pink-100','data_card'=>'text-cyan-500 bg-cyan-100','bank_transfer'=>'text-indigo-500 bg-indigo-100','cashback'=>'text-amber-500 bg-amber-100','admin_credit'=>'text-green-500 bg-green-100','admin_debit'=>'text-red-500 bg-red-100'];
 
-$page_title = 'Dashboard'; 
-include __DIR__ . '/includes/header.php'; 
-include __DIR__ . '/includes/sidebar.php'; 
+$page_title = 'Dashboard';
+include __DIR__ . '/includes/header.php';
+include __DIR__ . '/includes/sidebar.php';
 ?>
+<style>
+    /* The account number/name card uses a raw bg-[#F8F9FD] (near-white) —
+       header.php's dark-mode overrides only swap .bg-white/.bg-slate-50, so
+       this card's background never switched to dark. Its text still got
+       swapped to light colors (text-slate-800/text-slate-500 are covered),
+       leaving light text on a background that stayed light too. */
+    html.dark-mode .acct-card { background-color:#1e293b !important; border-color:#334155 !important; }
+</style>
 
 <!-- Welcome Section -->
 <div class="mb-3 sm:mb-6">
@@ -125,7 +133,7 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
         
         <?php if ($palmpay_acct): ?>
-        <div class="bg-[#F8F9FD] rounded-xl p-2.5 sm:p-3 border border-[#E9EEF7] mb-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] w-[85%] sm:max-w-md relative z-20 overflow-hidden">
+        <div class="acct-card bg-[#F8F9FD] rounded-xl p-2.5 sm:p-3 border border-[#E9EEF7] mb-4 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] w-[85%] sm:max-w-md relative z-20 overflow-hidden">
             <div class="flex items-center justify-between">
                 <div>
                     <p class="text-[9px] sm:text-[10px] text-[#061D8F] font-bold uppercase tracking-widest mb-0.5"><?= htmlspecialchars($palmpay_acct['bank_name']) ?> ACCOUNT</p>

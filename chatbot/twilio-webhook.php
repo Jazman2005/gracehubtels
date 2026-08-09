@@ -19,6 +19,33 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 ini_set('error_log', __DIR__ . '/twilio-error.log');
 
+require_once __DIR__ . '/../user/core/db.php';
+
+// Verify this request genuinely came from Twilio before trusting From/Body —
+// otherwise anyone can POST a forged incoming WhatsApp message. Twilio signs
+// every webhook request with HMAC-SHA1 over the exact callback URL + sorted
+// POST params, using your Auth Token as the key (see twilio.com/docs/usage/security).
+$twilio_auth_token = setting('twilio_auth_token', '');
+if (empty($twilio_auth_token)) {
+    log_write('chatbot', 'ERROR', 'twilio_auth_token not configured — rejecting webhook');
+    http_response_code(500);
+    exit;
+}
+$signature = $_SERVER['HTTP_X_TWILIO_SIGNATURE'] ?? '';
+$url = 'https://' . ($_SERVER['HTTP_HOST'] ?? '') . ($_SERVER['REQUEST_URI'] ?? '');
+$signed_data = $url;
+$sorted_params = $_POST;
+ksort($sorted_params);
+foreach ($sorted_params as $key => $value) {
+    $signed_data .= $key . $value;
+}
+$expected_signature = base64_encode(hash_hmac('sha1', $signed_data, $twilio_auth_token, true));
+if (empty($signature) || !hash_equals($expected_signature, $signature)) {
+    log_write('chatbot', 'ERROR', 'Invalid Twilio signature — rejecting webhook', ['ip' => get_ip()]);
+    http_response_code(403);
+    exit;
+}
+
 $from = $_POST['From'] ?? '';
 $body = trim($_POST['Body'] ?? '');
 

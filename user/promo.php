@@ -6,6 +6,7 @@ $user = get_user($uid);
 $name = explode(' ', $user['full_name'])[0];
 
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
+    if(!verify_csrf($_POST['csrf']??'')){echo json_encode(['success'=>false,'message'=>'Invalid token']);exit;}
     $action = $_POST['action']??'';
     if($action==='claim_promo'){
         $code = strtoupper(sanitize($_POST['code']??'', 50));
@@ -56,7 +57,8 @@ $claims = db()->prepare("SELECT c.created_at, p.code, p.amount FROM promo_claims
 $claims->execute([$uid]);
 $claims = $claims->fetchAll();
 
-$page_title = 'Promo Codes'; 
+$csrf = csrf_token();
+$page_title = 'Promo Codes';
 include __DIR__ . '/includes/header.php'; 
 include __DIR__ . '/includes/sidebar.php'; 
 ?>
@@ -127,10 +129,11 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <script>
+const CSRF = <?=json_encode($csrf)?>;
 async function claimPromo(){
   const c=document.getElementById('promo_code').value;
   if(!c)return Swal.fire('Notice', 'Please enter a code', 'info');
-  const fd=new FormData();fd.append('action','claim_promo');fd.append('code',c);
+  const fd=new FormData();fd.append('action','claim_promo');fd.append('code',c);fd.append('csrf',CSRF);
   const r=await fetch('',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
   if(r.success) { showAlert(r.message, 'Success', 'check-circle', 'text-emerald-500'); location.reload(); }
   else showAlert(r.message, 'Error', 'exclamation-circle', 'text-red-500');

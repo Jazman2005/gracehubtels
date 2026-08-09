@@ -1,7 +1,8 @@
 <?php
 // Health check — visit https://gracehubtels.com/chatbot/health.php to verify bot is reachable
 require_once __DIR__ . '/../user/core/db.php';
-if (!isset($_GET['key']) || !hash_equals(setting('bot_diag_key') ?: 'gracehubtels_diag_2024', $_GET['key'])) {
+$diag_key = setting('bot_diag_key', '');
+if (empty($diag_key) || !isset($_GET['key']) || !hash_equals($diag_key, $_GET['key'])) {
     http_response_code(403); die("Access denied");
 }
 $status = 'OK';

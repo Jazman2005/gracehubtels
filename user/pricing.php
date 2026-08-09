@@ -9,7 +9,7 @@ $sel_net = htmlspecialchars(strtoupper($_GET['net'] ?? 'MTN'));
 if(!in_array($sel_net, $nets)) $sel_net = 'MTN';
 
 // Fetch data plans for the selected network
-$data_plans = db()->prepare("SELECT * FROM data_plans WHERE network = ? AND is_active = 1 ORDER BY CAST(selling_price AS DECIMAL)");
+$data_plans = db()->prepare("SELECT * FROM data_plans WHERE network = ? AND is_active = 1 ORDER BY data_type,display_order,CAST(selling_price AS DECIMAL)");
 $data_plans->execute([$sel_net]);
 $plans = $data_plans->fetchAll();
 

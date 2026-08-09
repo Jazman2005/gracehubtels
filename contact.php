@@ -21,9 +21,9 @@
                 </a>
                 
                 <ul class="nav-menu" id="nav-menu">
-                    <li><a href="index.html#features" class="nav-link" id="link-features">Features</a></li>
-                    <li><a href="index.html#how-it-works" class="nav-link" id="link-how">How It Works</a></li>
-                    <li><a href="contact.html" class="nav-link active" id="link-contact">Contact</a></li>
+                    <li><a href="index.php#features" class="nav-link" id="link-features">Features</a></li>
+                    <li><a href="index.php#how-it-works" class="nav-link" id="link-how">How It Works</a></li>
+                    <li><a href="contact.php" class="nav-link active" id="link-contact">Contact</a></li>
                     <li><a href="privacy-policy.php" class="nav-link" id="link-privacy">Privacy Policy</a></li>
                 </ul>
 
@@ -33,7 +33,7 @@
                 </div>
 
                 <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation">
-                    <i>â˜°</i>
+                    <i>☰</i>
                 </button>
             </nav>
         </div>
@@ -155,7 +155,7 @@
        ========================================== -->
     <div class="modal-overlay" id="success-overlay">
         <div class="success-modal">
-            <div class="success-icon-box">âœ“</div>
+            <div class="success-icon-box">✓</div>
             <h3>Message Sent!</h3>
             <p>Thank you, <strong class="success-client-name">user</strong>. Your inquiry has been logged successfully. A payment specialist will respond to <strong class="success-client-email">your email</strong> within 2 hours.</p>
             <button class="btn btn-navy" id="close-modal-btn" style="padding: 10px 24px;">Close Window</button>
@@ -185,9 +185,9 @@
                 <div>
                     <h3 class="footer-title">Platform</h3>
                     <ul class="footer-links">
-                        <li><a href="index.html#features" class="footer-link">Features</a></li>
-                        <li><a href="index.html#how-it-works" class="footer-link">How It Works</a></li>
-                        <li><a href="index.html#testimonials" class="footer-link">Testimonials</a></li>
+                        <li><a href="index.php#features" class="footer-link">Features</a></li>
+                        <li><a href="index.php#how-it-works" class="footer-link">How It Works</a></li>
+                        <li><a href="index.php#testimonials" class="footer-link">Testimonials</a></li>
                     </ul>
                 </div>
                 

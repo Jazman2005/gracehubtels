@@ -8,7 +8,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if(!verify_admin_csrf($_POST['csrf']??'')){ echo json_encode(['success'=>false,'message'=>'Invalid token']); exit; }
     $action = $_POST['action']??'';
     if($action==='add_banner'){
-        $link = filter_var($_POST['link']??'', FILTER_SANITIZE_URL);
+        // FILTER_SANITIZE_URL alone doesn't block dangerous schemes like
+        // javascript:/data: — this link renders as a raw <a href> on the public
+        // homepage, so require it to actually be a well-formed http(s) URL.
+        $link = trim($_POST['link']??'');
+        if ($link !== '' && (!filter_var($link, FILTER_VALIDATE_URL) || !preg_match('#^https?://#i', $link))) {
+            echo json_encode(['success'=>false,'message'=>'Banner link must be a valid http:// or https:// URL']);
+            exit;
+        }
         $url = '';
         
         if(!empty($_FILES['image_file']['tmp_name'])){

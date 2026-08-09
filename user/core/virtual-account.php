@@ -281,7 +281,7 @@ class VirtualAccountManager
             log_error('wallet', 'VA_PALMPAY_EXCEPTION', [
                 'uid' => $user['id'], 'error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()
             ]);
-            return ['success' => false, 'message' => 'Server error: ' . $e->getMessage()];
+            return ['success' => false, 'message' => 'Server error. Please try again or contact support.'];
         }
     }
 

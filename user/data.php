@@ -2,19 +2,22 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/data.php';
 require_once __DIR__.'/core/beneficiaries.php';
-auth_user(); 
+auth_user();
 $uid = (int)$_SESSION['user_id'];
-$user = get_user($uid); 
+$user = get_user($uid);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) { 
-    if (!verify_csrf($_POST['csrf_token'] ?? '')) { 
-        json_response(['success' => false, 'message' => 'Invalid token'], 403); 
-    } 
-    if (!rate_limit('data_'.$uid, 5, 60)) { 
-        json_response(['success' => false, 'message' => 'Too many requests.'], 429); 
-    } 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) {
+        json_response(['success' => false, 'message' => 'Invalid token'], 403);
+    }
+    if (!rate_limit('data_'.$uid, 5, 60)) {
+        json_response(['success' => false, 'message' => 'Too many requests.'], 429);
+    }
+    if (($_POST['action'] ?? '') === 'save_benef') {
+        json_response(save_beneficiary($uid, $_POST));
+    }
     json_response(process_data($uid, $_POST));
-} 
+}
 
 $csrf = csrf_token(); 
 $sel_net = htmlspecialchars(strtoupper($_GET['net'] ?? ''));
@@ -43,10 +46,18 @@ if ($benef_id) {
     }
 }
 
-$page_title = 'Buy Data'; 
-include __DIR__ . '/includes/header.php'; 
-include __DIR__ . '/includes/sidebar.php'; 
+$page_title = 'Buy Data';
+include __DIR__ . '/includes/header.php';
+include __DIR__ . '/includes/sidebar.php';
 ?>
+<style>
+    /* Plan size text (e.g. "1GB") was too faint in dark mode — text-slate-900
+       isn't covered by header.php's dark-mode overrides, so it stayed near-
+       black on a dark background. Force bold + black in light mode, bold +
+       white in dark mode. */
+    .plan-size-text { color:#000 !important; font-weight:900 !important; }
+    html.dark-mode .plan-size-text { color:#fff !important; }
+</style>
 
 <div class="max-w-2xl mx-auto">
     <!-- Header -->
@@ -89,48 +100,6 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
         <?php endif;?>
 
-        <!-- Network Selection -->
-        <div class="mb-4 sm:mb-5">
-            <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3">Select Network</label>
-            <div class="grid grid-cols-4 gap-2 sm:gap-3">
-                <?php foreach($nets as $n=>$pinfo): 
-    $bg = $pinfo[0]; 
-    $color = $pinfo[1]; 
-    $logo = $pinfo[2];?>
-                <a href="?net=<?=$n?>" class="net-btn flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 <?= $sel_net===$n?'border-brand-orange bg-brand-orangeLight':'border-slate-100 bg-slate-50 hover:border-brand-orange/50' ?> transition-all relative overflow-hidden text-center">
-                    <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-1 sm:mb-2 overflow-hidden bg-white shadow-sm flex items-center justify-center <?= $bg ?> <?= $color ?> font-bold text-xs sm:text-base">
-                        <?php $logo_url = "https://api.msjpay.ng/assets/logos/" . strtolower($n) . ".png"; ?>
-                        <img src="<?=$logo_url?>" alt="<?=$n?>" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.innerHTML='<?=substr($n,0,1)?>'">
-                    </div>
-                    <span class="text-[10px] sm:text-xs font-semibold text-slate-700"><?=$n?></span>
-                    <div class="absolute top-1 sm:top-2 right-1 sm:right-2 text-brand-orange opacity-0 check-icon <?= $sel_net===$n?'!opacity-100':'' ?>">
-                        <i class="fas fa-check-circle text-[10px] sm:text-xs"></i>
-                    </div>
-                </a>
-                <?php endforeach;?>
-            </div>
-        </div>
-        
-        <!-- Data Type Selection -->
-        <?php if (!empty($types)): ?>
-        <div class="mb-4 sm:mb-5">
-            <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2">Data Type</label>
-            <div class="relative inline-block w-full">
-                <select class="block w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-colors font-medium appearance-none text-sm" id="typeSelect" onchange="location.href='?net=<?=$sel_net?>&type='+this.value">
-                    <option value="" <?=empty($sel_type) ? 'selected' : ''?> disabled>-- Select Data Type --</option>
-                    <?php foreach ($types as $t): ?>
-                    <option value="<?=htmlspecialchars($t['data_type'])?>" <?=$sel_type === $t['data_type'] ? 'selected' : ''?>>
-                        <?=htmlspecialchars($t['label'])?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 sm:pr-4 text-slate-500">
-                    <i class="fas fa-chevron-down text-xs"></i>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
-
         <!-- Phone Number -->
         <div class="mb-4 sm:mb-5">
             <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2">Phone Number</label>
@@ -147,6 +116,50 @@ include __DIR__ . '/includes/sidebar.php';
             </div>
         </div>
 
+        <!-- Network Selection — hidden until a phone number is typed; auto-highlights
+             the detected network, but stays fully clickable so a ported number can
+             be pointed at a different network. -->
+        <div id="networkSection" class="mb-4 sm:mb-5 <?= empty($sel_net) ? 'hidden' : '' ?>">
+            <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3">Select Network</label>
+            <div class="grid grid-cols-4 gap-2 sm:gap-3">
+                <?php foreach($nets as $n=>$pinfo):
+    $bg = $pinfo[0];
+    $color = $pinfo[1];
+    $logo = $pinfo[2];?>
+                <a href="?net=<?=$n?>" data-net="<?=$n?>" class="net-btn flex flex-col items-center justify-center p-2 sm:p-3 rounded-xl border-2 <?= $sel_net===$n?'border-brand-orange bg-brand-orangeLight':'border-slate-100 bg-slate-50 hover:border-brand-orange/50' ?> transition-all relative overflow-hidden text-center">
+                    <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full mb-1 sm:mb-2 overflow-hidden bg-white shadow-sm flex items-center justify-center <?= $bg ?> <?= $color ?> font-bold text-xs sm:text-base">
+                        <?php $logo_url = "https://api.msjpay.ng/assets/logos/" . strtolower($n) . ".png"; ?>
+                        <img src="<?=$logo_url?>" alt="<?=$n?>" class="w-full h-full object-cover" onerror="this.style.display='none';this.parentNode.innerHTML='<?=substr($n,0,1)?>'">
+                    </div>
+                    <span class="text-[10px] sm:text-xs font-semibold text-slate-700"><?=$n?></span>
+                    <div class="absolute top-1 sm:top-2 right-1 sm:right-2 text-brand-orange opacity-0 check-icon <?= $sel_net===$n?'!opacity-100':'' ?>">
+                        <i class="fas fa-check-circle text-[10px] sm:text-xs"></i>
+                    </div>
+                </a>
+                <?php endforeach;?>
+            </div>
+        </div>
+
+        <!-- Data Type Selection -->
+        <?php if (!empty($types)): ?>
+        <div class="mb-4 sm:mb-5">
+            <label class="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2">Data Type</label>
+            <div class="relative inline-block w-full">
+                <select class="block w-full px-3 sm:px-4 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/50 focus:border-brand-orange transition-colors font-medium appearance-none text-sm" id="typeSelect" onchange="location.href='?net=<?=$sel_net?>&type='+this.value+'&phone='+encodeURIComponent(document.getElementById('phoneF').value)">
+                    <option value="" <?=empty($sel_type) ? 'selected' : ''?> disabled>-- Select Data Type --</option>
+                    <?php foreach ($types as $t): ?>
+                    <option value="<?=htmlspecialchars($t['data_type'])?>" <?=$sel_type === $t['data_type'] ? 'selected' : ''?>>
+                        <?=htmlspecialchars($t['label'])?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 sm:pr-4 text-slate-500">
+                    <i class="fas fa-chevron-down text-xs"></i>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <p id="networkWarn" class="text-red-500 text-[11px] sm:text-xs font-semibold mt-1.5 hidden"></p>
           <!-- Plan Selection -->
         <div class="mb-4 sm:mb-5">
@@ -160,8 +173,8 @@ include __DIR__ . '/includes/sidebar.php';
                      data-validity="<?=htmlspecialchars($p['validity'] ?? '')?>"
                      onclick="selectPlanCard(this)">
                     <?php $clean_name = trim(str_ireplace([$sel_net, 'data'], '', $p['display_name'] ?? $p['plan_name'] ?? '')); ?>
-                    <div class="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-0.5"><?=htmlspecialchars($clean_name ?: ($p['data_type'] ?? 'BUNDLE'))?></div>
-                    <div class="text-sm sm:text-base font-black text-slate-900 my-0.5 sm:my-1"><?=htmlspecialchars($p['data_size'])?></div>
+                    <div class="text-[9px] sm:text-[10px] font-extrabold plan-size-text uppercase tracking-wider mb-0.5" style="font-weight:900;color:#000;"><?=htmlspecialchars($clean_name ?: ($p['data_type'] ?? 'BUNDLE'))?></div>
+                    <div class="text-sm sm:text-base font-black plan-size-text my-0.5 sm:my-1" style="font-weight:900;color:#000;"><?=htmlspecialchars($p['data_size'])?></div>
                     <div class="text-sm sm:text-base font-black text-brand-orange">₦<?=number_format((float)$p['selling_price'], 0)?></div>
                     <div class="text-[9px] sm:text-[10px] text-slate-500 mt-0.5 sm:mt-1 font-semibold flex items-center justify-center gap-1"><i class="far fa-clock"></i> <?=htmlspecialchars($p['validity'] ?? '30 Days')?></div>
                     <div class="absolute top-1 sm:top-2 right-1 sm:right-2 text-brand-orange opacity-0 check-icon transition-opacity duration-300">
@@ -222,30 +235,72 @@ function detectNetwork(phone) {
     return null;
 }
 
-document.getElementById("phoneF").addEventListener("input", function(e) {
-    let phone = this.value.replace(/[^0-9]/g, "");
-    let detected = detectNetwork(phone);
-    let warnEl = document.getElementById("networkWarn");
-    
+// Mutable client-side copy of the server-selected network. Starts as whatever
+// $sel_net the page loaded with, but — unlike the PHP value — this can be
+// cleared client-side when the phone number is erased, so a freshly typed
+// number isn't stuck inheriting the previous number's network.
+let effectiveNet = "<?=$sel_net?>";
+
+function resetNetSelection() {
+    effectiveNet = "";
+    document.getElementById("networkSection").classList.add('hidden');
+    document.getElementById("networkWarn").classList.add('hidden');
+    document.querySelectorAll('.net-btn').forEach(a => {
+        a.classList.remove('border-brand-orange', 'bg-brand-orangeLight');
+        a.classList.add('border-slate-100', 'bg-slate-50');
+        a.querySelector('.check-icon').classList.remove('!opacity-100');
+    });
+}
+
+function handlePhoneInput() {
+    let phone = document.getElementById("phoneF").value.replace(/[^0-9]/g, "");
+
     // Update all network links to preserve the typed phone number
     document.querySelectorAll('.net-btn').forEach(a => {
         let url = new URL(a.href, window.location.origin);
         url.searchParams.set('phone', phone);
         a.href = url.toString();
     });
-    
-    let currentNet = "<?=$sel_net?>";
-    
+
+    // Erased back below the detection threshold — drop whatever network was
+    // selected (auto or manual) so the next number typed gets its own fresh
+    // detection instead of inheriting the previous number's network.
+    if (phone.length < 4) {
+        resetNetSelection();
+        return;
+    }
+
+    let detected = detectNetwork(phone);
+    let warnEl = document.getElementById("networkWarn");
+    let netSection = document.getElementById("networkSection");
+
+    // No network locked in yet — reveal the picker only once enough digits
+    // are typed to attempt detection, and live-preview the detected network
+    // so it's obvious what's about to be auto-selected. The picker stays
+    // fully clickable throughout, so a ported number can still be pointed at
+    // a different network instead.
+    if (!effectiveNet) {
+        netSection.classList.remove('hidden');
+        document.querySelectorAll('.net-btn').forEach(a => {
+            const isMatch = detected && a.dataset.net === detected;
+            a.classList.toggle('border-brand-orange', isMatch);
+            a.classList.toggle('bg-brand-orangeLight', isMatch);
+            a.classList.toggle('border-slate-100', !isMatch);
+            a.classList.toggle('bg-slate-50', !isMatch);
+            a.querySelector('.check-icon').classList.toggle('!opacity-100', isMatch);
+        });
+    }
+
     if (detected) {
-        if (!currentNet) {
+        if (!effectiveNet) {
             warnEl.textContent = `Note: This looks like an ${detected} number. Auto-selecting...`;
             warnEl.classList.remove("hidden");
             warnEl.classList.replace("text-red-500", "text-brand-orange");
-            
+
             if (phone.length >= 10) {
                 window.location.href = '?net=' + detected + '&phone=' + phone + '&autofocus=1';
             }
-        } else if (currentNet !== detected) {
+        } else if (effectiveNet !== detected) {
             warnEl.textContent = "Note: This looks like an " + detected + " number.";
             warnEl.classList.replace("text-brand-orange", "text-red-500");
             warnEl.classList.remove("hidden");
@@ -255,10 +310,17 @@ document.getElementById("phoneF").addEventListener("input", function(e) {
     } else {
         warnEl.classList.add("hidden");
     }
-});
+}
 
-// Restore focus if auto-selected
+document.getElementById("phoneF").addEventListener("input", handlePhoneInput);
+
+// Restore focus if auto-selected, and reveal the network picker immediately
+// if a phone number was already prefilled server-side (e.g. a saved number
+// or ?phone=) without requiring the user to type anything first.
 window.addEventListener('DOMContentLoaded', (event) => {
+    if (document.getElementById('phoneF').value) {
+        handlePhoneInput();
+    }
     let urlParams = new URLSearchParams(window.location.search);
     if(urlParams.get('autofocus') == '1') {
         let phoneInput = document.getElementById('phoneF');
@@ -297,7 +359,7 @@ function saveBenef() {
     
     let fd = new FormData();
     fd.append('action', 'save_benef');
-    fd.append('type', 'data');
+    fd.append('service', 'data');
     fd.append('label', label);
     fd.append('value', phone);
     

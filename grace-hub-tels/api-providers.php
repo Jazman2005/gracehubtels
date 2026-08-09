@@ -203,7 +203,7 @@ $default_value_maps['airtime_to_cash'] = "";
 .page-tab{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);color:var(--text-muted);font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;transition:all .2s}
 .page-tab:hover{border-color:var(--primary);color:var(--primary)}
 .page-tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
-.page-tab .count-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:10px;font-size:10px;font-weight:700;padding:0 6px;margin-left:6px;background:rgba(79,70,229,.12);color:var(--primary)}
+.page-tab .count-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:10px;font-size:10px;font-weight:700;padding:0 6px;margin-left:6px;background:rgba(255,90,31,.12);color:var(--primary)}
 .page-tab.active .count-badge{background:rgba(255,255,255,.2);color:#fff}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .form-grid .colspan-2{grid-column:1/-1}

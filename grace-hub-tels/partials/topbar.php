@@ -43,7 +43,16 @@ $page_titles=[
   'virtual-cards.php'=>'Virtual Cards',
   'cms-settings.php'=>'Appearance / CMS',
   'faq-manager.php'=>'FAQ Manager',
-  'manage-account.php'=>'Manage Account'
+  'manage-account.php'=>'Manage Account',
+  'manual-funding.php'=>'Manual Funding Settings',
+  'exam-pins-stock.php'=>'Local Exam PIN Stock',
+  'bulk-sms-history.php'=>'Bulk SMS History',
+  'data-plan-mapping.php'=>'Plan ID Mapping',
+  'data-plan-mapping'=>'Plan ID Mapping',
+  'ticket-view.php'=>'Ticket Details',
+  'admin-management.php'=>'Admin Management',
+  'service-betting.php'=>'Betting Platforms',
+  'accounting.php'=>'Accounting & Reconciliation'
 ];
 $title=$page_titles[basename($_SERVER['PHP_SELF'])]??'Admin Panel';
 ?>
@@ -62,7 +71,7 @@ $title=$page_titles[basename($_SERVER['PHP_SELF'])]??'Admin Panel';
           <?=$pending_a2c?> pending action
       </a>
       <?php endif;?>
-      <div class="admin-avatar"><?=strtoupper(substr($admin['username']??'A',0,1))?></div>
+      <a href="<?= ADMIN_URL ?>/manage-account.php" class="admin-avatar" data-tooltip="Manage Account" style="text-decoration:none;"><?=strtoupper(substr($admin['username']??'A',0,1))?></a>
   </div>
 </header>
 <script>

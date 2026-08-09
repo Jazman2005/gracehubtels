@@ -99,7 +99,7 @@ $payvessel_default_nin = get_gw_set('gw_payvessel_default_nin');
     <div class="data-panel" >
         <div class="panel-title-bar" style="border-bottom:1px solid #E2E8F0; padding:20px 24px; background:#fff; display:flex; justify-content:space-between; align-items:center;">
             <h3 style="margin:0; font-size:16px; color:var(--navy-dark); display:flex; align-items:center; gap:8px;">
-                <div style="width:28px;height:28px;border-radius:6px;background:#E0E7FF;color:#4F46E5;display:flex;align-items:center;justify-content:center;">
+                <div style="width:28px;height:28px;border-radius:6px;background:#FFF0EB;color:#FF5A1F;display:flex;align-items:center;justify-content:center;">
                     <i class="fas fa-wallet"></i>
                 </div>
                 PalmPay Direct

@@ -14,6 +14,23 @@ try {
     exit;
 }
 
+// Whapi.Cloud doesn't sign requests the way Twilio does, so this endpoint is
+// otherwise wide open to anyone who knows the URL — verify a shared secret
+// embedded in the webhook URL you configure in the Whapi.Cloud dashboard
+// (https://.../chatbot/index.php?key=<whapi_webhook_secret>).
+$whapi_webhook_secret = setting('whapi_webhook_secret', '');
+if (empty($whapi_webhook_secret)) {
+    _log('whapi_webhook_secret not configured — rejecting webhook');
+    http_response_code(500);
+    exit;
+}
+$provided_key = $_GET['key'] ?? '';
+if (empty($provided_key) || !hash_equals($whapi_webhook_secret, (string)$provided_key)) {
+    _log('Invalid or missing webhook key — rejecting webhook');
+    http_response_code(403);
+    exit;
+}
+
 try {
     $raw = file_get_contents('php://input');
     if (!$raw) { http_response_code(200); exit; }

@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_messaging');
     $action = $_POST['action'] ?? '';
     if ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
@@ -39,6 +40,7 @@ $modals=db()->query("SELECT * FROM notifications WHERE user_id IS NULL AND displ
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>.two-col-page{display:grid;grid-template-columns:1fr 2fr;gap:24px;align-items:start}@media (max-width:1024px){.two-col-page{grid-template-columns:1fr}}</style>
 </head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
@@ -62,11 +64,11 @@ $modals=db()->query("SELECT * FROM notifications WHERE user_id IS NULL AND displ
 
 <?php $rows = $tab === 'modal' ? $modals : $marquees; $dt = $tab === 'modal' ? 'modal' : 'marquee'; ?>
 
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:24px;align-items:start">
+<div class="two-col-page">
     <div class="data-panel">
         <div class="panel-title-bar" style="border-bottom:1px solid #E2E8F0;padding:20px 24px;background:#fff;">
             <h3 style="display:flex;align-items:center;gap:8px;margin:0;">
-                <div style="width:32px;height:32px;border-radius:8px;background:rgba(79,70,229,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;">
+                <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,90,31,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;">
                     <i class="fas fa-<?=$tab==='modal'?'window-maximize':'scroll'?>"></i>
                 </div>
                 New <?=ucfirst($dt)?>

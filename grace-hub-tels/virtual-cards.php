@@ -13,13 +13,20 @@ $msg = '';
             $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']);
             if ($is_ajax) { http_response_code(403); echo json_encode(['success'=>false,'message'=>'Invalid CSRF token']); exit; }
             $msg = '<div class="save-toast err show">Invalid CSRF token</div>';
+        } elseif (!has_permission('manage_cards')) {
+            // Freezing/unfreezing/terminating a live card and rewriting the
+            // Cashwyre API keys both need the "Virtual Cards" permission —
+            // matches the checkbox Staff Management already offers for this.
+            $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']);
+            if ($is_ajax) { http_response_code(403); echo json_encode(['success'=>false,'message'=>'Missing permission: manage_cards']); exit; }
+            $msg = '<div class="save-toast err show">Missing permission: manage_cards</div>';
         } else {
             $action = $_POST['action'];
             $card_id = trim($_POST['card_id'] ?? '');
             $is_ajax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']);
             
             if ($action === 'save_api') {
-                $allowed = ['cashwyre_api_key', 'cashwyre_secret_key', 'cashwyre_base_url', 'virtual_card_exchange_rate', 'cashwyre_enabled', 'virtual_card_setup_fee_markup', 'virtual_card_funding_fee_type', 'virtual_card_funding_fee_value', 'virtual_card_rate_markup_type', 'virtual_card_rate_markup_value'];
+                $allowed = ['cashwyre_api_key', 'cashwyre_secret_key', 'cashwyre_base_url', 'cashwyre_webhook_secret', 'virtual_card_exchange_rate', 'cashwyre_enabled', 'virtual_card_setup_fee_markup', 'virtual_card_funding_fee_type', 'virtual_card_funding_fee_value', 'virtual_card_rate_markup_type', 'virtual_card_rate_markup_value'];
                 foreach ($_POST as $key => $val) {
                     if (in_array($key, $allowed)) {
                         setting_set($key, trim((string)$val));
@@ -83,6 +90,10 @@ $msg = '';
     }
 
 function k(string $key): string { return htmlspecialchars(setting($key)); }
+// Secret fields (API keys) must not render for viewers who can't act on them —
+// auth_admin() alone (no role/permission) lets any admin, including 'support',
+// load this page; only the manage_cards-gated POST below can change these.
+function k_secret(string $key): string { return has_permission('manage_cards') ? htmlspecialchars(setting($key)) : ''; }
 
 // Fetch Cards
 $cards = db()->query("
@@ -127,15 +138,20 @@ $cards = db()->query("
     <div style="padding: 24px; display:flex; flex-direction:column; gap:16px;">
         <div class="form-group">
             <label>API Key</label>
-            <input type="password" class="form-control" id="cashwyre_api_key" value="<?=k('cashwyre_api_key')?>">
+            <input type="password" class="form-control" id="cashwyre_api_key" value="<?=k_secret('cashwyre_api_key')?>">
         </div>
         <div class="form-group">
             <label>Secret Key</label>
-            <input type="password" class="form-control" id="cashwyre_secret_key" value="<?=k('cashwyre_secret_key')?>">
+            <input type="password" class="form-control" id="cashwyre_secret_key" value="<?=k_secret('cashwyre_secret_key')?>">
         </div>
         <div class="form-group">
             <label>Base URL (e.g. https://businessapi.cashwyre.com/api/v1.0)</label>
             <input type="text" class="form-control" id="cashwyre_base_url" value="<?=k('cashwyre_base_url')?>">
+        </div>
+        <div class="form-group">
+            <label>Webhook Secret</label>
+            <input type="password" class="form-control" id="cashwyre_webhook_secret" value="<?=k_secret('cashwyre_webhook_secret')?>">
+            <small class="text-muted">From your Cashwyre dashboard — without this, card funding/freeze/unfreeze confirmations from Cashwyre are silently rejected (webhook/cashwyre/index.php fails closed with no secret).</small>
         </div>
 
         <hr style="margin: 8px 0; border: none; border-top: 1px solid var(--border-light);">
@@ -194,7 +210,7 @@ $cards = db()->query("
         </div>
 
         <div class="form-check" style="display:flex;align-items:center;gap:12px;padding:12px 0">
-            <input type="checkbox" id="cashwyre_enabled" style="width:18px;height:18px;accent-color:#4F46E5;cursor:pointer" <?=setting('cashwyre_enabled','0')==='1'?'checked':''?>>
+            <input type="checkbox" id="cashwyre_enabled" style="width:18px;height:18px;accent-color:#FF5A1F;cursor:pointer" <?=setting('cashwyre_enabled','0')==='1'?'checked':''?>>
             <label for="cashwyre_enabled" style="font-weight:600;font-size:14px;cursor:pointer">Enable Virtual Card Service</label>
         </div>
 
@@ -304,6 +320,7 @@ async function saveCashwyre() {
     fd.append('cashwyre_api_key', document.getElementById('cashwyre_api_key').value);
     fd.append('cashwyre_secret_key', document.getElementById('cashwyre_secret_key').value);
     fd.append('cashwyre_base_url', document.getElementById('cashwyre_base_url').value);
+    fd.append('cashwyre_webhook_secret', document.getElementById('cashwyre_webhook_secret').value);
     fd.append('virtual_card_setup_fee_markup', document.getElementById('virtual_card_setup_fee_markup').value);
     fd.append('virtual_card_exchange_rate', document.getElementById('virtual_card_exchange_rate').value);
     fd.append('virtual_card_rate_markup_type', document.getElementById('virtual_card_rate_markup_type').value);
@@ -355,7 +372,7 @@ async function viewCard(cardId){
             </div>
             <div style="background:#F8FAFC;border-radius:12px;padding:16px;">
                 <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:4px;">Balance</div>
-                <div style="font-weight:700;color:#4F46E5;font-size:20px;">$${parseFloat(c.balance||0).toFixed(2)}</div>
+                <div style="font-weight:700;color:#FF5A1F;font-size:20px;">$${parseFloat(c.balance||0).toFixed(2)}</div>
             </div>
             <div style="background:#F8FAFC;border-radius:12px;padding:16px;">
                 <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:4px;">Status</div>

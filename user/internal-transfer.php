@@ -25,9 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 }
 
 $csrf = csrf_token();
+// Must match process_internal_transfer()'s own fee lookup in
+// core/internal_transfer.php exactly — otherwise the fee shown here before
+// confirming wouldn't match what actually gets deducted.
 $fee = 0.0;
-if (setting('internal_transfer_charge_enabled') === '1') {
-    $fee = (float)setting('internal_transfer_charge', '0');
+if (setting('p2p_transfer_charge_enabled') === '1') {
+    $fee = (float)setting('p2p_transfer_charge', '0');
 }
 
 $page_title = 'Wallet to Wallet Transfer'; 

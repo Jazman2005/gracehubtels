@@ -2,9 +2,19 @@
 require_once __DIR__.'/core/auth.php';
 auth_admin();
 function k(string $key,string $d=''):string{return htmlspecialchars(setting($key,$d));}
+// Secret fields (API tokens) must not render for viewers who can't act on them —
+// auth_admin() alone (no role/permission) lets any admin, including 'support',
+// load this page; only the manage_settings-gated POST below can change them.
+function k_secret(string $key,string $d=''):string{return has_permission('manage_settings')?htmlspecialchars(setting($key,$d)):'';}
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
-    $allowed=['site_name','site_tagline','site_email','site_phone','site_address','maintenance_mode','registration_enabled','min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee','vendor_upgrade_fee','kyc_tier1_limit_daily','kyc_tier1_limit_single','kyc_tier2_limit_daily','kyc_tier2_limit_single','kyc_tier3_limit_daily','kyc_tier3_limit_single','internal_transfer_charge','internal_transfer_charge_enabled', 'limit_daily_regular', 'limit_daily_agent', 'limit_daily_vendor', 'limit_airtime_daily', 'limit_airtime_min', 'limit_airtime_max', 'limit_transfer_daily', 'green_api_id_instance', 'green_api_token_instance', 'green_api_recipient', 'wa_notif_withdrawals', 'wa_notif_manual_funding', 'wa_notif_a2c', 'wa_notif_admin_login', 'wa_notif_failed_tx', 'network_prefixes_mtn', 'network_prefixes_glo', 'network_prefixes_airtel', 'network_prefixes_9mobile'];
+    require_permission('manage_settings');
+    // NOTE: p2p_transfer_charge(_enabled) and limit_daily_user are the actual
+    // keys read by the money-moving code (core/internal_transfer.php,
+    // user/core/db.php's check_daily_limit()) — these fields used to save
+    // under internal_transfer_charge(_enabled)/limit_daily_regular instead,
+    // which meant editing them here had zero effect on real enforcement.
+    $allowed=['site_name','site_tagline','site_email','site_phone','site_address','maintenance_mode','registration_enabled','min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee','vendor_upgrade_fee','kyc_tier1_limit_daily','kyc_tier1_limit_single','kyc_tier2_limit_daily','kyc_tier2_limit_single','kyc_tier3_limit_daily','kyc_tier3_limit_single','p2p_transfer_charge','p2p_transfer_charge_enabled', 'limit_daily_user', 'limit_daily_agent', 'limit_daily_vendor', 'limit_airtime_daily', 'limit_airtime_min', 'limit_airtime_max', 'limit_transfer_daily', 'green_api_id_instance', 'green_api_token_instance', 'green_api_recipient', 'wa_notif_withdrawals', 'wa_notif_manual_funding', 'wa_notif_a2c', 'wa_notif_admin_login', 'wa_notif_failed_tx', 'network_prefixes_mtn', 'network_prefixes_glo', 'network_prefixes_airtel', 'network_prefixes_9mobile'];
     foreach($_POST as $key=>$val){if(in_array($key,$allowed))setting_set($key,trim((string)$val));}
     json_response(['success'=>true,'message'=>'Settings saved']);
 }
@@ -43,8 +53,8 @@ $csrf=admin_csrf();
 <div class="form-group"><label>Daily Transfer Limit (&#8358;)</label><input type="number" class="form-control" id="limit_transfer_daily" value="<?=k('limit_transfer_daily')?>"></div>
 <div class="form-group"><label>Transfer Charge (&#8358;) &mdash; Bank</label><input type="number" class="form-control" id="transfer_charge" value="<?=k('transfer_charge')?>"></div>
 <div class="form-grid">
-<div class="flex items-center justify-between" style="padding:10px 0"><label style="font-size:13px;font-weight:600">P2P Charge Enabled</label><label class="toggle"><input type="checkbox" id="internal_transfer_charge_enabled" <?=setting('internal_transfer_charge_enabled')==='1'?'checked':''?>><span class="slider"></span></label></div>
-<div class="form-group"><label>P2P Charge (&#8358;)</label><input type="number" class="form-control" id="internal_transfer_charge" value="<?=k('internal_transfer_charge', '0')?>"></div>
+<div class="flex items-center justify-between" style="padding:10px 0"><label style="font-size:13px;font-weight:600">P2P Charge Enabled</label><label class="toggle"><input type="checkbox" id="p2p_transfer_charge_enabled" <?=setting('p2p_transfer_charge_enabled')==='1'?'checked':''?>><span class="slider"></span></label></div>
+<div class="form-group"><label>P2P Charge (&#8358;)</label><input type="number" class="form-control" id="p2p_transfer_charge" value="<?=k('p2p_transfer_charge', '0')?>"></div>
 </div>
 <div class="form-grid"><div class="form-group"><label>Min A2C</label><input type="number" class="form-control" id="min_a2c_amount" value="<?=k('min_a2c_amount')?>"></div><div class="form-group"><label>Max A2C</label><input type="number" class="form-control" id="max_a2c_amount" value="<?=k('max_a2c_amount')?>"></div></div>
 <div class="form-group"><label>Virtual Card Creation Fee (&#8358;)</label><input type="number" class="form-control" id="virtual_card_creation_fee" value="<?=k('virtual_card_creation_fee','1000')?>"></div>
@@ -54,7 +64,7 @@ $csrf=admin_csrf();
 <div class="data-panel">
 <div class="panel-title-bar"><h3><i class="fas fa-user-tag" style="color:var(--info)"></i> Role Daily Limits</h3></div>
 <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px">
-<div class="form-group"><label>Regular Daily Limit (&#8358;)</label><input type="number" class="form-control" id="limit_daily_regular" value="<?=k('limit_daily_regular', '50000')?>"></div>
+<div class="form-group"><label>Regular Daily Limit (&#8358;)</label><input type="number" class="form-control" id="limit_daily_user" value="<?=k('limit_daily_user', '50000')?>"></div>
 <div class="form-group"><label>Agent Daily Limit (&#8358;)</label><input type="number" class="form-control" id="limit_daily_agent" value="<?=k('limit_daily_agent', '200000')?>"></div>
 <div class="form-group"><label>Vendor Daily Limit (&#8358;)</label><input type="number" class="form-control" id="limit_daily_vendor" value="<?=k('limit_daily_vendor', '1000000')?>"></div>
 <button class="btn-primary" onclick="saveRoleLimits()"><i class="fas fa-save"></i> Save</button>
@@ -92,7 +102,7 @@ $csrf=admin_csrf();
 <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px">
 <p style="font-size:12px; color:var(--text-muted); margin:0;">These credentials are used to send automated WhatsApp alerts to the admin regarding withdrawals, funding, etc.</p>
 <div class="form-group"><label>Id Instance</label><input type="text" class="form-control" id="green_api_id_instance" value="<?=k('green_api_id_instance')?>"></div>
-<div class="form-group"><label>Token Instance</label><input type="password" class="form-control" id="green_api_token_instance" value="<?=k('green_api_token_instance')?>"></div>
+<div class="form-group"><label>Token Instance</label><input type="password" class="form-control" id="green_api_token_instance" value="<?=k_secret('green_api_token_instance')?>"></div>
 <div class="form-group"><label>Admin Receiving Phone Number</label><input type="text" class="form-control" id="green_api_recipient" value="<?=k('green_api_recipient')?>" placeholder="e.g. 2348012345678"></div>
 <hr style="border: 0; border-top: 1px solid var(--border-light); margin: 8px 0;">
 <label style="font-size:13px;font-weight:600;margin-bottom:4px;display:block">Notification Preferences</label>
@@ -112,8 +122,8 @@ $csrf=admin_csrf();
 const CSRF='<?=$csrf?>';
 async function postSave(ids,toggles=[]){const fd=new FormData();fd.append('csrf',CSRF);ids.forEach(id=>fd.append(id,document.getElementById(id).value));toggles.forEach(id=>fd.append(id,document.getElementById(id).checked?'1':'0'));const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);}
 function saveGeneral(){postSave(['site_name','site_tagline','site_email','site_phone','site_address','vendor_upgrade_fee'],['maintenance_mode','registration_enabled']);}
-function saveLimits(){postSave(['min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','limit_transfer_daily','transfer_charge','internal_transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee'],['internal_transfer_charge_enabled']);}
-function saveRoleLimits(){postSave(['limit_daily_regular','limit_daily_agent','limit_daily_vendor']);}
+function saveLimits(){postSave(['min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','limit_transfer_daily','transfer_charge','p2p_transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee'],['p2p_transfer_charge_enabled']);}
+function saveRoleLimits(){postSave(['limit_daily_user','limit_daily_agent','limit_daily_vendor']);}
 function saveAirtimeLimits(){postSave(['limit_airtime_daily','limit_airtime_min','limit_airtime_max']);}
 function saveKyc(){postSave(['kyc_tier1_limit_single','kyc_tier1_limit_daily','kyc_tier2_limit_single','kyc_tier2_limit_daily','kyc_tier3_limit_single','kyc_tier3_limit_daily']);}
 function saveWhatsApp(){postSave(['green_api_id_instance','green_api_token_instance','green_api_recipient'], ['wa_notif_withdrawals','wa_notif_manual_funding','wa_notif_a2c','wa_notif_admin_login','wa_notif_failed_tx']);}

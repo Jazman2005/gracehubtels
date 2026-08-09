@@ -1,7 +1,12 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
-auth_admin();
+// Managing other admin accounts — including just viewing their emails/login
+// IPs, and especially minting new ones with an arbitrary role — is the single
+// most sensitive area of the panel. Superadmin-only, not just a checkable
+// permission (a permission would let a superadmin hand out the ability to
+// create MORE superadmins).
+require_superadmin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
     if(!rate_limit('admin_mgmt',10,60))json_response(['success'=>false,'message'=>'Too many requests'],429);
@@ -9,6 +14,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if($action==='create_admin'){
         $email=strtolower(trim($_POST['email']??''));$password=$_POST['password']??'';
         $role=sanitize($_POST['role']??'admin',50);$is_active=(int)($_POST['is_active']??1);
+        if(!in_array($role,['support','admin','superadmin'],true))json_response(['success'=>false,'message'=>'Invalid role']);
         if(!filter_var($email,FILTER_VALIDATE_EMAIL))json_response(['success'=>false,'message'=>'Invalid email']);
         if(strlen($password)<8)json_response(['success'=>false,'message'=>'Password must be 8+ characters']);
         $s=db()->prepare("SELECT id FROM admin WHERE email=? LIMIT 1");$s->execute([$email]);
@@ -20,8 +26,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if($action==='toggle_active'){
         $id=(int)($_POST['id']??0);
         if($id==($_SESSION['admin_id']??0))json_response(['success'=>false,'message'=>'Cannot modify yourself']);
-        $s=db()->prepare("SELECT is_active FROM admin WHERE id=? LIMIT 1");$s->execute([$id]);$a=$s->fetch();
+        $s=db()->prepare("SELECT is_active,role FROM admin WHERE id=? LIMIT 1");$s->execute([$id]);$a=$s->fetch();
         if(!$a)json_response(['success'=>false,'message'=>'Admin not found']);
+        if($a['role']==='superadmin')json_response(['success'=>false,'message'=>'Cannot deactivate a superadmin']);
         $nv=$a['is_active']?0:1;
         db()->prepare("UPDATE admin SET is_active=? WHERE id=?")->execute([$nv,$id]);
         audit_log($_SESSION['admin_id'], $nv?'ACTIVATE_ADMIN':'DEACTIVATE_ADMIN', "Admin ID $id ".($nv?'activated':'deactivated'));

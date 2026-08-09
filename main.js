@@ -124,39 +124,44 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isFormValid) {
                 const submitBtn = contactForm.querySelector('.form-submit-btn');
                 const origText = submitBtn.textContent;
-                
+                const clientName = document.getElementById('fullname').value;
+                const clientEmail = document.getElementById('email').value;
+
                 // Show loading state
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Sending...';
                 submitBtn.style.opacity = '0.7';
 
-                // Simulate API post response
-                setTimeout(() => {
-                    // Open the success modal overlay
-                    const overlay = document.getElementById('success-overlay');
-                    if (overlay) {
-                        // Personalize modal content
-                        const clientName = document.getElementById('fullname').value;
-                        const clientEmail = document.getElementById('email').value;
-                        
-                        const clientNameText = overlay.querySelector('.success-client-name');
-                        const clientEmailText = overlay.querySelector('.success-client-email');
-                        
-                        if (clientNameText) clientNameText.textContent = clientName;
-                        if (clientEmailText) clientEmailText.textContent = clientEmail;
-                        
-                        overlay.style.display = 'flex';
-                    }
-                    
-                    // Reset fields
-                    contactForm.reset();
-                    if (charCounter) charCounter.textContent = '0 / 1000';
-                    
-                    // Restore button state
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = origText;
-                    submitBtn.style.opacity = '1';
-                }, 1500);
+                const fd = new FormData(contactForm);
+                fetch('contact-submit', { method: 'POST', body: fd })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            const overlay = document.getElementById('success-overlay');
+                            if (overlay) {
+                                const clientNameText = overlay.querySelector('.success-client-name');
+                                const clientEmailText = overlay.querySelector('.success-client-email');
+
+                                if (clientNameText) clientNameText.textContent = clientName;
+                                if (clientEmailText) clientEmailText.textContent = clientEmail;
+
+                                overlay.style.display = 'flex';
+                            }
+
+                            contactForm.reset();
+                            if (charCounter) charCounter.textContent = '0 / 1000';
+                        } else {
+                            alert(res.message || 'Could not send your message. Please try again.');
+                        }
+                    })
+                    .catch(() => {
+                        alert('Connection error. Please check your internet and try again.');
+                    })
+                    .finally(() => {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = origText;
+                        submitBtn.style.opacity = '1';
+                    });
             }
         });
     }

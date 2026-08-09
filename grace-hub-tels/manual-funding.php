@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 auth_admin();
+// Same fields are also editable from payment-gateways.php, which requires
+// manage_api — match that gate here so there's no back door to the same
+// setting (the bank account shown to every user for manual deposits).
+require_permission('manage_api');
 function k(string $key):string{return htmlspecialchars(setting($key) ?? '');}
 
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
@@ -44,7 +48,7 @@ $csrf=admin_csrf();
 <div class="data-panel" style="max-width:600px">
     <div class="panel-title-bar" style="border-bottom:1px solid #E2E8F0; margin-bottom:16px;">
         <h3 style="display:flex; align-items:center; gap:8px;">
-            <div style="width:32px;height:32px;border-radius:8px;background:rgba(79,70,229,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,90,31,0.1);color:var(--primary);display:flex;align-items:center;justify-content:center;">
                 <i class="fas fa-building-columns"></i>
             </div>
             Official Bank Details

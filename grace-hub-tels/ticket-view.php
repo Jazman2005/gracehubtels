@@ -52,6 +52,8 @@ $badgeColor = $ticket['status'] === 'open' ? 'danger' : ($ticket['status'] === '
 .msg.user{background:#fff;border:1px solid #E5E7EB;color:#1F2937;align-self:flex-start;border-top-left-radius:4px}
 .msg.admin{background:var(--navy);color:#fff;align-self:flex-end;border-top-right-radius:4px}
 .msg-meta{font-size:11px;opacity:0.7;margin-bottom:4px;display:block}
+.ticket-layout{display:grid;grid-template-columns:3fr 1fr;gap:20px}
+@media (max-width:1024px){.ticket-layout{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -75,7 +77,7 @@ $badgeColor = $ticket['status'] === 'open' ? 'danger' : ($ticket['status'] === '
   </div>
 </div>
 
-<div style="display:grid;grid-template-columns:3fr 1fr;gap:20px">
+<div class="ticket-layout">
   
   <div class="data-panel" >
     <div class="chat-box" id="chatWindow">

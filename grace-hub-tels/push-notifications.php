@@ -43,7 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!verify_admin_csrf($_POST['csrf'] ?? '')) {
         json_response(['success' => false, 'message' => 'Invalid CSRF token'], 403);
     }
-    
+    // Mass push broadcasts + rewriting OneSignal credentials — same permission
+    // Staff Management already defines for the Messaging Hub.
+    if (!has_permission('manage_messaging')) {
+        json_response(['success' => false, 'message' => 'Missing permission: manage_messaging'], 403);
+    }
+
     $action = $_POST['action'];
 
     if ($action === 'save_settings') {
@@ -125,8 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 function k(string $key): string { return htmlspecialchars(setting($key)); }
 
 $app_id = k('onesignal_app_id');
-$rest_key = k('onesignal_rest_api_key');
-$is_configured = !empty($app_id) && !empty($rest_key);
+$is_configured = !empty($app_id) && !empty(setting('onesignal_rest_api_key'));
+// Secret must not render for viewers who can't act on it — auth_admin() alone
+// (no role/permission) lets any admin, including 'support', load this page;
+// only the manage_messaging-gated save action above can change it.
+$rest_key = has_permission('manage_messaging') ? k('onesignal_rest_api_key') : '';
 
 ?>
 <!DOCTYPE html>
@@ -234,7 +242,7 @@ $is_configured = !empty($app_id) && !empty($rest_key);
             <div style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed #cbd5e1;">
                 <h4 style="font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 8px;">Need Help?</h4>
                 <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
-                    Find your App ID and REST API Key in your <a href="https://onesignal.com" target="_blank" style="color:#4F46E5; font-weight:600;">OneSignal Dashboard</a> under <strong>Settings &gt; Keys &amp; IDs</strong>.
+                    Find your App ID and REST API Key in your <a href="https://onesignal.com" target="_blank" style="color:#FF5A1F; font-weight:600;">OneSignal Dashboard</a> under <strong>Settings &gt; Keys &amp; IDs</strong>.
                 </p>
             </div>
         </div>

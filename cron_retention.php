@@ -12,6 +12,28 @@ if (file_exists(__DIR__ . '/user/core/auth.php')) {
     require_once __DIR__ . '/user/core/auth.php';
 }
 
+// Same cron_secret convention as cron_check_vtu.php/cron_refund.php — this
+// was previously callable by anyone (it only sends marketing pushes/emails/
+// WhatsApp, not money, but still shouldn't be a public, unauthenticated
+// trigger for bulk outbound messaging).
+if (php_sapi_name() !== 'cli' && !defined('STDIN')) {
+    $cron_key = $_GET['key'] ?? '';
+    $expected = setting('cron_secret', '');
+    if (empty($expected) || !hash_equals($expected, $cron_key)) {
+        http_response_code(403);
+        exit('Access denied');
+    }
+}
+
+$lockFile = __DIR__ . '/cron_retention.lock';
+if (file_exists($lockFile) && (time() - filemtime($lockFile) < 300)) {
+    exit("Cron is already running or ran too recently.\n");
+}
+touch($lockFile);
+register_shutdown_function(function() use ($lockFile) {
+    if (file_exists($lockFile)) unlink($lockFile);
+});
+
 // 1. Ensure CRM tracking table exists
 try {
     db()->exec("CREATE TABLE IF NOT EXISTS crm_logs (
@@ -205,4 +227,4 @@ if (date('d') == '01') {
     }
 }
 
-echo "CRM Automations Completed.\n";d
+echo "CRM Automations Completed.\n";

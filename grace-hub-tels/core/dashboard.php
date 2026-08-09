@@ -38,7 +38,7 @@ function admin_stats():array{
 }
 function get_users_list(int $page=1,int $per=20,string $search='',string $filter=''):array{
     $db=db();$offset=($page-1)*$per;$where='WHERE 1=1';$params=[];
-    if($search){$where.=" AND (full_name LIKE ? OR phone LIKE ? OR username LIKE ?)";$s="%{$search}%";$params=array_merge($params,[$s,$s,$s]);}
+    if($search){$where.=" AND (full_name LIKE ? OR phone LIKE ? OR username LIKE ? OR email LIKE ?)";$s="%{$search}%";$params=array_merge($params,[$s,$s,$s,$s]);}
     if($filter==='suspended')$where.=" AND is_suspended=1";
     elseif($filter==='active')$where.=" AND is_active=1 AND is_suspended=0";
 

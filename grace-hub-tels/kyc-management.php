@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_users');
     $action=$_POST['action']??'';$id=(int)($_POST['id']??0);
     $req=db()->prepare("SELECT * FROM kyc_requests WHERE id=? LIMIT 1");$req->execute([$id]);$r=$req->fetch();
     if(!$r)json_response(['success'=>false,'message'=>'Request not found']);
@@ -27,6 +28,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     json_response(['success'=>false],400);
 }
 function k(string $key):string{return htmlspecialchars(setting($key));}
+// Secret fields (API credentials) must not render for viewers who can't act on
+// them — auth_admin() alone (no role/permission) lets any admin, including
+// 'support', load this page; only the manage_users-gated POST above can change these.
+function k_secret(string $key):string{return has_permission('manage_users')?htmlspecialchars(setting($key)):'';}
 $csrf=admin_csrf();
 $filter_raw=$_GET['status']??'pending';
 $allowed_filters=['pending','auto_approved','approved','rejected','all'];
@@ -60,11 +65,11 @@ $cmap=[];foreach($counts as $c)$cmap[$c['status']]=$c['c'];
   <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
     <div class="form-group">
       <label>Bearer Token</label>
-      <input type="password" class="form-control" id="easeid_bearer" value="<?=k('easeid_bearer')?>">
+      <input type="password" class="form-control" id="easeid_bearer" value="<?=k_secret('easeid_bearer')?>">
     </div>
     <div class="form-group">
       <label>Secret (HMAC Signature)</label>
-      <input type="password" class="form-control" id="easeid_secret" value="<?=k('easeid_secret')?>">
+      <input type="password" class="form-control" id="easeid_secret" value="<?=k_secret('easeid_secret')?>">
     </div>
     <button class="btn-primary" onclick="saveEaseID()">Save API Keys</button>
   </div>

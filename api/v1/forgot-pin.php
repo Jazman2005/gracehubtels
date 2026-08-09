@@ -28,7 +28,7 @@ if ($step === 'request') {
         exit;
     }
 
-    $otp = sprintf('%06d', mt_rand(100000, 999999));
+    $otp = sprintf('%06d', random_int(100000, 999999));
     $expiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
 
     $stmt = db()->prepare("UPDATE users SET pin_reset_token=?, pin_reset_token_expiry=? WHERE id=?");

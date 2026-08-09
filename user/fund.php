@@ -13,8 +13,11 @@ $manual_account_name = setting('manual_account_name') ?? '';
 
 $csrf=csrf_token(); 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) { 
-    if (!verify_csrf($_POST['csrf_token'] ?? '')) { 
-        json_response(['success' => false, 'message' => 'Invalid token'], 403); 
+    if (!verify_csrf($_POST['csrf_token'] ?? '')) {
+        json_response(['success' => false, 'message' => 'Invalid token'], 403);
+    }
+    if (!rate_limit('fund_'.$uid, 5, 60)) {
+        json_response(['success' => false, 'message' => 'Too many requests.'], 429);
     }
     $action = $_POST['action'] ?? '';
     if ($action === 'create_va') { 

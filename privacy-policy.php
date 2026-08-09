@@ -21,8 +21,8 @@
                 </a>
                 
                 <ul class="nav-menu" id="nav-menu">
-                    <li><a href="index.html#features" class="nav-link" id="link-features">Features</a></li>
-                    <li><a href="index.html#how-it-works" class="nav-link" id="link-how">How It Works</a></li>
+                    <li><a href="index.php#features" class="nav-link" id="link-features">Features</a></li>
+                    <li><a href="index.php#how-it-works" class="nav-link" id="link-how">How It Works</a></li>
                     <li><a href="contact.php" class="nav-link" id="link-contact">Contact</a></li>
                     <li><a href="privacy-policy.php" class="nav-link active" id="link-privacy">Privacy Policy</a></li>
                 </ul>
@@ -33,7 +33,7 @@
                 </div>
 
                 <button class="mobile-toggle" id="mobile-toggle" aria-label="Toggle Navigation">
-                    <i>â˜°</i>
+                    <i>☰</i>
                 </button>
             </nav>
         </div>
@@ -150,9 +150,9 @@
                 <div>
                     <h3 class="footer-title">Platform</h3>
                     <ul class="footer-links">
-                        <li><a href="index.html#features" class="footer-link">Features</a></li>
-                        <li><a href="index.html#how-it-works" class="footer-link">How It Works</a></li>
-                        <li><a href="index.html#testimonials" class="footer-link">Testimonials</a></li>
+                        <li><a href="index.php#features" class="footer-link">Features</a></li>
+                        <li><a href="index.php#how-it-works" class="footer-link">How It Works</a></li>
+                        <li><a href="index.php#testimonials" class="footer-link">Testimonials</a></li>
                     </ul>
                 </div>
                 

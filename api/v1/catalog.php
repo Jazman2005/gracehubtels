@@ -20,7 +20,7 @@ function cat_price($base, $agent, $vendor, $role) {
 }
 
 $data_plans = [];
-$stmt = $db->query("SELECT id, network, plan_id, plan_name, display_name, data_type, data_size, validity, selling_price, agent_price, vendor_price, network_id FROM data_plans WHERE is_active = 1 ORDER BY data_type, selling_price");
+$stmt = $db->query("SELECT id, network, plan_id, plan_name, display_name, data_type, data_size, validity, selling_price, agent_price, vendor_price, network_id FROM data_plans WHERE is_active = 1 ORDER BY data_type, display_order, selling_price");
 while ($row = $stmt->fetch()) {
     $price = cat_price((float)$row['selling_price'], (float)$row['agent_price'], (float)$row['vendor_price'], $role);
     $data_plans[] = [

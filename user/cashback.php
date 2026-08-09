@@ -192,7 +192,7 @@ async function submitWithdraw() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
 
     try {
-        const res = await fetch('/user/cashback.php', {
+        const res = await fetch('', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({

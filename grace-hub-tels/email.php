@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 auth_admin();
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
+    require_permission('manage_messaging');
     $action = $_POST['action'] ?? '';
     if($action === 'save_smtp') {
         $allowed=['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from_name','smtp_from_email','smtp_encryption'];
@@ -32,6 +33,10 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     }
 }
 function k(string $key):string{return htmlspecialchars(setting($key));}
+// SMTP password must not render for viewers who can't act on it — auth_admin()
+// alone (no role/permission) lets any admin, including 'support', load this
+// page; only the manage_messaging-gated POST above can change it.
+function k_secret(string $key):string{return has_permission('manage_messaging')?htmlspecialchars(setting($key)):'';}
 $csrf=admin_csrf();$campaigns=db()->query("SELECT * FROM email_campaigns ORDER BY created_at DESC LIMIT 20")->fetchAll();
 $smtp_encryption = setting('smtp_encryption', 'tls');
 ?><!DOCTYPE html>
@@ -71,7 +76,7 @@ $smtp_encryption = setting('smtp_encryption', 'tls');
         <div class="form-group"><label>SMTP Username <span style="color:var(--danger);">*</span></label><input type="text" class="form-control" id="smtp_user" value="<?=k('smtp_user')?>" placeholder="your@email.com"></div>
     </div>
     <div class="form-group"><label>SMTP Password <span style="color:var(--danger);">*</span></label>
-        <div style="display:flex;gap:8px;"><input type="password" class="form-control" id="smtp_pass" value="<?=k('smtp_pass')?>" placeholder="App password or SMTP password" style="flex:1;">
+        <div style="display:flex;gap:8px;"><input type="password" class="form-control" id="smtp_pass" value="<?=k_secret('smtp_pass')?>" placeholder="App password or SMTP password" style="flex:1;">
         <button class="btn-primary" onclick="togglePass()" style="padding:0 14px;border-radius:8px;font-size:14px;background:#E2E8F0;color:#475569;" type="button"><i class="fas fa-eye" id="eyeIcon"></i></button></div>
     </div>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">

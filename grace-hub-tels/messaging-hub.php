@@ -12,7 +12,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     if (!verify_admin_csrf($_POST['csrf'] ?? '')) {
         json_response(['success' => false, 'message' => 'Invalid CSRF token'], 403);
     }
-    
+    // Mass WhatsApp/Email/SMS broadcasts to the whole user base — same
+    // permission Staff Management already defines for the Messaging Hub.
+    if (!has_permission('manage_messaging')) {
+        json_response(['success' => false, 'message' => 'Missing permission: manage_messaging'], 403);
+    }
+
     $action = $_POST['action'];
 
     if ($action === 'send_broadcast') {
@@ -215,8 +220,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         <h3 style="color:#fff;font-size:15px;font-weight:700">Compose Broadcast</h3>
     </div>
     <div style="padding:24px">
-        <div id="broadcastAlert" style="padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;display:none;margin-bottom:20px;"></div>
-        
         <form id="broadcastForm" onsubmit="sendBroadcast(event)">
             
             <div class="form-group">
@@ -267,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             </div>
 
             <div style="text-align: right; margin-top: 20px;">
-                <button type="submit" class="btn btn-primary" id="btnSend">
+                <button type="submit" class="btn-primary" id="btnSend">
                     <i class="fas fa-paper-plane" style="margin-right:6px"></i> Send Broadcast
                 </button>
             </div>
@@ -277,6 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
 </div>
 </div>
+<div class="save-toast" id="toast"></div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
@@ -306,12 +310,10 @@ function sendBroadcast(e) {
     }
 
     const btn = $('#btnSend');
-    const alertBox = $('#broadcastAlert');
-    
+
     if(!confirm("Are you sure you want to broadcast this message to the selected segment? This action cannot be undone.")) return;
 
     btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-    alertBox.hide();
 
     $.ajax({
         url: 'messaging-hub.php',
@@ -327,27 +329,22 @@ function sendBroadcast(e) {
         },
         dataType: 'json',
         success: function(res) {
-            alertBox.show().removeClass('bg-danger text-white bg-success');
+            showToast(res.message ? res.message.replace(/<br>/g, ' — ') : (res.success ? 'Broadcast sent' : 'Error processing request'), res.success);
             if(res.success) {
-                alertBox.css({'background':'#DCFCE7', 'color':'#16A34A', 'border':'1px solid #BBF7D0'});
-                alertBox.html('<i class="fas fa-check-circle"></i> ' + res.message);
                 $('#broadcastForm')[0].reset();
                 toggleSpecificUser();
-            } else {
-                alertBox.css({'background':'#FEE2E2', 'color':'#DC2626', 'border':'1px solid #FECACA'});
-                alertBox.html('<i class="fas fa-exclamation-triangle"></i> ' + (res.message || 'Error processing request'));
             }
         },
         error: function(xhr, status, error) {
-            alertBox.show().css({'background':'#FEE2E2', 'color':'#DC2626', 'border':'1px solid #FECACA'});
             let errMsg = xhr.responseJSON ? xhr.responseJSON.message : xhr.responseText;
-            alertBox.html('<i class="fas fa-exclamation-triangle"></i> System Error (' + xhr.status + '): ' + errMsg);
+            showToast('System Error (' + xhr.status + '): ' + errMsg, false);
         },
         complete: function() {
             btn.prop('disabled', false).html('<i class="fas fa-paper-plane" style="margin-right:6px"></i> Send Broadcast');
         }
     });
 }
+function showToast(msg,ok){const t=document.getElementById('toast');t.textContent=msg;t.className='save-toast show '+(ok?'ok':'err');setTimeout(()=>t.classList.remove('show'),3000);}
 </script>
 </body>
 </html>
