@@ -330,30 +330,43 @@ async function submitA2C() {
     const cash = amt * (parseFloat(document.getElementById('selRate').value) / 100);
     
     if(autoNets[net]) {
-        const pin = document.getElementById('pinF').value.trim();
-        if(!pin) return Swal.fire('Notice', 'Enter your airtime share PIN', 'info');
+        const sharePin = document.getElementById('pinF').value.trim();
+        if(!sharePin) return Swal.fire('Notice', 'Enter your airtime share PIN', 'info');
         if(await showConfirm(`Instant A2C with AutoSyncNG\n\nNetwork: ${net}\nSending From: ${sender}\nAirtime Value: ₦${amt}\nCash You Will Receive: ₦${cash}\n\nAn OTP will be sent to ${sender} via SMS.`, 'Confirm')) {
-            processA2C(net, sender, amt, pin);
+            confirmTransaction({
+                "Network": net,
+                "Airtime Value": "₦" + amt,
+                "Cash Due": "₦" + cash
+            }, function(pin) {
+                processA2C(net, sender, amt, sharePin, pin);
+            });
         }
     } else {
         if(await showConfirm(`Submit Airtime to Cash Request?\n\nNetwork: ${net}\nSending From: ${sender}\nAirtime Value: ₦${amt}\nCash You Will Receive: ₦${cash}\n\nMake sure you have already sent the airtime to our number!`, 'Confirm Request')) {
-            processA2C(net, sender, amt, '');
+            confirmTransaction({
+                "Network": net,
+                "Airtime Value": "₦" + amt,
+                "Cash Due": "₦" + cash
+            }, function(pin) {
+                processA2C(net, sender, amt, '', pin);
+            });
         }
     }
 }
 
-function processA2C(net, sender, amt, pin) {
+function processA2C(net, sender, amt, sharePin, pin) {
     const btn = document.getElementById('submitBtn');
     const ogHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     btn.disabled = true;
-    
+
     const fd = new FormData();
     fd.append('csrf_token', document.getElementById('csrfF').value);
     fd.append('network', net);
     fd.append('sender_phone', sender);
     fd.append('airtime_amount', amt);
-    if(pin) fd.append('share_pin', pin);
+    fd.append('pin', pin);
+    if(sharePin) fd.append('share_pin', sharePin);
     
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 60000);
