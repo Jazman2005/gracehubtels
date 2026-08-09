@@ -24,7 +24,11 @@ $sel_net = htmlspecialchars(strtoupper($_GET['net'] ?? ''));
 if (!in_array($sel_net, ['MTN', 'GLO', 'AIRTEL', '9MOBILE'])) { 
     $sel_net = '';
 } 
-$types = get_data_types($sel_net);
+// get_data_types('') returns types across ALL networks (no filter applied),
+// not "no types" — without this guard the Data Type dropdown showed up on
+// first page load before the user had typed a phone number or picked a
+// network at all, since $types was never actually empty.
+$types = $sel_net ? get_data_types($sel_net) : [];
 $sel_type = htmlspecialchars($_GET['type'] ?? '');
 $plans = !empty($sel_type) ? get_data_plans($sel_net, $sel_type) : [];
 $benefs = get_beneficiaries($uid, 'data'); 
