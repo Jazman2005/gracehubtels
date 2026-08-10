@@ -185,10 +185,17 @@ function is_api_response_pending(?array $res): bool {
 
 function get_plan_bindings(string $service, int $plan_id): array {
   try {
-    $s = db()->prepare("SELECT b.product_code, r.name as provider_name, r.api_base_url, r.api_key, r.api_token, r.api_pin, r.contract_code, r.public_key, r.secret_key, r.network_id_map, r.value_map FROM plan_api_bindings b JOIN api_registry r ON r.id=b.api_registry_id WHERE b.service=? AND b.plan_id=? AND r.is_active=1 ORDER BY b.priority");
+    // api_registry's URL column is named `base_url`, not `api_base_url` — this
+    // query used to select the latter, which doesn't exist on the table, so
+    // every call threw a PDOException that the catch below silently swallowed
+    // into an empty array. Every plan-specific provider binding configured via
+    // data-plan-mapping.php (data/cabletv/electricity) was therefore always
+    // ignored at purchase time, with no error surfaced anywhere.
+    $s = db()->prepare("SELECT b.product_code, r.name as provider_name, r.base_url AS api_base_url, r.api_key, r.api_token, r.api_pin, r.contract_code, r.public_key, r.secret_key, r.network_id_map, r.value_map FROM plan_api_bindings b JOIN api_registry r ON r.id=b.api_registry_id WHERE b.service=? AND b.plan_id=? AND r.is_active=1 ORDER BY b.priority");
     $s->execute([$service, $plan_id]);
     return $s->fetchAll(PDO::FETCH_ASSOC);
   } catch (\Throwable $e) {
+    log_error('api_router', 'get_plan_bindings query failed: ' . $e->getMessage(), ['service' => $service, 'plan_id' => $plan_id]);
     return [];
   }
 }
