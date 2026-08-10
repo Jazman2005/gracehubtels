@@ -120,9 +120,8 @@ class CableTVService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
-                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
                 db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
                 $cb=apply_cashback($uid,$price,'cabletv',null);
                 notify_user($uid,'✅ Cable TV Subscribed',"{$plan['plan_name']} activated on {$sc}",'success',null,$debit['balance_before'],$debit['balance_after']);
@@ -132,8 +131,10 @@ class CableTVService {
         }
 
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
+        $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
             update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''));
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Cable TV Processing',"Your {$plan['plan_name']} subscription is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
         }
@@ -146,6 +147,7 @@ class CableTVService {
         // provider's real status can be confirmed.
         if (!empty($last_res['_network_error'])) {
             update_tx_status($debit['ref'],'processing');
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Cable TV Processing',"We're confirming your {$plan['plan_name']} subscription with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'We could not immediately confirm this subscription due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
         }
@@ -153,6 +155,7 @@ class CableTVService {
         $err_msg = 'Subscription failed. Wallet reversed.';
         if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
         refund_failed_transaction($debit['ref'], $uid, $price, $err_msg);
+        save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return['success'=>true,'message'=>$err_msg,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

@@ -2,6 +2,7 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 require_once __DIR__.'/../user/core/bank_transfer.php';
+require_once __DIR__.'/../user/core/api_router.php';
 
 auth_admin();
 $csrf = admin_csrf();
@@ -65,6 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         $notify = 'https://www.gracehubtels.com/webhook/palmpay/index.php';
         $res = $api->transfer($ref, $meta['payee_name'] ?? '', $meta['bank_code'], $meta['account_number'], $tx['phone'], $amount, $notify, $meta['narration'] ?? '');
         if ($res && ($res['respCode']??'') === '00000000') {
+            save_tx_response($ref, provider_response_text($res));
             if (update_tx_status($ref, 'success', $res['data']['orderNo'] ?? null)) {
                 $cb = apply_cashback($tx['user_id'], $amount, 'bank_transfer', null);
                 notify_user($tx['user_id'], 'Transfer Successful', number_format($amount,2) . " sent to " . ($meta['bank_code']??'') . " - " . ($meta['account_number']??'') . ".", 'success');
@@ -111,6 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         // the claim back to pending for a legitimate retry.
         update_tx_status($ref, 'pending');
         $err = $res['respMsg'] ?? 'API error';
+        save_tx_response($ref, provider_response_text($res) ?: $err);
         log_error('bank_transfer', 'Approval transfer failed', ['ref'=>$ref,'response'=>$res]);
         json_response(['success'=>false,'message'=>'Transfer failed: ' . $err]);
     } elseif ($action === 'reject') {

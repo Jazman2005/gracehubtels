@@ -183,6 +183,38 @@ function is_api_response_pending(?array $res): bool {
   return false;
 }
 
+// Providers return wildly different response shapes. This pulls out whatever
+// human-readable text is actually in there — falling back to the full
+// (redacted) JSON body when no recognizable message field exists — so the
+// REAL provider reply ends up on the receipt regardless of whether the
+// purchase landed as successful, failed, pending, or still processing,
+// instead of just our own generic internal message. Call this with the raw
+// $res from api_call()/api_post() and feed the result into save_tx_response().
+function provider_response_text(?array $res): string {
+    if (!$res) return '';
+    if (!empty($res['_network_error'])) {
+        return 'No response from provider (network/timeout error)' . (!empty($res['_curl_error']) ? ': ' . $res['_curl_error'] : '');
+    }
+    $candidates = [
+        $res['message'] ?? null,
+        $res['msg'] ?? null,
+        $res['error'] ?? null,
+        $res['description'] ?? null,
+        $res['respMsg'] ?? null,
+        $res['data']['transaction']['message'] ?? null,
+        $res['data']['message'] ?? null,
+    ];
+    foreach ($candidates as $c) {
+        if (is_string($c) && trim($c) !== '') return $c;
+        if (is_array($c) && !empty($c)) { $j = json_encode($c); if ($j) return $j; }
+    }
+    $clean = $res;
+    unset($clean['_http_code'], $clean['_curl_errno'], $clean['_curl_error'], $clean['_network_error']);
+    if (empty($clean)) return '';
+    $j = json_encode(redact_sensitive($clean), JSON_UNESCAPED_SLASHES);
+    return $j ?: '';
+}
+
 function get_plan_bindings(string $service, int $plan_id): array {
   try {
     // api_registry's URL column is named `base_url`, not `api_base_url` — this

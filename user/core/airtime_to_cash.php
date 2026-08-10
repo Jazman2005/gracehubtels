@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__.'/db.php'; require_once __DIR__.'/auth.php';
+require_once __DIR__.'/db.php'; require_once __DIR__.'/auth.php'; require_once __DIR__.'/api_router.php';
 try{db()->query("SELECT 1 FROM airtime_to_cash LIMIT 1");}catch(PDOException$e){
     db()->exec("CREATE TABLE IF NOT EXISTS airtime_to_cash (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -121,7 +121,7 @@ class AirtimeToCashService {
             try{
                 $lk=db()->prepare("SELECT id,status FROM airtime_to_cash WHERE transaction_ref=? AND status='processing' LIMIT 1 FOR UPDATE");$lk->execute([$ref]);$locked=$lk->fetch();
                 if(!$locked){$db->rollback();return['success'=>false,'message'=>'Transaction already completed'];}
-                $cr=credit_wallet((int)$req['user_id'],$actual,'airtime_to_cash',"A2C: ₦{$req['airtime_amount']} {$req['network']} → ₦{$actual}",['a2c_ref'=>$ref,'network'=>$req['network'],'api_ref'=>$api_ref]);
+                $cr=credit_wallet((int)$req['user_id'],$actual,'airtime_to_cash',"A2C: ₦{$req['airtime_amount']} {$req['network']} → ₦{$actual}",['a2c_ref'=>$ref,'network'=>$req['network'],'api_ref'=>$api_ref,'response'=>provider_response_text($res)]);
                 if($cr['success']){
                     $pd['complete_response']=$res;db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,provider_response=?,updated_at=NOW() WHERE transaction_ref=?")->execute([$actual,json_encode($pd),$ref]);
                     $db->commit();

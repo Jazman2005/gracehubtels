@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/db.php';
+require_once __DIR__.'/api_router.php';
 
 class CashwyreAPI {
     private string $secretKey;
@@ -272,6 +273,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
 
     if (!$result['success']) {
         refund_failed_transaction($debit['ref'], $user_id, $total, $result['message'] ?? 'Failed to create virtual card.');
+        save_tx_response($debit['ref'], provider_response_text($result));
         log_error('api_cashwyre', 'CARD_CREATE_FAILED', ['user_id' => $user_id, 'error' => $result['message'] ?? '']);
         $msg = $result['message'] ?? 'Failed to create virtual card. You have been refunded.';
         if (stripos($msg, 'retry again later') !== false) {
@@ -340,6 +342,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
 
     if (!$card_id) {
         refund_failed_transaction($debit['ref'], $user_id, $total, 'Could not retrieve card code.');
+        save_tx_response($debit['ref'], provider_response_text($result));
         return ['success' => false, 'message' => 'Could not retrieve card code. You have been refunded.'];
     }
 
@@ -351,6 +354,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
         ->execute([$user_id, $card_id, $masked, $card_number, $expiry, $cvv, $brand, $topupUsd, json_encode($data)]);
 
     update_tx_status($debit['ref'], 'success');
+    save_tx_response($debit['ref'], provider_response_text($result));
     $baseRate = get_live_ngn_rate();
     if ($baseRate <= 0) $baseRate = $rate;
     $costPrice = (2.50 * $baseRate) + ($topupUsd * $baseRate);
@@ -464,6 +468,7 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
             log_error('virtual_card', 'Withdraw succeeded at provider but wallet credit failed — manual reconciliation required', ['user_id' => $user_id, 'card_id' => $card_id, 'usd_amount' => $usd_amount]);
             return ['success' => false, 'message' => 'Withdrawal was processed but crediting your wallet failed. Please contact support with card ref: ' . $card_id];
         }
+        save_tx_response($credit['ref'], provider_response_text($r));
         notify_user($user_id, 'Virtual Card Withdrawal', '₦' . number_format($ngn_amount) . ' withdrawn from virtual card to wallet', 'success', null, $credit['balance_before'], $credit['balance_after']);
         $baseRate = get_live_ngn_rate();
         if ($baseRate <= 0) $baseRate = $rate;
@@ -518,8 +523,10 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
                 return ['success' => true, 'message' => 'Your card funding is being verified due to a network issue. This can take a few minutes — check back shortly.', 'ref' => $debit['ref'], 'processing' => true];
             }
             refund_failed_transaction($debit['ref'], $user_id, $total_ngn, $r['message'] ?? 'Failed to fund virtual card.');
+            save_tx_response($debit['ref'], provider_response_text($r) ?: ($r['message'] ?? 'Failed to fund virtual card.'));
             return ['success' => false, 'message' => $r['message'] ?? 'Funding failed. You have been refunded.'];
         }
+        save_tx_response($debit['ref'], provider_response_text($r));
         // Guard against a Cashwyre funding webhook (which independently
         // credits virtual_cards.balance for the same top-up event under its
         // own 'cashwyre:fund:<event_id>' idempotency key) resolving this same

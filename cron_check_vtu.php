@@ -87,6 +87,9 @@ try {
             }
         } elseif ($result['failed']) {
             if (update_tx_status($ref, 'failed')) {
+                if (!empty($result['message'])) {
+                    db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$result['message'], $ref]);
+                }
                 $uid = (int)$tx['user_id'];
                 $amount = (float)$tx['amount'];
                 credit_wallet($uid, $amount, $category, ucwords(str_replace('_', ' ', $category)) . ' reversal - ' . ($result['message'] ?: 'Provider reported failure'), [], 'vtu_refund:' . $ref);

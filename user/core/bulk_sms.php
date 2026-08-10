@@ -172,6 +172,7 @@ class BulkSMSService {
 
         if ($success) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? 'mocked'), 'SMS')) {
                 db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")
                     ->execute([$total_cost, $total_amount - $total_cost, $prov['provider_name'] ?? 'System', $debit['ref']]);
@@ -184,8 +185,10 @@ class BulkSMSService {
 
         // Pending on async response
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name']??'System',$debit['ref']]);
+        $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
             update_tx_status($debit['ref'], 'pending', (string)($last_res['id'] ?? ''));
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid, 'Bulk SMS Processing', 'Your bulk SMS campaign is being processed.', 'info', null, $debit['balance_before'], $debit['balance_after']);
             return ['success' => true, 'message' => 'Transaction is being processed. Check receipt for updates.', 'ref' => $debit['ref'], 'pending' => true];
         }
@@ -196,6 +199,7 @@ class BulkSMSService {
         // blindly.
         if (!empty($last_res['_network_error'])) {
             update_tx_status($debit['ref'], 'processing');
+            save_tx_response($debit['ref'], $provider_resp);
             db()->prepare("UPDATE bulk_sms_history SET status='pending', provider_response=? WHERE transaction_ref=?")->execute([json_encode($last_res), $debit['ref']]);
             notify_user($uid, 'Bulk SMS Processing', "We're confirming your bulk SMS campaign with the provider. This can take a few minutes.", 'info', null, $debit['balance_before'], $debit['balance_after']);
             return ['success' => true, 'message' => 'We could not immediately confirm this campaign due to a network issue. It is being verified — check your receipt shortly.', 'ref' => $debit['ref'], 'pending' => true];
@@ -208,6 +212,7 @@ class BulkSMSService {
         $err_msg = 'Campaign delivery failed. Wallet reversed.';
         if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
         refund_failed_transaction($debit['ref'], $uid, $total_amount, $err_msg);
+        save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return ['success' => true, 'message' => $err_msg, 'ref' => $debit['ref'], 'refunded' => true];
     }
 }

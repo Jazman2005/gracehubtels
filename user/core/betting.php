@@ -184,9 +184,8 @@ class BettingService {
 
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? ''))) {
-                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
                 notify_user($uid, 'Betting Funded', "{$plan['platform_name']} account ({$customerId}) funded with ₦{$amount}.", 'success', null, $debit['balance_before'], $debit['balance_after']);
                 $cb = apply_cashback($uid, $amount, 'betting', null);
                 return ['success'=>true, 'message'=>"Betting wallet funded successfully.", 'ref'=>$debit['ref'], 'cashback'=>$cb];
@@ -195,9 +194,11 @@ class BettingService {
         }
 
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'], $debit['ref']]);
+        $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
             $prov_ref = $last_res['id'] ?? $last_res['data']['transaction']['reference'] ?? $last_res['reference'] ?? '';
             update_tx_status($debit['ref'], 'pending', $prov_ref);
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid, 'Betting Processing', "Funding for {$plan['platform_name']} ({$customerId}) is processing.", 'info', null, $debit['balance_before'], $debit['balance_after']);
             return ['success'=>true, 'message'=>'Transaction is being processed. Check receipt for updates.', 'ref'=>$debit['ref'], 'pending'=>true];
         }
@@ -210,6 +211,7 @@ class BettingService {
         // admin to resolve it via Transaction Details).
         if (!empty($last_res['_network_error'])) {
             update_tx_status($debit['ref'], 'processing');
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid, 'Betting Processing', "We're confirming your {$plan['platform_name']} funding with the provider. This can take a few minutes.", 'info', null, $debit['balance_before'], $debit['balance_after']);
             return ['success'=>true, 'message'=>'We could not immediately confirm this funding due to a network issue. It is being verified — check your receipt shortly.', 'ref'=>$debit['ref'], 'pending'=>true];
         }
@@ -218,6 +220,7 @@ class BettingService {
         if (!empty($last_res['message'])) $err = $last_res['message'];
         elseif (!empty($last_res['error'])) $err = is_array($last_res['error']) ? json_encode($last_res['error']) : $last_res['error'];
         refund_failed_transaction($debit['ref'], $uid, $total, $err);
+        save_tx_response($debit['ref'], $provider_resp ?: $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

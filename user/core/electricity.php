@@ -111,17 +111,18 @@ class ElectricityService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
                 $tok = $res['data']['transaction']['token'] ?? $res['data']['transaction']['pin'] ?? $res['data']['transaction']['main_token'] ?? $res['data']['transaction']['units'] ?? $res['data']['transaction']['meter_token'] ?? $res['data']['token'] ?? $res['data']['pin'] ?? $res['data']['main_token'] ?? $res['data']['units'] ?? $res['token'] ?? $res['pin'] ?? $res['meter_token'] ?? $res['vtoken'] ?? $res['tokens'] ?? $res['data_pin'] ?? $res['tokenCode'] ?? $res['token_code'] ?? $res['main_token'] ?? $res['units'] ?? $res['unit'] ?? $res['card'] ?? (is_string($res['message'] ?? null) && preg_match('/[0-9]{4,}(?:-[0-9]{4,})+/', $res['message'], $m) ? $m[0] : '') ?? (is_string($res['data']['transaction']['details'] ?? null) && preg_match('/[0-9]{4,}(?:-[0-9]{4,})+/', $res['data']['transaction']['details'], $m) ? $m[0] : '') ?: 'Check meter';
-                $resp_msg = $res['message'] ?? $res['msg'] ?? $d['message'] ?? $d['msg'] ?? $d['transaction']['details'] ?? '';
-                if ($resp_msg || $tok) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?, '$.token', ?) WHERE transaction_ref=?")->execute([$resp_msg, $tok, $debit['ref']]);notify_user($uid,' ⚡ Electricity Token',"Token: {$tok} for meter {$meter}",'success',null,$debit['balance_before'],$debit['balance_after']);$cb=apply_cashback($uid,$amount,'electricity',null);return['success'=>true,'message'=>"Token: {$tok}",'token'=>$tok,'ref'=>$debit['ref'],'cashback'=>$cb];
+                if ($tok) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.token', ?) WHERE transaction_ref=?")->execute([$tok, $debit['ref']]);notify_user($uid,' ⚡ Electricity Token',"Token: {$tok} for meter {$meter}",'success',null,$debit['balance_before'],$debit['balance_after']);$cb=apply_cashback($uid,$amount,'electricity',null);return['success'=>true,'message'=>"Token: {$tok}",'token'=>$tok,'ref'=>$debit['ref'],'cashback'=>$cb];
             }
             return['success'=>true,'message'=>'Purchase successful','ref'=>$debit['ref']];
         }
 
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
+        $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
-            $prov_ref = $last_res['id'] ?? $last_res['data']['transaction']['reference'] ?? $last_res['data']['id'] ?? $last_res['reference'] ?? '';update_tx_status($debit['ref'],'pending',$prov_ref);notify_user($uid,'Electricity Processing',"Your electricity purchase for meter {$meter} is being processed. Check back later.",'info',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
+            $prov_ref = $last_res['id'] ?? $last_res['data']['transaction']['reference'] ?? $last_res['data']['id'] ?? $last_res['reference'] ?? '';update_tx_status($debit['ref'],'pending',$prov_ref);save_tx_response($debit['ref'], $provider_resp);notify_user($uid,'Electricity Processing',"Your electricity purchase for meter {$meter} is being processed. Check back later.",'info',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
         }
 
         // A network-level failure on the final attempt means we don't
@@ -133,6 +134,7 @@ class ElectricityService {
         // instead of refunding blindly.
         if (!empty($last_res['_network_error'])) {
             update_tx_status($debit['ref'],'processing');
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Electricity Processing',"We're confirming your electricity purchase for meter {$meter} with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'We could not immediately confirm this purchase due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
         }
@@ -144,6 +146,7 @@ class ElectricityService {
         // previously only refunded $amount, silently keeping the charge on a
         // purchase that never went through.
         refund_failed_transaction($debit['ref'], $uid, $total, $err);
+        save_tx_response($debit['ref'], $provider_resp ?: $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

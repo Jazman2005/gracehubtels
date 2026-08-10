@@ -47,13 +47,15 @@ class DataCardService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'],'success')) {
                 $raw_pins=$res['data_pin']??$res['data']['pins']??[];$pins=[];foreach($raw_pins as $rp){if(is_array($rp)){$pins[]=['pin'=>$rp['pin']??json_encode($rp),'memo'=>$rp['memo']??''];}else{$pins[]=['pin'=>$rp,'memo'=>''];}}$costTotal=(float)$plan['cost_price']*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO data_cards (user_id,transaction_ref,network,plan_name,quantity,amount,pins,status) VALUES (?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$plan['network'],$plan['plan_name'],$qty,$total,json_encode($pins)]);notify_user($uid,'Data Cards Ready',"{$qty}x {$plan['data_size']} {$plan['network']} data card(s) purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} data card(s) ready",'pins'=>$pins,'ref'=>$debit['ref']];
             }
             return['success'=>true,'message'=>"{$qty} data card(s) ready",'ref'=>$debit['ref']];
         }
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name']??'System',$debit['ref']]);
-        if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??'')); notify_user($uid,'Data Card Processing',"Your data card purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
+        $provider_resp = provider_response_text($last_res);
+        if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??'')); save_tx_response($debit['ref'], $provider_resp); notify_user($uid,'Data Card Processing',"Your data card purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
 
         // A network-level failure on the final attempt means we don't
         // actually know whether that provider processed the request — leave
@@ -61,6 +63,7 @@ class DataCardService {
         // blindly.
         if (!empty($last_res['_network_error'])) {
             update_tx_status($debit['ref'],'processing');
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Data Card Processing',"We're confirming your data card purchase with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'We could not immediately confirm this purchase due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
         }
@@ -69,6 +72,7 @@ class DataCardService {
         if(!empty($last_res['message'])) $err=$last_res['message'];
         elseif(!empty($last_res['error'])) $err=is_array($last_res['error'])?json_encode($last_res['error']):$last_res['error'];
         refund_failed_transaction($debit['ref'], $uid, $total, $err);
+        save_tx_response($debit['ref'], $provider_resp ?: $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

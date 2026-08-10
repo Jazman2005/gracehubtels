@@ -124,13 +124,12 @@ class DataService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             // Guard against a duplicate/concurrent resolution of this same
             // ref (e.g. cron_check_vtu.php already resolved it while this
             // request was mid-flight) — only award cashback/promo usage and
             // notify success if we actually won the transition here.
             if (update_tx_status($debit['ref'],'success',(string)($res['id']??''),$plan['network'])) {
-                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
                 db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
                 $cb=apply_cashback($uid,$price,'data',$plan['network'],(int)$plan['id']);
                 if($promo_id > 0) { db()->prepare("INSERT INTO promo_usage (user_id, promo_id, transaction_ref, discount_applied) VALUES (?, ?, ?, ?)")->execute([$uid, $promo_id, $debit['ref'], $discount]); db()->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=?")->execute([$promo_id]); }
@@ -139,15 +138,22 @@ class DataService {
             }
             return['success'=>true,'message'=>"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'ref'=>$debit['ref']];
         }
-        
+
         $is_timeout = $last_res && !empty($last_res['_curl_errno']);
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
-        if($is_timeout){ update_tx_status($debit['ref'],'processing'); return['success'=>true,'message'=>"Transaction is being processed. Check status shortly.",'ref'=>$debit['ref'],'processing'=>true]; }
-        if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??'')); notify_user($uid,'Data Processing',"Your data purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
-        
+        $provider_resp = provider_response_text($last_res);
+        if($is_timeout){ update_tx_status($debit['ref'],'processing'); save_tx_response($debit['ref'], $provider_resp); return['success'=>true,'message'=>"Transaction is being processed. Check status shortly.",'ref'=>$debit['ref'],'processing'=>true]; }
+        if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??'')); save_tx_response($debit['ref'], $provider_resp); notify_user($uid,'Data Processing',"Your data purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
+
         $err_msg = 'Purchase failed. Wallet reversed.';
         if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
         refund_failed_transaction($debit['ref'], $uid, $price, $err_msg);
+        // refund_failed_transaction() already stamped meta.response with
+        // $err_msg above — overwrite it with the full raw provider reply
+        // (falls back to the same text when there's nothing more specific)
+        // so the receipt always shows the real response, not just our
+        // shortened/defaulted failure reason.
+        save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return['success'=>true,'message'=>$err_msg,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

@@ -106,12 +106,11 @@ class AirtimeService {
         
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
+            save_tx_response($debit['ref'], provider_response_text($res));
             // Guard against a duplicate/concurrent resolution of this same
             // ref — only proceed to award cashback and notify success if we
             // actually won the pending/processing -> success transition.
             if (update_tx_status($debit['ref'],'success',(string)($res['id']??''),$network)) {
-                $resp_msg = $res['message'] ?? $res['msg'] ?? '';
-                if ($resp_msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$resp_msg, $debit['ref']]);
                 db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$cost,$charge_amount-$cost,$prov['provider_name'],$debit['ref']]);
                 $cb=apply_cashback($uid,$charge_amount,'airtime',$network);
                 notify_user($uid,'✅ Airtime Sent',"₦{$amount} {$network} airtime sent to {$phone}",'success',null,$debit['balance_before'],$debit['balance_after']);
@@ -121,8 +120,10 @@ class AirtimeService {
         }
 
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
+        $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
             update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''),$network);
+            save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Airtime Processing',"Your {$amount} {$network} airtime purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
         }
@@ -135,6 +136,7 @@ class AirtimeService {
         // real status can be confirmed, instead of refunding blindly.
         if (!empty($last_res['_network_error'])) {
             update_tx_status($debit['ref'],'processing');
+            save_tx_response($debit['ref'], $provider_resp);
             if ($last_prov) log_error('airtime', 'Network error on final provider attempt — left processing pending verification', ['ref'=>$debit['ref'],'provider'=>$last_prov['provider_name']]);
             notify_user($uid,'Airtime Processing',"We're confirming your {$amount} {$network} airtime purchase with the network. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'We could not immediately confirm this purchase due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
@@ -144,6 +146,10 @@ class AirtimeService {
         elseif (!empty($last_res['error'])) { $err_msg = is_array($last_res['error']) ? json_encode($last_res['error']) : $last_res['error']; }
         elseif (!empty($last_res['detail'])) { $err_msg = $last_res['detail']; }
         refund_failed_transaction($debit['ref'], $uid, $charge_amount, $err_msg);
+        // See data.php for why this runs after refund_failed_transaction():
+        // overwrites the generic/shortened failure reason with the full raw
+        // provider reply so the receipt always shows the real response.
+        save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return['success'=>true,'message'=>$err_msg,'ref'=>$debit['ref'],'refunded'=>true];
     }
 }

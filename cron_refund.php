@@ -125,6 +125,9 @@ try {
             log_write('cron_refund', 'INFO', "Skipped $ref — already resolved by another process");
             continue;
         }
+        if (!empty($result['message'])) {
+            db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$result['message'], $ref]);
+        }
 
         // 2. Refund the wallet. Shares the same idempotency key convention as the
         // vtu webhook/cron_check_vtu refund paths for the same category set, so a

@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__.'/db.php'; require_once __DIR__.'/auth.php';
+require_once __DIR__.'/db.php'; require_once __DIR__.'/auth.php'; require_once __DIR__.'/api_router.php';
 
 try {
     db()->exec("CREATE TABLE IF NOT EXISTS exam_pins_stock (
@@ -97,8 +97,10 @@ class ExamPinService {
             }
 
             $res=$this->api_post($prov['api_key'],['exam_name'=>$exam,'quantity'=>$qty]);
+            $provider_resp = provider_response_text($res);
 
             if($res&&in_array($res['_http_code']??0,[200,201])){
+                save_tx_response($debit['ref'], $provider_resp);
                 // Guard against a duplicate/replayed resolution of this same
                 // ref (e.g. the catch block below firing after this branch
                 // already succeeded, on some later unrelated exception) —
@@ -121,6 +123,7 @@ class ExamPinService {
             // atomically claims the transaction first, so this is still safe
             // against being triggered more than once for the same ref.
             refund_failed_transaction($debit['ref'],$uid,$amount,'Purchase failed');
+            save_tx_response($debit['ref'], $provider_resp ?: 'Purchase failed');
             return['success'=>false,'message'=>'Purchase failed. Wallet reversed.'];
 
         } catch (\Throwable $e) {

@@ -157,6 +157,7 @@ if ($is_success) {
 if ($is_failed) {
     $claimed = update_tx_status($ref, 'failed');
     if ($claimed) {
+        if ($msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$msg, $ref]);
         $uid = (int)$tx_row['user_id'];
         $charge = (float)($tx_row['charge'] ?? 0);
         $amount_to_refund = (float)$tx_row['amount'] + $charge;
