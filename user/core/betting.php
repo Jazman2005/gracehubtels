@@ -70,8 +70,13 @@ class BettingService {
         // explicit decline. Flagged (fixing a pre-existing bug where
         // curl_error() was called *after* curl_close(), always returning an
         // empty string) so the final purchase decision can avoid treating an
-        // uncertain outcome the same as a confirmed failure.
-        if (!$res) $d = ['_http_code' => $code, '_curl_error' => $err, '_network_error' => true];
+        // uncertain outcome the same as a confirmed failure. Must check
+        // $res === false specifically — curl_exec() returns an empty string
+        // (falsy, but not false) for a real HTTP response with an empty
+        // body, which is a confirmed decline from the provider, not an
+        // unknown network condition; the old !$res check misrouted that
+        // case into "network error" instead of a normal failed response.
+        if ($res === false) $d = ['_http_code' => $code, '_curl_error' => $err, '_network_error' => true];
         elseif (!$d) $d = ['_http_code' => $code, '_raw_response' => $res];
         
         log_api($prov['provider_name'] ?? 'betting_api', 'betting', $data, $d, in_array($code, [200, 201]) && !is_api_response_failure($d));

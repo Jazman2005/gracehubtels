@@ -41,8 +41,22 @@ class DataService {
         // provider received/processed this request — not the same as an
         // explicit decline. Flagged so the timeout-handling below (this file
         // already distinguishes $is_timeout from a confirmed decline) has a
-        // consistent marker matching the other services.
-        if (!$res) $d = ['_http_code' => $code, '_curl_errno' => $err_no, '_curl_error' => $err_msg, '_network_error' => true];
+        // consistent marker matching the other services. This must check
+        // $res === false specifically, not just !$res — curl_exec() returns
+        // an empty string (falsy, but not false) for a real HTTP response
+        // with an empty body (confirmed live: Gladtidings' data endpoint
+        // returned a bare 500 with no body), which is a genuine decline from
+        // the provider, not an unknown network condition. The old !$res
+        // check treated that empty-body 500 as a network error, so the
+        // purchase got silently refunded as "no response from provider"
+        // instead of surfacing the real HTTP 500 failure.
+        if ($res === false) {
+            $d = ['_http_code' => $code, '_curl_errno' => $err_no, '_curl_error' => $err_msg, '_network_error' => true];
+        } elseif ($d === null && !empty($res)) {
+            $d = ['_http_code' => $code, 'message' => "HTTP " . $code . ": " . substr(strip_tags($res), 0, 200)];
+        } elseif ($d === null) {
+            $d = ['_http_code' => $code, 'message' => "HTTP {$code}: empty response body"];
+        }
         log_api($prov['provider_name'] ?? 'data_api', 'data/buy', $payload, $d, in_array($code, [200, 201]));
         return $d;
     }
