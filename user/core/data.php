@@ -90,17 +90,26 @@ class DataService {
             if (empty($prov['api_base_url'])) continue;
             $last_prov = $prov;
             $plan_code = !empty($prov['product_code']) ? $prov['product_code'] : $plan['plan_id'];
-            $api_payload = ['network' => $plan['network_id'], 'plan' => $plan_code, 'mobile_number' => $phone, 'Ported_number' => true, 'ref' => $debit['ref']];
+            // The Add/Edit Data Plan admin form has no network_id input at all (only
+            // a free-text Network name field), so data_plans.network_id is never
+            // actually collected and silently defaults to 1 (MTN) for every plan —
+            // GLO/AIRTEL/9MOBILE plans were all sending MTN's network ID to every
+            // provider. Resolve it the same way airtime/cabletv/electricity already
+            // do: dynamically per-provider from the network NAME, not the plan's
+            // (unreliable) stored ID column.
+            $net_map = build_network_map($prov, 'data');
+            $network_id = $net_map[$plan['network']] ?? $plan['network_id'];
+            $api_payload = ['network' => $network_id, 'plan' => $plan_code, 'mobile_number' => $phone, 'Ported_number' => true, 'ref' => $debit['ref']];
             $pname = strtolower($prov['provider_name'] ?? '');
             if (strpos($pname, 'autosyncng') !== false) {
-                $api_payload = ['phone' => $phone, 'product_id' => $plan['network_id'], 'variation_code' => (string)$plan_code, 'request_ref' => $debit['ref'], 'ported_no' => true];
+                $api_payload = ['phone' => $phone, 'product_id' => $network_id, 'variation_code' => (string)$plan_code, 'request_ref' => $debit['ref'], 'ported_no' => true];
             } elseif (strpos($pname, 'autopilot') !== false) {
                 $dt = strtoupper($plan['data_type'] ?? '');
                 if ($dt === 'CG' || $dt === 'CORPORATE') $dt = 'CORPORATE GIFTING';
                 if ($dt === 'DG' || $dt === 'GIFTING') $dt = 'DIRECT GIFTING';
-                
+
                 $api_payload = [
-                    'networkId' => (string)$plan['network_id'],
+                    'networkId' => (string)$network_id,
                     'dataType' => (string)$dt,
                     'planId' => (string)$plan_code,
                     'phone' => (string)$phone,
