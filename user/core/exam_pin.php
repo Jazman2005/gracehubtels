@@ -20,18 +20,31 @@ try { db()->exec("ALTER TABLE exam_pins ADD COLUMN pins_data TEXT DEFAULT NULL")
 try { db()->exec("ALTER TABLE exam_pins ADD COLUMN amount DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER quantity"); } catch (\Throwable $e) {}
 
 class ExamPinService {
-    private function get_provider(): ?array {
-        $s=db()->prepare("SELECT * FROM api_providers WHERE service='exam_pin' AND is_active=1 ORDER BY priority LIMIT 1");
-        $s->execute();return $s->fetch()?:null;
+    // Builds the request for whichever provider is being tried. Gladtidings
+    // is the only exam_pin provider confirmed working in production
+    // (/api/epin/, flat exam_name+quantity fields, 'Authorization: Token'
+    // header) — any other provider added via API Registry falls back to the
+    // same convention until it's actually tested and given its own branch.
+    private function api_post(array $prov, array $data): ?array {
+        $pname = strtolower($prov['provider_name'] ?? '');
+        $token = $prov['api_key'] ?: $prov['api_token'];
+        if (strpos($pname, 'gladtidings') !== false) {
+            $url = rtrim($prov['api_base_url'], '/') . '/api/epin/';
+        } else {
+            $url = rtrim($prov['api_base_url'], '/') . '/api/epin/';
+        }
+        $ch=curl_init($url);
+        curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_HTTPHEADER=>['Content-Type: application/json','Authorization: Token '.$token],CURLOPT_TIMEOUT=>30,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2]);
+        $res=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);$err=curl_error($ch);curl_close($ch);
+        // A cURL-level failure means we genuinely don't know whether the
+        // provider received/processed this request — not the same as an
+        // explicit decline.
+        $d=$res?json_decode($res,true):($res===false?['_network_error'=>true,'message'=>"cURL Error: ".$err]:null);
+        if($d)$d['_http_code']=$code;
+        log_api($prov['provider_name'] ?? 'exam_pin_api','exam_pin',$data,$d,in_array($code,[200,201]));
+        return $d;
     }
-    
-    private function api_post(string $token,array $data): ?array {
-        $ch=curl_init('https://www.gladtidingsdata.com/api/epin/');
-        curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_HTTPHEADER=>['Content-Type: application/json','Authorization: Token '.$token],CURLOPT_TIMEOUT=>30]);
-        $res=curl_exec($ch);$code=curl_getinfo($ch,CURLINFO_HTTP_CODE);curl_close($ch);$d=$res?json_decode($res,true):null;if($d)$d['_http_code']=$code;
-        log_api('gladtidings','exam_pin',$data,$d,in_array($code,[200,201]));return $d;
-    }
-    
+
     public function process(int $uid,array $input): array {
         try {
             $exam=strtoupper(trim($input['exam_name']??$input['exam']??''));$qty=(int)($input['quantity']??1);$pin=(string)($input['pin']??'');
@@ -90,16 +103,29 @@ class ExamPinService {
             }
             // --- END LOCAL STOCK LOGIC ---
             
-            $prov=$this->get_provider();
-            if(!$prov||empty($prov['api_key'])){
+            // Multi-provider failover (matches every other service in this
+            // codebase) — previously this only ever tried a single hardcoded
+            // provider row with no fallback, and the Gladtidings URL/token
+            // were hardcoded in api_post() instead of coming from whichever
+            // registry entry is actually routed here via API Routes.
+            $providers = get_api_providers('exam_pin');
+            if (empty($providers)) {
                 refund_failed_transaction($debit['ref'],$uid,$amount,'Exam PIN service not configured or out of stock');
                 return['success'=>false,'message'=>'Exam PIN service not configured or Out of Stock'];
             }
+            $success = false; $has_pending = false; $last_res = null; $last_prov = null;
+            foreach ($providers as $prov) {
+                if (empty($prov['api_base_url']) || (empty($prov['api_key']) && empty($prov['api_token']))) continue;
+                $last_prov = $prov;
+                $res = $this->api_post($prov, ['exam_name'=>$exam,'quantity'=>$qty]);
+                if ($res && in_array($res['_http_code']??0,[200,201]) && !is_api_response_failure($res) && !is_api_response_pending($res)) { $success = true; break; }
+                if ($res && in_array($res['_http_code']??0,[200,201]) && is_api_response_pending($res) && !$success) { $has_pending = true; $last_res = $res; continue; }
+                $last_res = $res;
+            }
+            $provider_resp = provider_response_text($last_res);
 
-            $res=$this->api_post($prov['api_key'],['exam_name'=>$exam,'quantity'=>$qty]);
-            $provider_resp = provider_response_text($res);
-
-            if($res&&in_array($res['_http_code']??0,[200,201])){
+            if ($success && $last_prov) {
+                $res = $last_res;
                 save_tx_response($debit['ref'], $provider_resp);
                 // Guard against a duplicate/replayed resolution of this same
                 // ref (e.g. the catch block below firing after this branch
@@ -107,22 +133,32 @@ class ExamPinService {
                 // only proceed to record the pins/notify if we actually won
                 // the pending/processing -> success transition here.
                 if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
+                    db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
                     db()->prepare("INSERT INTO exam_pins (user_id,transaction_ref,exam_name,quantity,amount,pins_data,status) VALUES (?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$exam,$qty,$amount,json_encode($res['pins']??[])]);
                     notify_user($uid,'✅ Exam PINs Ready',"{$qty} {$exam} PIN(s) purchased.",'success');
                 }
                 return['success'=>true,'message'=>"{$qty} {$exam} PIN(s) purchased",'pins'=>$res['pins']??[],'ref'=>$debit['ref']];
             }
 
+            if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
+
+            if ($has_pending) {
+                update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''));
+                save_tx_response($debit['ref'], $provider_resp);
+                notify_user($uid,'Exam PIN Processing',"Your {$exam} PIN purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
+                return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
+            }
+
             // Note: the exam-PIN provider exposes no status-verification
-            // endpoint, so a network timeout here ($res===null) cannot be
-            // distinguished from a confirmed decline the way other services
-            // in this codebase now do — refunding remains the pragmatic
-            // choice for this low-value, non-verifiable item type rather
-            // than leaving the transaction stuck in 'processing' forever
-            // with no mechanism to ever resolve it. refund_failed_transaction()
+            // endpoint, so a network timeout here cannot be distinguished
+            // from a confirmed decline the way other services in this
+            // codebase now do — refunding remains the pragmatic choice for
+            // this low-value, non-verifiable item type rather than leaving
+            // the transaction stuck in 'processing' forever with no
+            // mechanism to ever resolve it. refund_failed_transaction()
             // atomically claims the transaction first, so this is still safe
             // against being triggered more than once for the same ref.
-            refund_failed_transaction($debit['ref'],$uid,$amount,'Purchase failed');
+            refund_failed_transaction($debit['ref'],$uid,$amount,$provider_resp ?: 'Purchase failed');
             save_tx_response($debit['ref'], $provider_resp ?: 'Purchase failed');
             return['success'=>false,'message'=>'Purchase failed. Wallet reversed.'];
 

@@ -51,6 +51,14 @@ class CableTVService {
             if ($res && (isset($res['Customer_Name']) || isset($res['msg']))) return ['success'=>true,'name'=>$res['Customer_Name'] ?? $res['msg'] ?? ''];
             return ['success'=>false,'message'=>$res['message']??$res['error']??'Invalid smartcard number'];
         }
+        if (stripos($prov['provider_name'] ?? '', 'gladtidings') !== false) {
+            // Unconfirmed — mirrors MsjDataSubs' convention as the best
+            // guess; correct once tested live against the real response.
+            $url=rtrim($prov['api_base_url'],'/')."/api/cable/verify/";
+            $res=$this->api_post($prov,$url,['provider'=>$cid, 'iucnumber'=>$sc]);
+            if ($res && (isset($res['Customer_Name']) || isset($res['msg']))) return ['success'=>true,'name'=>$res['Customer_Name'] ?? $res['msg'] ?? ''];
+            return ['success'=>false,'message'=>$res['message']??$res['error']??'Invalid smartcard number'];
+        }
         if (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {
             $url=rtrim($prov['api_base_url'],'/')."/api/cable/cable-validation?iuc={$sc}&cable={$cid}";
             $res=$this->api_get($prov,$url);
@@ -105,6 +113,11 @@ class CableTVService {
                 if ($cname === 'SHOWMAX') $api_payload['phoneNo'] = (string)($input['phone'] ?? '08000000000');
 
             } elseif (stripos($prov['provider_name'] ?? '', 'msjdatasubs') !== false) {
+                $url=rtrim($prov['api_base_url'],'/').'/api/cabletv/';
+                $api_payload = ['provider' => (string)$plan['cable_id'], 'plan' => (string)$plan['plan_id'], 'iucnumber' => $sc, 'subtype' => 'renew', 'phone' => $input['phone'] ?? '08000000000', 'ref' => $debit['ref']];
+            } elseif (stripos($prov['provider_name'] ?? '', 'gladtidings') !== false) {
+                // Unconfirmed — mirrors MsjDataSubs' convention as the best
+                // guess; correct once tested live against the real response.
                 $url=rtrim($prov['api_base_url'],'/').'/api/cabletv/';
                 $api_payload = ['provider' => (string)$plan['cable_id'], 'plan' => (string)$plan['plan_id'], 'iucnumber' => $sc, 'subtype' => 'renew', 'phone' => $input['phone'] ?? '08000000000', 'ref' => $debit['ref']];
             } elseif (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {

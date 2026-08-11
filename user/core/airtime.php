@@ -12,6 +12,13 @@ class AirtimeService {
             $url = rtrim($prov['api_base_url'], '/') . '/api/airtime/';
         } elseif (strpos($pname, 'telecomabode') !== false) {
             $url = rtrim($prov['api_base_url'], '/') . '/api/topup/';
+        } elseif (strpos($pname, 'gladtidings') !== false) {
+            // Unconfirmed — only Gladtidings' exam_pin endpoint (/api/epin/)
+            // has actually been tested. Mirrors msjdatasubs' URL/field
+            // convention as the best-guess default; check the real API
+            // response (now surfaced on the receipt) after a live test and
+            // correct this if it 404s or the field names don't match.
+            $url = rtrim($prov['api_base_url'], '/') . '/api/airtime/';
         } else {
             $url = $prov['api_base_url'];
         }
@@ -93,7 +100,7 @@ class AirtimeService {
                 if (!empty($prov['api_pin'])) $api_payload['pin'] = (string)$prov['api_pin'];
             } else {
                 $api_payload = ['network' => $net_map[$network]??$network, 'amount' => $amount, 'mobile_number' => $phone, 'Ported_number' => true, 'airtime_type' => 'VTU', 'ref' => $debit['ref']];
-                if (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false) {
+                if (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false || strpos($pname, 'gladtidings') !== false) {
                     $api_payload['phone'] = $phone; unset($api_payload['mobile_number']); $api_payload['ported_number'] = true; unset($api_payload['Ported_number']);
                 }
                 if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; $api_payload['account_pin'] = $prov['api_pin']; }

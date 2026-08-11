@@ -48,6 +48,15 @@ class ElectricityService {
             if($res&&in_array($res['_http_code']??0,[200,201]))return['success'=>true,'name'=>$res['name']??$res['customer_name']??$res['Customer_Name']??$res['msg']??'Valid Meter','address'=>$res['address']??$res['customer_address']??$res['Customer_Address']??''];
             return['success'=>false,'message'=>$res['message']??$res['error']??'Invalid meter number'];
         }
+        if (stripos($pname, 'gladtidings') !== false) {
+            // Unconfirmed — mirrors MsjDataSubs' convention as the best
+            // guess; correct once tested live against the real response.
+            $pid=!empty($prov['product_code'])?$prov['product_code']:(!empty($d['product_code'])?$d['product_code']:$disco_id);
+            $url=rtrim($prov['api_base_url'],'/').'/api/electricity/verify/';
+            $res=$this->api_post($prov,$url,['provider'=>$pid,'meternumber'=>$meter,'metertype'=>$mtype]);
+            if($res&&in_array($res['_http_code']??0,[200,201]))return['success'=>true,'name'=>$res['name']??$res['customer_name']??$res['Customer_Name']??$res['msg']??'Valid Meter','address'=>$res['address']??$res['customer_address']??$res['Customer_Address']??''];
+            return['success'=>false,'message'=>$res['message']??$res['error']??'Invalid meter number'];
+        }
         if (stripos($pname, 'telecomabode') !== false) {
             // Same product_code-mapping precedence as process()'s catch-all branch,
             // so validation checks the identical disco identity the purchase will use.
@@ -94,6 +103,13 @@ class ElectricityService {
                 $api_payload = ['meter_number'=>$meter,'product_id'=>$pid,'type'=>$mtype,'amount'=>$amount,'request_ref'=>$debit['ref']];
                 if (!empty($prov['api_pin'])) $api_payload['pin'] = $prov['api_pin'];
             } elseif (stripos($pname, 'msjdatasubs') !== false) {
+                $pid=!empty($prov['product_code'])?$prov['product_code']:(!empty($d['product_code'])?$d['product_code']:$did);
+                $url=rtrim($prov['api_base_url'],'/').'/api/electricity/';
+                $api_payload = ['provider'=>$pid,'meternumber'=>$meter,'metertype'=>$mtype,'amount'=>$amount,'phone'=>$phone?:$user['phone'],'ref'=>$debit['ref']];
+                if (!empty($prov['api_pin'])) $api_payload['pin'] = $prov['api_pin'];
+            } elseif (stripos($pname, 'gladtidings') !== false) {
+                // Unconfirmed — mirrors MsjDataSubs' convention as the best
+                // guess; correct once tested live against the real response.
                 $pid=!empty($prov['product_code'])?$prov['product_code']:(!empty($d['product_code'])?$d['product_code']:$did);
                 $url=rtrim($prov['api_base_url'],'/').'/api/electricity/';
                 $api_payload = ['provider'=>$pid,'meternumber'=>$meter,'metertype'=>$mtype,'amount'=>$amount,'phone'=>$phone?:$user['phone'],'ref'=>$debit['ref']];

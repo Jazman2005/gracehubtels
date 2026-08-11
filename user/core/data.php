@@ -116,7 +116,9 @@ class DataService {
                     'reference' => (string)$debit['ref']
                 ];
 
-            } elseif (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false) {
+            } elseif (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false || strpos($pname, 'gladtidings') !== false) {
+                // Gladtidings' field convention here is unconfirmed — mirrors
+                // MsjDataSubs' as the best guess; correct once tested live.
                 $api_payload['phone'] = $phone; $api_payload['data_plan'] = $plan_code; unset($api_payload['mobile_number']); unset($api_payload['plan']); $api_payload['ported_number'] = true; unset($api_payload['Ported_number']);
             }
             if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; if (strpos($pname, 'autosyncng') === false && strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }

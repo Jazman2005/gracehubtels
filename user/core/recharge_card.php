@@ -45,6 +45,10 @@ class RechargeCardService {
                 $payload = ['product_id'=>(string)($net_map[$net_id]??$net_id), 'variation_code'=>(string)$did, 'quantity'=>(string)$qty, 'request_ref'=>$debit['ref']];
             } elseif (stripos($prov['provider_name'] ?? '', 'msjdatasubs') !== false) {
                 $payload = ['network'=>(string)$net_id, 'quantity'=>(string)$qty, 'plan'=>(string)$did, 'businessname'=>$name, 'ref'=>$debit['ref']];
+            } elseif (stripos($prov['provider_name'] ?? '', 'gladtidings') !== false) {
+                // Unconfirmed — mirrors MsjDataSubs' convention (default URL
+                // above) as the best guess; correct once tested live.
+                $payload = ['network'=>(string)$net_id, 'quantity'=>(string)$qty, 'plan'=>(string)$did, 'businessname'=>$name, 'ref'=>$debit['ref']];
             } elseif (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {
                 $url=rtrim($prov['api_base_url'],'/').'/api/recharge_card/';
                 $payload = ['network'=>(string)$net_id, 'quantity'=>(string)$qty, 'plan_type'=>(string)$did, 'card_name'=>$name, 'ref'=>$debit['ref']];
