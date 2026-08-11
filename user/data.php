@@ -173,8 +173,9 @@ include __DIR__ . '/includes/sidebar.php';
                 <div class="plan-card cursor-pointer border-2 border-slate-100 bg-slate-50 hover:border-brand-orange/50 hover:bg-white rounded-xl p-2 sm:p-2.5 relative overflow-hidden transition-all text-center flex flex-col justify-center min-h-[90px] sm:min-h-[100px]" 
                      data-id="<?=$p['id']?>" 
                      data-price="<?=$p['selling_price']?>" 
-                     data-size="<?=$sel_net?> <?=htmlspecialchars($p['data_size'])?>" 
+                     data-size="<?=$sel_net?> <?=htmlspecialchars($p['data_size'])?>"
                      data-validity="<?=htmlspecialchars($p['validity'] ?? '')?>"
+                     data-plan-name="<?=htmlspecialchars(trim(($p['display_name'] ?: $p['plan_name']) ?: (($p['data_type'] ?? 'BUNDLE') . ' ' . $p['data_size'])))?>"
                      onclick="selectPlanCard(this)">
                     <?php $clean_name = trim(str_ireplace([$sel_net, 'data'], '', $p['display_name'] ?? $p['plan_name'] ?? '')); ?>
                     <div class="text-[9px] sm:text-[10px] font-extrabold plan-size-text uppercase tracking-wider mb-0.5" style="font-weight:900;color:#000;"><?=htmlspecialchars($clean_name ?: ($p['data_type'] ?? 'BUNDLE'))?></div>
@@ -385,22 +386,22 @@ function openConfirm() {
     if(!phone || phone.length < 10) return showAlert('Please enter a valid phone number', 'Error', 'exclamation-triangle', 'text-amber-500');
     
     let pCard = document.querySelector('.plan-card[data-id="'+planId+'"]');
-    let planSize = pCard.dataset.size;
+    let planName = pCard.dataset.planName || pCard.dataset.size;
     let amt = parseInt(pCard.dataset.price);
     let net = "<?=$sel_net?>";
-    
+
     if(typeof confirmTransaction === 'function') {
         confirmTransaction({
             "Transaction": "Data Purchase",
             "Network": net,
-            "Plan": planSize,
+            "Plan": planName,
             "Phone": phone,
             "Amount": "₦" + amt.toLocaleString()
         }, function(pin) {
             processTx(pin);
         });
     } else {
-        const pin = prompt(`Confirm Data Purchase:\nNetwork: ${net}\nPlan: ${planSize}\nPhone: ${phone}\nAmount: ₦${amt.toLocaleString()}\n\nEnter your 4-digit PIN:`);
+        const pin = prompt(`Confirm Data Purchase:\nNetwork: ${net}\nPlan: ${planName}\nPhone: ${phone}\nAmount: ₦${amt.toLocaleString()}\n\nEnter your 4-digit PIN:`);
         if(pin && pin.length >= 4) processTx(pin);
     }
 }
