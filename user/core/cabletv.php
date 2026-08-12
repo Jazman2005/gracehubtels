@@ -52,12 +52,13 @@ class CableTVService {
             return ['success'=>false,'message'=>$res['message']??$res['error']??'Invalid smartcard number'];
         }
         if (stripos($prov['provider_name'] ?? '', 'gladtidings') !== false) {
-            // Unconfirmed — mirrors MsjDataSubs' convention as the best
-            // guess; correct once tested live against the real response.
-            $url=rtrim($prov['api_base_url'],'/')."/api/cable/verify/";
-            $res=$this->api_post($prov,$url,['provider'=>$cid, 'iucnumber'=>$sc]);
-            if ($res && (isset($res['Customer_Name']) || isset($res['msg']))) return ['success'=>true,'name'=>$res['Customer_Name'] ?? $res['msg'] ?? ''];
-            return ['success'=>false,'message'=>$res['message']??$res['error']??'Invalid smartcard number'];
+            // Confirmed via Gladtidings' own Postman docs
+            // (ValidateSmartCardNumber) — a GET with a /v2/ path, unlike the
+            // unversioned /api/validateiuc/ the generic fallback below uses.
+            $url=rtrim($prov['api_base_url'],'/')."/api/v2/validateiuc/?cable_id={$cid}&smart_card_number={$sc}";
+            $res=$this->api_get($prov,$url);
+            if($res&&!($res['invalid']??true)&&empty($res['message'])&&empty($res['error']))return['success'=>true,'name'=>$res['name']];
+            return['success'=>false,'message'=>$res['message']??$res['error']??'Invalid smartcard number'];
         }
         if (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {
             $url=rtrim($prov['api_base_url'],'/')."/api/cable/cable-validation?iuc={$sc}&cable={$cid}";
@@ -92,6 +93,10 @@ class CableTVService {
             $last_prov = $prov;
             $cable_id_override = (int)provider_network_id($prov, 'cable_'.$plan['cable_id'], $plan['cable_id']);
             $url=rtrim($prov['api_base_url'],'/').'/api/cablesub/';
+            // Confirmed via Gladtidings' own Postman docs (SubscribeCableTv)
+            // that this base payload/URL shape (cablename/cableplan/
+            // smart_card_number, /api/cablesub/) is exactly what Gladtidings
+            // wants — it needs no override below, unlike msjdatasubs/telecomabode.
             $api_payload = ['cablename'=>$cable_id_override,'cableplan'=>(int)$plan['plan_id'],'smart_card_number'=>$sc];
             if (stripos($prov['provider_name'] ?? '', 'autosyncng') !== false) {
                 $pid=$plan['product_code']??'';if(!$pid){$pq=db()->prepare("SELECT product_code FROM cable_plans WHERE cable_id=? AND product_code IS NOT NULL LIMIT 1");$pq->execute([$plan['cable_id']]);$pid=$pq->fetchColumn()?:$plan['cable_id'];}
@@ -113,11 +118,6 @@ class CableTVService {
                 if ($cname === 'SHOWMAX') $api_payload['phoneNo'] = (string)($input['phone'] ?? '08000000000');
 
             } elseif (stripos($prov['provider_name'] ?? '', 'msjdatasubs') !== false) {
-                $url=rtrim($prov['api_base_url'],'/').'/api/cabletv/';
-                $api_payload = ['provider' => (string)$plan['cable_id'], 'plan' => (string)$plan['plan_id'], 'iucnumber' => $sc, 'subtype' => 'renew', 'phone' => $input['phone'] ?? '08000000000', 'ref' => $debit['ref']];
-            } elseif (stripos($prov['provider_name'] ?? '', 'gladtidings') !== false) {
-                // Unconfirmed — mirrors MsjDataSubs' convention as the best
-                // guess; correct once tested live against the real response.
                 $url=rtrim($prov['api_base_url'],'/').'/api/cabletv/';
                 $api_payload = ['provider' => (string)$plan['cable_id'], 'plan' => (string)$plan['plan_id'], 'iucnumber' => $sc, 'subtype' => 'renew', 'phone' => $input['phone'] ?? '08000000000', 'ref' => $debit['ref']];
             } elseif (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {

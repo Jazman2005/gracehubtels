@@ -38,16 +38,15 @@ class RechargeCardService {
             $last_prov = $prov;
             $net_map = build_network_map($prov, 'recharge_card');
             $did = (int)provider_value($prov, 'denom_'.$denom, [100=>1,200=>2,500=>3,1000=>4][$denom]??1);
+            // Confirmed via Gladtidings' own Postman docs (PrintCard) that this
+            // base payload/URL shape is exactly what Gladtidings wants — it
+            // needs no override below, unlike msjdatasubs/telecomabode.
             $url=rtrim($prov['api_base_url'], '/').'/api/rechargepin/';
             $payload = ['network'=>$net_id,'network_amount'=>$did,'quantity'=>$qty,'name_on_card'=>$name];
             if (stripos($prov['provider_name'] ?? '', 'autosyncng') !== false) {
                 $url=rtrim($prov['api_base_url'],'/').'/api/v1/data-pin';
                 $payload = ['product_id'=>(string)($net_map[$net_id]??$net_id), 'variation_code'=>(string)$did, 'quantity'=>(string)$qty, 'request_ref'=>$debit['ref']];
             } elseif (stripos($prov['provider_name'] ?? '', 'msjdatasubs') !== false) {
-                $payload = ['network'=>(string)$net_id, 'quantity'=>(string)$qty, 'plan'=>(string)$did, 'businessname'=>$name, 'ref'=>$debit['ref']];
-            } elseif (stripos($prov['provider_name'] ?? '', 'gladtidings') !== false) {
-                // Unconfirmed — mirrors MsjDataSubs' convention (default URL
-                // above) as the best guess; correct once tested live.
                 $payload = ['network'=>(string)$net_id, 'quantity'=>(string)$qty, 'plan'=>(string)$did, 'businessname'=>$name, 'ref'=>$debit['ref']];
             } elseif (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {
                 $url=rtrim($prov['api_base_url'],'/').'/api/recharge_card/';

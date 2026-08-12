@@ -130,15 +130,16 @@ class DataService {
                     'reference' => (string)$debit['ref']
                 ];
 
-            } elseif (strpos($pname, 'gladtidings') !== false) {
-                // Confirmed via a live 400 response: Gladtidings validates
-                // network/ref/phone/data_plan the same as MsjDataSubs, but
-                // wants the ported-number flag under the capitalized key
-                // Ported_number — the msjdatasubs/telecomabode branch below
-                // renames it to lowercase ported_number, which Gladtidings'
-                // serializer rejects as a missing required field.
-                $api_payload['phone'] = $phone; $api_payload['data_plan'] = $plan_code; unset($api_payload['mobile_number']); unset($api_payload['plan']);
             } elseif (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false) {
+                // Confirmed via Gladtidings' own Postman docs that Gladtidings
+                // does NOT belong in this branch: its real BuyData endpoint
+                // wants {network, mobile_number, plan, Ported_number} — i.e.
+                // exactly the base $api_payload above, untouched. It was
+                // temporarily routed through here on a guess (mirroring
+                // MsjDataSubs), which silently renamed the two fields
+                // Gladtidings actually requires (mobile_number->phone,
+                // plan->data_plan) and caused the empty-body 500s seen live.
+                // Gladtidings now falls through with no override at all.
                 $api_payload['phone'] = $phone; $api_payload['data_plan'] = $plan_code; unset($api_payload['mobile_number']); unset($api_payload['plan']); $api_payload['ported_number'] = true; unset($api_payload['Ported_number']);
             }
             if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; if (strpos($pname, 'autosyncng') === false && strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }

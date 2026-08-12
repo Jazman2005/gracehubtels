@@ -49,12 +49,13 @@ class ElectricityService {
             return['success'=>false,'message'=>$res['message']??$res['error']??'Invalid meter number'];
         }
         if (stripos($pname, 'gladtidings') !== false) {
-            // Unconfirmed — mirrors MsjDataSubs' convention as the best
-            // guess; correct once tested live against the real response.
-            $pid=!empty($prov['product_code'])?$prov['product_code']:(!empty($d['product_code'])?$d['product_code']:$disco_id);
-            $url=rtrim($prov['api_base_url'],'/').'/api/electricity/verify/';
-            $res=$this->api_post($prov,$url,['provider'=>$pid,'meternumber'=>$meter,'metertype'=>$mtype]);
-            if($res&&in_array($res['_http_code']??0,[200,201]))return['success'=>true,'name'=>$res['name']??$res['customer_name']??$res['Customer_Name']??$res['msg']??'Valid Meter','address'=>$res['address']??$res['customer_address']??$res['Customer_Address']??''];
+            // Confirmed via Gladtidings' own Postman docs
+            // (ValidateMeterNumber) — a GET with a /v2/ path, unlike the
+            // unversioned /api/validatemeter/ the generic fallback below uses.
+            $disco_id_override=!empty($prov['product_code'])?$prov['product_code']:(!empty($d['product_code'])?$d['product_code']:$disco_id);
+            $url=rtrim($prov['api_base_url'],'/')."/api/v2/validatemeter/?disco_id={$disco_id_override}&meter_type={$mtype}&meter_number={$meter}";
+            $res=$this->api_get($prov,$url);
+            if($res&&!($res['invalid']??true)&&empty($res['message'])&&empty($res['error']))return['success'=>true,'name'=>$res['name']??'Valid Meter','address'=>$res['address']??''];
             return['success'=>false,'message'=>$res['message']??$res['error']??'Invalid meter number'];
         }
         if (stripos($pname, 'telecomabode') !== false) {
@@ -108,12 +109,14 @@ class ElectricityService {
                 $api_payload = ['provider'=>$pid,'meternumber'=>$meter,'metertype'=>$mtype,'amount'=>$amount,'phone'=>$phone?:$user['phone'],'ref'=>$debit['ref']];
                 if (!empty($prov['api_pin'])) $api_payload['pin'] = $prov['api_pin'];
             } elseif (stripos($pname, 'gladtidings') !== false) {
-                // Unconfirmed — mirrors MsjDataSubs' convention as the best
-                // guess; correct once tested live against the real response.
-                $pid=!empty($prov['product_code'])?$prov['product_code']:(!empty($d['product_code'])?$d['product_code']:$did);
-                $url=rtrim($prov['api_base_url'],'/').'/api/electricity/';
-                $api_payload = ['provider'=>$pid,'meternumber'=>$meter,'metertype'=>$mtype,'amount'=>$amount,'phone'=>$phone?:$user['phone'],'ref'=>$debit['ref']];
-                if (!empty($prov['api_pin'])) $api_payload['pin'] = $prov['api_pin'];
+                // Confirmed via Gladtidings' own Postman docs (RechargeMeter):
+                // same URL as the generic fallback below, but the disco field
+                // is named disco_name (not disco_id) and the meter-type field
+                // is capitalized MeterType (not meter_type) — both silently
+                // ignored/rejected by their server under the generic names.
+                $url=rtrim($prov['api_base_url'],'/').'/api/billpayment/';
+                $disco_id_override = !empty($prov['product_code']) ? $prov['product_code'] : (int)provider_network_id($prov, 'disco_'.$did, $did);
+                $api_payload = ['disco_name'=>$disco_id_override,'amount'=>$amount,'meter_number'=>$meter,'MeterType'=>ucfirst($mtype),'Customer_Phone'=>$phone?:$user['phone'],'customer_name'=>$user['full_name'],'customer_address'=>''];
             } else {
                 $url=rtrim($prov['api_base_url'],'/').'/api/billpayment/';
                 $disco_id_override = !empty($prov['product_code']) ? $prov['product_code'] : (int)provider_network_id($prov, 'disco_'.$did, $did);

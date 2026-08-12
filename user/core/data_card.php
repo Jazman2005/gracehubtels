@@ -5,6 +5,9 @@ class DataCardService {
         $pname = strtolower($prov['provider_name'] ?? '');
         if (strpos($pname, 'autosyncng') !== false) {
             $url=rtrim($prov['api_base_url'],'/').'/api/v1/data/pin';
+        } elseif (strpos($pname, 'gladtidings') !== false) {
+            // Confirmed via Gladtidings' own Postman docs (GenerateDataCard).
+            $url=rtrim($prov['api_base_url'],'/').'/api/data-card/';
         } else {
             $url=rtrim($prov['api_base_url'],'/').'/api/rechargepin/';
         }
@@ -36,6 +39,12 @@ class DataCardService {
             if (strpos($pname, 'autosyncng') !== false) {
                 $payload = ['product_id' => $nid, 'variation_code' => (string)$plan['plan_id'], 'quantity' => $qty, 'request_ref' => $debit['ref'], 'type' => 'data', 'days' => '30'];
                 if (!empty($prov['api_pin'])) $payload['pin'] = $prov['api_pin'];
+            } elseif (strpos($pname, 'gladtidings') !== false) {
+                // Confirmed via Gladtidings' own Postman docs
+                // (GenerateDataCard) — plan/quantity/name_on_card only, no
+                // network field at all.
+                $plan_code = !empty($prov['product_code']) ? $prov['product_code'] : $plan['plan_id'];
+                $payload = ['plan' => $plan_code, 'quantity' => $qty, 'name_on_card' => "DataCard_{$plan['data_size']}_{$plan['network']}"];
             } else {
                 $payload = ['network'=>$nid,'network_amount'=>1,'quantity'=>$qty,'name_on_card'=>"DataCard_{$plan['data_size']}_{$plan['network']}"];
             }

@@ -136,6 +136,11 @@ class BulkSMSService {
                 if (!empty($prov['api_pin'])) $api_payload['pin'] = trim($prov['api_pin']);
             } elseif (strpos($pname, 'sagecloud') !== false) {
                 $api_payload = ['reference' => $debit['ref'], 'recipients' => implode(', ', $valid_recipients), 'message' => $message, 'sender_ids' => $sender];
+            } elseif (strpos($pname, 'gladtidings') !== false) {
+                // Confirmed via Gladtidings' own Postman docs (SendSMS) —
+                // "recetipient" is their literal (misspelled) field name, not
+                // a typo on our side.
+                $api_payload = ['recetipient' => implode(',', $valid_recipients), 'message' => $message, 'sender' => $sender, 'DND' => true];
             } else {
                 $api_payload = ['sender' => $sender, 'sender_id' => $sender, 'message' => $message, 'recipients' => implode(',', $valid_recipients), 'numbers' => implode(',', $valid_recipients), 'phones' => implode(',', $valid_recipients), 'ref' => $debit['ref']];
                 if (!empty($prov['api_pin'])) { $api_payload['pin'] = trim($prov['api_pin']); if (strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = trim($prov['api_pin']); }
@@ -154,7 +159,10 @@ class BulkSMSService {
             if (strpos($pname, 'sagecloud') !== false) {
                 $url = rtrim($prov['api_base_url'], '/') . '/v2/sms/bulk-sms/';
             }
-            
+            if (strpos($pname, 'gladtidings') !== false) {
+                $url = rtrim($prov['api_base_url'], '/') . '/api/sendsms/';
+            }
+
             if (!empty($prov['api_base_url'])) {
                 $prov['api_base_url'] = $url;
                 $res = $this->api_call($prov, $api_payload);

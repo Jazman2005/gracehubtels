@@ -13,12 +13,8 @@ class AirtimeService {
         } elseif (strpos($pname, 'telecomabode') !== false) {
             $url = rtrim($prov['api_base_url'], '/') . '/api/topup/';
         } elseif (strpos($pname, 'gladtidings') !== false) {
-            // Unconfirmed — only Gladtidings' exam_pin endpoint (/api/epin/)
-            // has actually been tested. Mirrors msjdatasubs' URL/field
-            // convention as the best-guess default; check the real API
-            // response (now surfaced on the receipt) after a live test and
-            // correct this if it 404s or the field names don't match.
-            $url = rtrim($prov['api_base_url'], '/') . '/api/airtime/';
+            // Confirmed via Gladtidings' own Postman docs (BuyAirtime).
+            $url = rtrim($prov['api_base_url'], '/') . '/api/topup/';
         } else {
             $url = $prov['api_base_url'];
         }
@@ -100,7 +96,13 @@ class AirtimeService {
                 if (!empty($prov['api_pin'])) $api_payload['pin'] = (string)$prov['api_pin'];
             } else {
                 $api_payload = ['network' => $net_map[$network]??$network, 'amount' => $amount, 'mobile_number' => $phone, 'Ported_number' => true, 'airtime_type' => 'VTU', 'ref' => $debit['ref']];
-                if (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false || strpos($pname, 'gladtidings') !== false) {
+                // Confirmed via Gladtidings' own Postman docs that its real
+                // BuyAirtime endpoint wants exactly this base shape
+                // (network/amount/mobile_number/Ported_number/airtime_type)
+                // — it does NOT belong in the msjdatasubs/telecomabode
+                // rename below, which was a guess that turned out wrong for
+                // the sibling data endpoint too.
+                if (strpos($pname, 'msjdatasubs') !== false || strpos($pname, 'telecomabode') !== false) {
                     $api_payload['phone'] = $phone; unset($api_payload['mobile_number']); $api_payload['ported_number'] = true; unset($api_payload['Ported_number']);
                 }
                 if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; $api_payload['account_pin'] = $prov['api_pin']; }
