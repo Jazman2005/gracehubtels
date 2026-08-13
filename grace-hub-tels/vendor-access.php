@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endforeach; ?>
 
         <div class="group-title">Admin Tools</div>
-        <p class="group-sub">Extra back-office pages for THIS install's own staff — never locks anything operationally essential (withdrawals, KYC, settings, staff/security, API setup always stay available).</p>
+        <p class="group-sub">Extra back-office pages for THIS install's own staff — never locks anything operationally essential (withdrawals, settings, staff/security, API setup always stay available).</p>
         <?php foreach (ADMIN_FEATURE_REGISTRY as $fkey => $flabel): $on = feature_enabled($fkey); ?>
         <div class="row">
             <div>

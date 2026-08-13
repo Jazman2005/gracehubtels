@@ -72,7 +72,7 @@ $log_channels = [
     'api_rechargecardapi', 'api_examapi', 'api_apicashwyre',
     'api_onesignalapi', 'api_gladtidings',
     'security', 'transactions', 'auth', 'wallet', 'notifications',
-    'cashback', 'kyc', 'email', 'palmpay_api', 'webhook_palmpay', 'contact'
+    'cashback', 'email', 'palmpay_api', 'webhook_palmpay', 'contact'
 ];
 
 foreach ($log_channels as $channel) {
@@ -191,7 +191,7 @@ const FEATURE_REGISTRY = [
 // them visibly apart from services, and so it's obvious at a glance which
 // keys are safe to lock without risking a client being unable to run their
 // business — deliberately excludes anything operationally essential
-// (Withdrawals, KYC, Settings, Staff Management, Security, API Registry).
+// (Withdrawals, Settings, Staff Management, Security, API Registry).
 const ADMIN_FEATURE_REGISTRY = [
     'admin_accounting' => 'Accounting (Liability Overview)',
     'admin_cashback' => 'Cashback Management',

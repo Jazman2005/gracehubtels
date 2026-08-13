@@ -23,7 +23,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if($action === 'send_bulk') {
         $subject=sanitize($_POST['subject']??'',255);$message=sanitize($_POST['message']??'',2000);$target=$_POST['target']??'all';
         if(!$subject||!$message)json_response(['success'=>false,'message'=>'Subject and message required']);
-        $targets=['all','active','inactive','kyc_verified','no_kyc'];
+        $targets=['all','active','inactive'];
         $where=in_array($target,$targets,true)?match($target){'active'=>'is_active=1','inactive'=>'is_active=0',default=>'1=1'}:'1=1';
         $users=db()->query("SELECT id,email,full_name FROM users WHERE $where AND email IS NOT NULL LIMIT 200")->fetchAll();
         $sent=0;$fail=0;
@@ -60,7 +60,7 @@ $smtp_encryption = setting('smtp_encryption', 'tls');
   <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
     <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:14px;font-size:13px;color:#1E40AF;display:flex;align-items:flex-start;gap:10px;">
       <i class="fas fa-info-circle" style="margin-top:2px;"></i>
-      <div>Email notifications are sent for: <strong>user login</strong>, <strong>new signups</strong>, <strong>transactions</strong> (debit/credit), <strong>cashback</strong>, and <strong>KYC updates</strong>. Configure SMTP below to enable delivery.</div>
+      <div>Email notifications are sent for: <strong>user login</strong>, <strong>new signups</strong>, <strong>transactions</strong> (debit/credit), and <strong>cashback</strong>. Configure SMTP below to enable delivery.</div>
     </div>
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div class="form-group"><label>SMTP Host <span style="color:var(--danger);">*</span></label><input type="text" class="form-control" id="smtp_host" value="<?=k('smtp_host')?>" placeholder="e.g. smtp.gmail.com"></div>
@@ -124,7 +124,7 @@ $smtp_encryption = setting('smtp_encryption', 'tls');
   <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
     <div class="form-group"><label>Subject</label><input type="text" class="form-control" id="subject"></div>
     <div class="form-group"><label>Message</label><textarea class="form-control" id="message" rows="5"></textarea></div>
-    <div class="form-group"><label>Target Audience</label><select class="form-control" id="target"><option value="all">All Users</option><option value="active">Active Users</option><option value="inactive">Inactive Users</option><option value="kyc_verified">KYC Verified</option><option value="no_kyc">No KYC</option></select></div>
+    <div class="form-group"><label>Target Audience</label><select class="form-control" id="target"><option value="all">All Users</option><option value="active">Active Users</option><option value="inactive">Inactive Users</option></select></div>
     <button class="btn-primary" onclick="sendCampaign()"><i class="fas fa-paper-plane" style="margin-right:6px;"></i> Send Campaign</button>
   </div>
 </div>

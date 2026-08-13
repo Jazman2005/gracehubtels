@@ -14,7 +14,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $owns->execute([$ref, (int)$user['id']]);
         if (!$owns->fetch()) { http_response_code(404); echo json_encode(['success'=>false,'message'=>'Order not found']); exit; }
         if (!rate_limit('api_esim_refresh_'.$user['id'], 4, 60)) { http_response_code(429); echo json_encode(['success'=>false,'message'=>'Too many requests.']); exit; }
-        echo json_encode(resolve_esim_order($ref));
+        $result = resolve_esim_order($ref);
+        $order = db()->prepare("SELECT status, iccid, activation_code, qr_image, smdp FROM esim_orders WHERE transaction_ref=?");
+        $order->execute([$ref]);
+        if ($row = $order->fetch()) {
+            $result['status'] = $row['status'];
+            $result['iccid'] = $row['iccid'];
+            $result['activation_code'] = $row['activation_code'];
+            $result['qr_image'] = $row['qr_image'];
+            $result['smdp'] = $row['smdp'];
+        }
+        echo json_encode($result);
         exit;
     }
     $region = strtoupper(trim($_GET['region'] ?? ''));
@@ -48,7 +58,24 @@ if (empty($input['region']) || empty($input['api_registry_id']) || empty($input[
 $res = process_esim_purchase((int)$user['id'], $input);
 
 if ($res['success']) {
-    echo json_encode(['status' => 'success', 'success' => true, 'message' => $res['message'], 'pending' => $res['pending'] ?? false]);
+    $u_bal = db()->prepare("SELECT wallet_balance FROM users WHERE id=?");
+    $u_bal->execute([$user['id']]);
+    $updated = $u_bal->fetch();
+    $esim_data = ['iccid' => null, 'activation_code' => null, 'qr_image' => null, 'smdp' => null];
+    if (!empty($res['ref'])) {
+        $eo = db()->prepare("SELECT iccid, activation_code, qr_image, smdp FROM esim_orders WHERE transaction_ref=?");
+        $eo->execute([$res['ref']]);
+        if ($row = $eo->fetch()) { $esim_data = $row; }
+    }
+    echo json_encode([
+        'status' => 'success', 'success' => true, 'message' => $res['message'],
+        'pending' => $res['pending'] ?? false,
+        'data' => array_merge([
+            'reference' => $res['ref'] ?? null,
+            'balance_before' => (float)$user['wallet_balance'],
+            'balance_after' => (float)($updated['wallet_balance'] ?? 0),
+        ], $esim_data),
+    ]);
 } else {
     http_response_code(400);
     echo json_encode(['status' => 'error', 'success' => false, 'message' => $res['message']]);

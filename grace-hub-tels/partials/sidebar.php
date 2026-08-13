@@ -2,7 +2,6 @@
 $cur=basename($_SERVER['PHP_SELF']);
 $admin=get_admin();
 $pending_a2c=(int)db()->query("SELECT COUNT(*) FROM airtime_to_cash WHERE status='pending'")->fetchColumn();
-$kyc_pending=(int)db()->query("SELECT COUNT(*) FROM kyc_requests WHERE status='pending'")->fetchColumn();
 $pending_withdrawals=(int)db()->query("SELECT COUNT(*) FROM transactions WHERE category='bank_transfer' AND status='pending'")->fetchColumn();
 $pending_deposits=(int)db()->query("SELECT COUNT(*) FROM manual_funding_requests WHERE status='pending'")->fetchColumn();
 $_admin_perms=[];if(($_SESSION['admin_role']??'')!=='superadmin'){$_aps=db()->prepare("SELECT permissions FROM admin WHERE id=?");$_aps->execute([$_SESSION['admin_id']??0]);$_raw=$_aps->fetchColumn();if($_raw)$_admin_perms=json_decode($_raw,true)??[];}
@@ -188,13 +187,6 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
     <a href="<?= ADMIN_URL ?>/users-management.php" class="nav-item <?=$cur==='users-management.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-users"></i></span>
       <span class="nav-text">Customers</span>
-      <?php if($kyc_pending>0):?><span class="nav-badge"><?=$kyc_pending?></span><?php endif;?>
-    </a>
-    <?php endif;?>
-    <?php if(_has_perm('manage_users')):?>
-    <a href="<?= ADMIN_URL ?>/kyc-management.php" class="nav-item <?=$cur==='kyc-management.php'?'active':''?>">
-      <span class="nav-icon"><i class="fas fa-id-card"></i></span>
-      <span class="nav-text">KYC Review</span>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_referrals')):?>

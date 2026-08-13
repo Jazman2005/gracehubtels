@@ -14,7 +14,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     // user/core/db.php's check_daily_limit()) — these fields used to save
     // under internal_transfer_charge(_enabled)/limit_daily_regular instead,
     // which meant editing them here had zero effect on real enforcement.
-    $allowed=['site_name','site_tagline','site_email','site_phone','site_address','site_domain','maintenance_mode','registration_enabled','min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee','vendor_upgrade_fee','kyc_tier1_limit_daily','kyc_tier1_limit_single','kyc_tier2_limit_daily','kyc_tier2_limit_single','kyc_tier3_limit_daily','kyc_tier3_limit_single','p2p_transfer_charge','p2p_transfer_charge_enabled', 'limit_daily_user', 'limit_daily_agent', 'limit_daily_vendor', 'limit_airtime_daily', 'limit_airtime_min', 'limit_airtime_max', 'limit_transfer_daily', 'green_api_id_instance', 'green_api_token_instance', 'green_api_recipient', 'wa_notif_withdrawals', 'wa_notif_manual_funding', 'wa_notif_a2c', 'wa_notif_admin_login', 'wa_notif_failed_tx', 'network_prefixes_mtn', 'network_prefixes_glo', 'network_prefixes_airtel', 'network_prefixes_9mobile'];
+    $allowed=['site_name','site_tagline','site_email','site_phone','site_address','site_domain','maintenance_mode','registration_enabled','min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee','vendor_upgrade_fee','p2p_transfer_charge','p2p_transfer_charge_enabled', 'limit_daily_user', 'limit_daily_agent', 'limit_daily_vendor', 'limit_airtime_daily', 'limit_airtime_min', 'limit_airtime_max', 'limit_transfer_daily', 'green_api_id_instance', 'green_api_token_instance', 'green_api_recipient', 'wa_notif_withdrawals', 'wa_notif_manual_funding', 'wa_notif_a2c', 'wa_notif_admin_login', 'wa_notif_failed_tx', 'network_prefixes_mtn', 'network_prefixes_glo', 'network_prefixes_airtel', 'network_prefixes_9mobile'];
     foreach($_POST as $key=>$val){if(in_array($key,$allowed))setting_set($key,trim((string)$val));}
     json_response(['success'=>true,'message'=>'Settings saved']);
 }
@@ -79,14 +79,6 @@ $csrf=admin_csrf();
 <button class="btn-primary" onclick="saveAirtimeLimits()"><i class="fas fa-save"></i> Save</button>
 </div></div>
 
-<div class="data-panel">
-<div class="panel-title-bar"><h3><i class="fas fa-shield" style="color:var(--danger)"></i> KYC Tier Limits</h3></div>
-<div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px">
-<div class="form-grid"><div class="form-group"><label>Tier 1 Single (&#8358;)</label><input type="number" class="form-control" id="kyc_tier1_limit_single" value="<?=k('kyc_tier1_limit_single')?>"></div><div class="form-group"><label>Tier 1 Daily (&#8358;)</label><input type="number" class="form-control" id="kyc_tier1_limit_daily" value="<?=k('kyc_tier1_limit_daily')?>"></div></div>
-<div class="form-grid"><div class="form-group"><label>Tier 2 Single (&#8358;)</label><input type="number" class="form-control" id="kyc_tier2_limit_single" value="<?=k('kyc_tier2_limit_single')?>"></div><div class="form-group"><label>Tier 2 Daily (&#8358;)</label><input type="number" class="form-control" id="kyc_tier2_limit_daily" value="<?=k('kyc_tier2_limit_daily')?>"></div></div>
-<div class="form-grid"><div class="form-group"><label>Tier 3 Single (&#8358;)</label><input type="number" class="form-control" id="kyc_tier3_limit_single" value="<?=k('kyc_tier3_limit_single')?>"></div><div class="form-group"><label>Tier 3 Daily (&#8358;)</label><input type="number" class="form-control" id="kyc_tier3_limit_daily" value="<?=k('kyc_tier3_limit_daily')?>"></div></div>
-<button class="btn-primary" onclick="saveKyc()"><i class="fas fa-save"></i> Save</button>
-</div></div>
 <div class="data-panel" id="network-prefixes">
 <div class="panel-title-bar"><h3><i class="fas fa-network-wired" style="color:var(--primary)"></i> Network Auto-Selector Prefixes</h3></div>
 <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;padding:20px 24px">
@@ -126,7 +118,6 @@ function saveGeneral(){postSave(['site_name','site_tagline','site_email','site_p
 function saveLimits(){postSave(['min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','limit_transfer_daily','transfer_charge','p2p_transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee'],['p2p_transfer_charge_enabled']);}
 function saveRoleLimits(){postSave(['limit_daily_user','limit_daily_agent','limit_daily_vendor']);}
 function saveAirtimeLimits(){postSave(['limit_airtime_daily','limit_airtime_min','limit_airtime_max']);}
-function saveKyc(){postSave(['kyc_tier1_limit_single','kyc_tier1_limit_daily','kyc_tier2_limit_single','kyc_tier2_limit_daily','kyc_tier3_limit_single','kyc_tier3_limit_daily']);}
 function saveWhatsApp(){postSave(['green_api_id_instance','green_api_token_instance','green_api_recipient'], ['wa_notif_withdrawals','wa_notif_manual_funding','wa_notif_a2c','wa_notif_admin_login','wa_notif_failed_tx']);}
 function saveNetworkPrefixes(){postSave(['network_prefixes_mtn','network_prefixes_glo','network_prefixes_airtel','network_prefixes_9mobile']);}
 function showToast(msg,ok){const t=document.getElementById('toast');t.textContent=msg;t.className='save-toast show '+(ok?'ok':'err');setTimeout(()=>t.classList.remove('show'),2500);}

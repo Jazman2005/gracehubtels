@@ -9,7 +9,7 @@ if(isset($_GET['export']) && $_GET['export']==='csv'){
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename=users_export_'.date('YmdHis').'.csv');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['ID', 'Full Name', 'Username', 'Email', 'Phone', 'Wallet Balance', 'Cashback', 'KYC Level', 'User Type', 'Status', 'Joined Date']);
+    fputcsv($out, ['ID', 'Full Name', 'Username', 'Email', 'Phone', 'Wallet Balance', 'Cashback', 'User Type', 'Status', 'Joined Date']);
     foreach($data['data'] as $u) {
         fputcsv($out, [
             $u['id'], $u['full_name'], $u['username'], $u['email'], $u['phone'],
@@ -207,11 +207,10 @@ $csrf=admin_csrf();$page=max(1,(int)($_GET['page']??1));$search=trim($_GET['q']?
 $data=get_users_list($page,20,$search,$filter);
 
 $stats = db()->query("
-    SELECT 
+    SELECT
         COUNT(*) as total,
         SUM(CASE WHEN is_suspended = 0 THEN 1 ELSE 0 END) as active,
-        SUM(CASE WHEN is_suspended = 1 THEN 1 ELSE 0 END) as suspended,
-        0 as verified
+        SUM(CASE WHEN is_suspended = 1 THEN 1 ELSE 0 END) as suspended
     FROM users
 ")->fetch(PDO::FETCH_ASSOC);
 
@@ -265,13 +264,6 @@ $stats = db()->query("
       <div class="kpi-value"><?=number_format((float)$stats['suspended'])?></div>
     </div>
   </div>
-  <div class="kpi-card">
-    <div class="kpi-icon blue"><i class="fas fa-id-card"></i></div>
-    <div class="kpi-info">
-      <div class="kpi-label">KYC Verified</div>
-      <div class="kpi-value"><?=number_format((float)$stats['verified'])?></div>
-    </div>
-  </div>
 </div>
 
 <div class="data-panel">
@@ -287,8 +279,6 @@ $stats = db()->query("
       <a href="?filter=" class="filter-tab <?=$filter===''?'active':''?>">All Customers</a>
       <a href="?filter=active" class="filter-tab <?=$filter==='active'?'active':''?>">Active</a>
       <a href="?filter=suspended" class="filter-tab <?=$filter==='suspended'?'active':''?>">Suspended</a>
-      <a href="?filter=kyc1" class="filter-tab <?=$filter==='kyc1'?'active':''?>">KYC Verified</a>
-      <a href="?filter=no_kyc" class="filter-tab <?=$filter==='no_kyc'?'active':''?>">No KYC</a>
     </div>
   </form>
   <div class="responsive-grid-wrapper">

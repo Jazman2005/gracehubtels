@@ -27,7 +27,6 @@ $page_titles=[
   'api-logs.php'=>'API Logs & Errors',
   'cashback.php'=>'Cashback',
   'webhook-logs.php'=>'Webhook Logs',
-  'kyc-management.php'=>'KYC Review',
   'a2c-management.php'=>'A2C Requests',
   'notifications.php'=>'Broadcast',
   'marketing.php'=>'Send Emails',

@@ -44,7 +44,13 @@ if ($step === 'request') {
         db()->prepare("UPDATE users SET reset_token=?, reset_token_expiry=? WHERE id=?")->execute([$reset_token, $expiry, $user['id']]);
 
         $name = $user['full_name'];
-        $reset_url = site_url('/api/v1/forgot-password.php?step=reset&token=' . $reset_token);
+        // Points at the website's own working reset form (user/forget-password.php),
+        // not back at this JSON API — this endpoint only accepts POST, so a
+        // clicked email link (a browser GET) would 405 if it pointed here.
+        // The app-originated request still reaches the real backend logic
+        // (same reset_token/reset_token_expiry columns), it just completes
+        // the actual password-entry step in the browser, not in-app.
+        $reset_url = site_url('/user/forget-password.php?step=reset&token=' . $reset_token);
         $html = "<div style='font-family:Arial;max-width:480px;margin:0 auto;padding:24px;background:#fff;border-radius:12px;border:1px solid #E2E8F0;'>
             <h2 style='color:#0A2A7A;margin-top:0;'>Password Reset</h2>
             <p style='color:#475569;font-size:14px;'>Hi <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>,</p>

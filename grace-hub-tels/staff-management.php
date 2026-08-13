@@ -154,7 +154,7 @@ $staff=db()->query("SELECT id,username,email,role,is_active,permissions,last_log
                     
                     <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; background:#F8FAFC; padding:16px; border-radius:8px; border:1px solid #E2E8F0;">
                         <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;"><input type="checkbox" name="perms[]" value="view_users"> View Users</label>
-                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;"><input type="checkbox" name="perms[]" value="manage_users"> Manage Users & KYC</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;"><input type="checkbox" name="perms[]" value="manage_users"> Manage Users</label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;"><input type="checkbox" name="perms[]" value="manage_withdrawals"> Withdrawals</label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;"><input type="checkbox" name="perms[]" value="manage_deposits"> Manual Deposits</label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;cursor:pointer;"><input type="checkbox" name="perms[]" value="view_transactions"> View Transactions</label>

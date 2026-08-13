@@ -42,6 +42,7 @@ if ($method === 'POST') {
         if ($res['success']) {
             echo json_encode([
                 'status' => 'success',
+                'success' => true,
                 'message' => $res['message'],
                 'data' => [
                     'reference' => $res['ref'],

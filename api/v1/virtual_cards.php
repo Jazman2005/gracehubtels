@@ -80,7 +80,13 @@ if ($method === 'GET') {
             'rate_markup_value' => (float)setting('virtual_card_rate_markup_value', '0'),
             'full_name' => $user['full_name'] ?? 'USER',
             'funding_fee_type' => setting('virtual_card_funding_fee_type', 'none'),
-            'funding_fee_value' => (float)setting('virtual_card_funding_fee_value', '0')
+            'funding_fee_value' => (float)setting('virtual_card_funding_fee_value', '0'),
+            // No persistent address/dob columns exist on this install today,
+            // so these are always empty — returned anyway so the app's "skip
+            // KYC modal if already on file" check has something real to read
+            // rather than silently comparing against undefined.
+            'address' => $user['address'] ?? $user['home_address'] ?? '',
+            'dob' => $user['dob'] ?? ''
         ]
     ]);
     exit;

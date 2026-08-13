@@ -39,7 +39,17 @@ if (empty($input['country']) || empty($input['api_registry_id']) || empty($input
 $res = process_international_airtime_purchase((int)$user['id'], $input);
 
 if ($res['success']) {
-    echo json_encode(['status' => 'success', 'success' => true, 'message' => $res['message']]);
+    $u_bal = db()->prepare("SELECT wallet_balance FROM users WHERE id=?");
+    $u_bal->execute([$user['id']]);
+    $updated = $u_bal->fetch();
+    echo json_encode([
+        'status' => 'success', 'success' => true, 'message' => $res['message'],
+        'data' => [
+            'reference' => $res['ref'] ?? null,
+            'balance_before' => (float)$user['wallet_balance'],
+            'balance_after' => (float)($updated['wallet_balance'] ?? 0),
+        ],
+    ]);
 } else {
     http_response_code(400);
     echo json_encode(['status' => 'error', 'success' => false, 'message' => $res['message']]);

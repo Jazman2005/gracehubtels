@@ -87,7 +87,7 @@
                     <h2>2. How We Use Your Data</h2>
                     <p>We process your personal information for legitimate business and regulatory purposes:</p>
                     <ul>
-                        <li><strong>Identity Verification &amp; KYC Compliance:</strong> Confirming your identity to fulfill Central Bank of Nigeria (CBN) Anti-Money Laundering (AML) and Counter-Terrorism Financing (CFT) guidelines.</li>
+                        <li><strong>Identity Data for Account Issuance:</strong> Where a feature requires it — such as generating a dedicated virtual bank account — we collect and share identifying information (e.g. BVN/NIN) with our licensed banking and payment processing partners, who use it to meet their own Central Bank of Nigeria (CBN) Anti-Money Laundering (AML) and Counter-Terrorism Financing (CFT) obligations.</li>
                         <li><strong>Service Delivery:</strong> Processing incoming and outgoing payments, settling merchant accounts, generating digital invoices, and running our digital wallet operations.</li>
                         <li><strong>Fraud Prevention &amp; Security:</strong> Actively scanning transactions to detect and block fraudulent, abusive, or unauthorized activities.</li>
                         <li><strong>Product Optimization:</strong> Analyzing platform usage data to troubleshoot software bugs, improve visual UX, and design new financial features.</li>

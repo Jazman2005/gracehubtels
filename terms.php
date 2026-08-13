@@ -73,7 +73,7 @@
                 <h2>2. User Account Responsibilities</h2>
                 <p>To access our financial services, you must register a secure account.</p>
                 <p><strong>Information Accuracy:</strong> You must provide accurate, current, and complete details during sign-up. You agree to update this information immediately upon change.</p>
-                <p><strong>Know Your Customer (KYC):</strong> You authorize <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> to perform inquiries, including verifying your BVN, NIN, and corporate registrations, directly or through third-party databases.</p>
+                <p><strong>Identity Data (BVN/NIN):</strong> Where required to activate certain features — such as generating a dedicated virtual bank account number — you authorize <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> to collect and share your BVN and/or NIN with our licensed banking and payment processing partners, who use it to meet their own regulatory requirements for issuing that account.</p>
                 <p><strong>Account Security:</strong> You are solely responsible for safeguarding your login credentials, passwords, and 2FA codes. <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> will not be held liable for any loss resulting from unauthorized access caused by your failure to protect your login tokens.</p>
                 <p><strong>Notification:</strong> You must notify us immediately at <strong><?=htmlspecialchars('abuse@'.site_domain())?></strong> if you detect a security breach or unauthorized activity on your account.</p>
             </section>

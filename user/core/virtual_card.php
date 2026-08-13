@@ -259,15 +259,25 @@ function process_create_virtual_card(int $user_id, array $post): array {
     $lastName = count($parts) > 1 ? trim(substr($user['full_name'], strlen($firstName))) : setting('site_name','Gracehubtels');
     $email = $user['email'] ?? ($user['phone'] . '@'.site_domain());
 
+    // Prefer address/dob submitted with this request (e.g. the mobile app's
+    // one-time KYC modal) over whatever's on the user row — this codebase has
+    // no persistent address/dob columns today, so the request payload is the
+    // only place real values ever come from; without this, anything the user
+    // typed was silently discarded and every card shipped with the fallback
+    // placeholder date/address regardless of what they entered.
+    $dob = trim((string)($post['dob'] ?? ''));
+    if ($dob !== '' && stripos($dob, 'T') === false) $dob .= 'T00:00:00Z';
+    $address = trim((string)($post['address'] ?? ''));
+
     $result = $cw->create_card([
         'firstName' => $firstName,
         'lastName' => $lastName,
         'email' => $email,
         'phoneCode' => '+234',
         'phoneNumber' => $user['phone'],
-        'dateOfBirth' => $user['dob'] ?? '1990-01-01T00:00:00Z',
+        'dateOfBirth' => $dob ?: ($user['dob'] ?? '1990-01-01T00:00:00Z'),
         'homeAddressNumber' => $user['house_number'] ?? '1',
-        'homeAddress' => $user['address'] ?? $user['home_address'] ?? 'N/A',
+        'homeAddress' => $address ?: ($user['address'] ?? $user['home_address'] ?? 'N/A'),
         'cardName' => $user['full_name'] ?? 'User',
         'cardType' => 'virtual',
         'cardBrand' => 'Visa',

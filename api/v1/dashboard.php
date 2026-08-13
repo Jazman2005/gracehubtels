@@ -58,7 +58,6 @@ echo json_encode([
             'usd_balance' => (float)($data['usd_balance'] ?? 0),
             'cashback_balance' => (float)$data['user']['cashback_balance'],
             'notif_count' => $data['notif_count'],
-            'kyc_level' => '1',
             'referral_code' => $data['user']['referral_code'] ?: $data['user']['phone'],
         ],
         'virtual_accounts' => $data['virtual_accounts'],

@@ -15,7 +15,6 @@ function admin_stats():array{
     $wallet_sum=(float)$db->query("SELECT COALESCE(SUM(wallet_balance),0) FROM users WHERE is_active=1")->fetchColumn();
     $cashback_sum=(float)$db->query("SELECT COALESCE(SUM(cashback_balance),0) FROM users WHERE is_active=1")->fetchColumn();
     $pending_a2c=(int)$db->query("SELECT COUNT(*) FROM airtime_to_cash WHERE status IN ('pending','processing')")->fetchColumn();
-    $kyc_pending=(int)$db->query("SELECT COUNT(*) FROM kyc_requests WHERE status='pending'")->fetchColumn();
     // Wallet splits by user type
     $wallet_by_type=$db->query("SELECT COALESCE(user_type,'regular') as ut,COALESCE(SUM(wallet_balance),0) as bal FROM users WHERE is_active=1 GROUP BY ut")->fetchAll();
     $user_wallet=0;$agent_wallet=0;$vendor_wallet=0;
@@ -34,7 +33,7 @@ function admin_stats():array{
     $chart=$db->query("SELECT DATE(created_at) as d,COALESCE(SUM(amount),0) as vol,COALESCE(SUM(profit),0) as profit FROM transactions WHERE status='success' AND type='debit' AND created_at>=DATE_SUB(NOW(),INTERVAL 7 DAY) GROUP BY DATE(created_at) ORDER BY d")->fetchAll();
     $recent_tx=$db->query("SELECT t.*,u.full_name,u.phone FROM transactions t LEFT JOIN users u ON t.user_id=u.id ORDER BY t.created_at DESC LIMIT 15")->fetchAll();
     $categories=$db->query("SELECT category,COUNT(*) as cnt,COALESCE(SUM(amount),0) as vol,COALESCE(SUM(profit),0) as profit FROM transactions WHERE status='success' AND type='debit' AND DATE(created_at)=CURDATE() GROUP BY category ORDER BY vol DESC")->fetchAll();
-    return compact('users','new_today','kyc_pending','total_tx','success_tx','pending_tx','failed_tx','total_vol','today_vol','total_profit','today_profit','wallet_sum','cashback_sum','pending_a2c','user_wallet','agent_wallet','vendor_wallet','subscriber_count','agent_count','vendor_count','referral_total','referral_count','unread_tickets','today_visits','chart','recent_tx','categories');
+    return compact('users','new_today','total_tx','success_tx','pending_tx','failed_tx','total_vol','today_vol','total_profit','today_profit','wallet_sum','cashback_sum','pending_a2c','user_wallet','agent_wallet','vendor_wallet','subscriber_count','agent_count','vendor_count','referral_total','referral_count','unread_tickets','today_visits','chart','recent_tx','categories');
 }
 function get_users_list(int $page=1,int $per=20,string $search='',string $filter=''):array{
     $db=db();$offset=($page-1)*$per;$where='WHERE 1=1';$params=[];
