@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/data.php';
 require_once __DIR__.'/core/beneficiaries.php';
 auth_user();
+require_feature_user('data');
 $uid = (int)$_SESSION['user_id'];
 $user = get_user($uid);
 

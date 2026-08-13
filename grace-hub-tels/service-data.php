@@ -1,10 +1,54 @@
 <?php
 require_once __DIR__.'/core/auth.php';
+require_once __DIR__.'/../user/core/api_router.php';
 auth_admin();
+require_feature_admin('data');
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
     require_permission('manage_pricing');
     $action=$_POST['action']??'';
+
+    if($action==='set_type_provider'){
+        // This is an API-routing change, not a pricing change — gate it with
+        // manage_api on top of the page's existing manage_pricing gate, so an
+        // admin who can edit prices but not API config gets a clean 403
+        // instead of silently being able to redirect where money-moving
+        // requests go.
+        require_permission('manage_api');
+        $network = sanitize($_POST['network']??'',20);
+        $data_type = sanitize($_POST['data_type']??'',50);
+        $registry_id = (int)($_POST['api_registry_id']??0);
+        if($network===''||$data_type==='')json_response(['success'=>false,'message'=>'Missing network/data type'],400);
+
+        $existing = db()->prepare("SELECT id FROM api_providers WHERE service='data' AND network=? AND data_type=?");
+        $existing->execute([$network,$data_type]);
+        $existing_id = (int)$existing->fetchColumn();
+
+        if(!$registry_id){
+            if($existing_id) db()->prepare("DELETE FROM api_providers WHERE id=?")->execute([$existing_id]);
+            audit_log((int)$_SESSION['admin_id'], 'DATA_TYPE_PROVIDER', "Reverted $network/$data_type to universal API");
+            json_response(['success'=>true,'message'=>'Reverted to the network\'s universal API']);
+        }
+
+        $reg = db()->prepare("SELECT name, base_url FROM api_registry WHERE id=? AND is_active=1");
+        $reg->execute([$registry_id]);
+        $r = $reg->fetch();
+        if(!$r)json_response(['success'=>false,'message'=>'Provider not found or inactive'],404);
+
+        if($existing_id){
+            // Clear any leftover network_id_map/value_map from a previous
+            // provider — it belonged to that provider's ID scheme and would
+            // otherwise silently override the new provider's own correct
+            // defaults (the exact bug found earlier with AutosyncNG).
+            db()->prepare("UPDATE api_providers SET api_registry_id=?, provider_name=?, api_base_url=?, network_id_map=NULL, value_map=NULL, is_active=1 WHERE id=?")
+                ->execute([$registry_id, $r['name'], $r['base_url'], $existing_id]);
+        } else {
+            db()->prepare("INSERT INTO api_providers (service,network,data_type,api_registry_id,provider_name,api_base_url,priority,is_active) VALUES ('data',?,?,?,?,?,1,1)")
+                ->execute([$network, $data_type, $registry_id, $r['name'], $r['base_url']]);
+        }
+        audit_log((int)$_SESSION['admin_id'], 'DATA_TYPE_PROVIDER', "Set $network/$data_type to use {$r['name']} (registry #$registry_id)");
+        json_response(['success'=>true,'message'=>"$data_type on $network will now use {$r['name']}"]);
+    }
     if($action==='save_data_plan'){
         $id=(int)($_POST['id']??0);
         $cashback_type = in_array($_POST['cashback_type']??'', ['percent','fixed']) ? $_POST['cashback_type'] : null;
@@ -115,14 +159,34 @@ foreach (db()->query("SELECT scope_key, markup_user, markup_agent, markup_vendor
         'markup_vendor' => $bp['markup_vendor'],
     ];
 }
+// For the per-type "API Provider" control: which registry is actually in
+// effect right now for each (network, data_type) group on this page, and
+// whether that's a type-specific override or the network's inherited
+// universal route — computed with the exact same function try_api_providers()
+// calls at purchase time, so this can never disagree with real behavior.
+$type_provider_state = [];
+if ($network_filter) {
+    $types_seen = [];
+    foreach ($data_plans as $p) { $types_seen[$p['data_type']] = true; }
+    foreach (array_keys($types_seen) as $dt) {
+        $matches = get_api_providers('data', $network_filter, $dt);
+        $top = $matches[0] ?? null;
+        $type_provider_state[$dt] = [
+            'registry_id' => $top['api_registry_id'] ?? null,
+            'name' => $top['registry_name'] ?? $top['provider_name'] ?? null,
+            'is_override' => $top && strtoupper((string)($top['data_type'] ?? '')) === strtoupper($dt) && $top['data_type'] !== '',
+        ];
+    }
+}
+$api_regs = db()->query("SELECT id, name FROM api_registry WHERE is_active=1 ORDER BY name")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Data Plans – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Data Plans – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -177,7 +241,8 @@ foreach (db()->query("SELECT scope_key, markup_user, markup_agent, markup_vendor
   foreach($grouped_plans as $type => $plans): 
   ?>
   <div class="type-section" style="margin-top:20px; border:1px solid #E2E8F0; border-radius:8px; overflow:hidden;">
-      <div style="background:#F1F5F9; padding:12px 20px; border-bottom:1px solid #E2E8F0; display:flex; align-items:center; gap:10px;">
+      <div style="background:#F1F5F9; padding:12px 20px; border-bottom:1px solid #E2E8F0;">
+      <div style="display:flex; align-items:center; gap:10px;">
           <div style="width:12px; height:12px; background:var(--primary); border-radius:50%;"></div>
           <h4 style="margin:0; font-weight:700; color:#334155; font-size:15px; letter-spacing:0.5px;"><?=htmlspecialchars($type)?> PLANS</h4>
           <span style="background:#E2E8F0; color:#475569; font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px;"><?=count($plans)?> Plans</span>
@@ -185,6 +250,26 @@ foreach (db()->query("SELECT scope_key, markup_user, markup_agent, markup_vendor
           <button class="btn-toggle-type" onclick="openBulkPricing('<?=$network_filter?>','<?=htmlspecialchars($type,ENT_QUOTES)?>')" style="margin-left:auto; background:none; border:1px solid var(--primary); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; color:var(--primary); font-weight:600;" title="Bulk set pricing for <?=htmlspecialchars($type)?> plans"><i class="fas fa-percent"></i> Bulk Price</button>
           <button class="btn-toggle-type" onclick="toggleDataType('<?=$network_filter?>','<?=htmlspecialchars($type,ENT_QUOTES)?>')" style="margin-left:8px; background:none; border:1px solid #CBD5E1; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; color:#475569;" title="Enable/disable all <?=htmlspecialchars($type)?> plans"><i class="fas fa-power-off"></i> Toggle All</button>
           <?php endif;?>
+      </div>
+      <?php if($network_filter): $tstate = $type_provider_state[$type] ?? ['registry_id'=>null,'name'=>null,'is_override'=>false]; ?>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px dashed #E2E8F0;">
+          <span style="font-size:11px; font-weight:600; color:#64748B; min-width:90px;"><i class="fas fa-plug" style="margin-right:4px"></i> API Provider</span>
+          <select class="form-control type-provider-select" data-network="<?=htmlspecialchars($network_filter,ENT_QUOTES)?>" data-type="<?=htmlspecialchars($type,ENT_QUOTES)?>" style="max-width:220px; font-size:12px; padding:5px 8px;">
+              <option value="">— Use Network's Universal API —</option>
+              <?php foreach($api_regs as $r):?>
+              <option value="<?=$r['id']?>" <?=($tstate['is_override']&&$tstate['registry_id']==$r['id'])?'selected':''?>><?=htmlspecialchars($r['name'])?></option>
+              <?php endforeach;?>
+          </select>
+          <button class="btn-toggle-type" onclick="saveTypeProvider(this)" style="background:none; border:1px solid #CBD5E1; border-radius:6px; padding:4px 10px; cursor:pointer; font-size:12px; color:#475569;"><i class="fas fa-save"></i> Save</button>
+          <span style="font-size:11px; color:#94A3B8;">
+              <?php if($tstate['name']):?>
+                Currently serving via <strong><?=htmlspecialchars($tstate['name'])?></strong> (<?=$tstate['is_override']?'type override':'network default'?>)
+              <?php else:?>
+                <span style="color:var(--danger)"><i class="fas fa-triangle-exclamation"></i> No provider configured for this network/type</span>
+              <?php endif;?>
+          </span>
+      </div>
+      <?php endif;?>
       </div>
       <div class="responsive-grid-wrapper">
         <table class="data-table" style="margin-bottom:0;">
@@ -385,6 +470,17 @@ async function toggleDataType(network, dataType){
     const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
     showToast('All '+dataType+' plans '+(r.new_state?'enabled':'disabled'),r.success);
     if(r.success)setTimeout(()=>location.reload(),700);
+}
+
+async function saveTypeProvider(btn){
+    const row=btn.closest('div').querySelector('.type-provider-select');
+    const network=row.dataset.network, dataType=row.dataset.type, registryId=row.value;
+    const label=registryId?row.options[row.selectedIndex].text:'the network\'s universal API';
+    if(!confirm('Switch '+dataType+' on '+network+' to use '+label+'? Purchases will automatically fall back to the universal API if this one fails.')) return;
+    const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','set_type_provider');fd.append('network',network);fd.append('data_type',dataType);fd.append('api_registry_id',registryId);
+    const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+    showToast(r.message,r.success);
+    if(r.success)setTimeout(()=>location.reload(),900);
 }
 
 const BULK_PRESETS = <?= json_encode($bulk_presets, JSON_UNESCAPED_SLASHES) ?>;

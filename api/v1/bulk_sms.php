@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+require_feature_api('bulk_sms');
 
 if (!rate_limit('api_bulk_sms_' . $user['id'], 20, 3600)) {
     http_response_code(429);

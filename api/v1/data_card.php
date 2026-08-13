@@ -5,6 +5,7 @@ require_once dirname(__DIR__, 2) . '/user/core/data_card.php';
 require_once dirname(__DIR__, 2) . '/user/core/data.php';
 
 $user = api_auth();
+require_feature_api('data_card');
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $net = strtoupper($_GET['net'] ?? 'MTN');

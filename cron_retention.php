@@ -6,6 +6,7 @@
  */
 require_once __DIR__ . '/user/core/db.php';
 require_once __DIR__ . '/user/core/onesignal.php';
+$site_name = setting('site_name', 'Gracehubtels');
 
 // Try to include auth for email function if it exists there
 if (file_exists(__DIR__ . '/user/core/auth.php')) {
@@ -95,12 +96,12 @@ foreach ($inactive_users as $u) {
         $onesignal->send_push($title, $message, $u['id']);
         
         if (function_exists('send_email')) {
-            $html = "<h3>Hi {$u['full_name']},</h3><p>{$message}</p><p>Open Gracehubtels now to see our latest offers.</p>";
-            send_email($u['email'], 'We Miss You! - Gracehubtels', $html);
+            $html = "<h3>Hi {$u['full_name']},</h3><p>{$message}</p><p>Open {$site_name} now to see our latest offers.</p>";
+            send_email($u['email'], 'We Miss You! - ' . $site_name, $html);
         }
         
         if (function_exists('send_whatsapp_alert') && !empty($u['phone'])) {
-            $wa_msg = "Hi " . strtok($u['full_name'], ' ') . " 👋\n\nIt's been a while! Come back and enjoy seamless Data and Airtime top-ups today at Gracehubtels.";
+            $wa_msg = "Hi " . strtok($u['full_name'], ' ') . " 👋\n\nIt's been a while! Come back and enjoy seamless Data and Airtime top-ups today at {$site_name}.";
             send_whatsapp_alert($wa_msg, $u['phone']);
         }
         
@@ -131,7 +132,7 @@ foreach ($low_balance_users as $u) {
     
     if (!crm_already_sent($u['id'], 'low_balance', $ref)) {
         $title = "Low Wallet Balance 📉";
-        $message = "Your wallet is running low! Fund your Gracehubtels wallet now to avoid being stranded when you need Data urgently.";
+        $message = "Your wallet is running low! Fund your {$site_name} wallet now to avoid being stranded when you need Data urgently.";
         
         $onesignal->send_push($title, $message, $u['id']);
         
@@ -165,7 +166,7 @@ foreach ($first_tx_users as $tx) {
         $onesignal->send_push($title, $message, $uid);
         
         if (function_exists('send_whatsapp_alert') && !empty($tx['phone'])) {
-            $wa_msg = "Hi " . strtok($tx['full_name'], ' ') . " ⭐\n\nHow was your first transaction on Gracehubtels?\n\nReply to this message if you need any help or have feedback for us!";
+            $wa_msg = "Hi " . strtok($tx['full_name'], ' ') . " ⭐\n\nHow was your first transaction on {$site_name}?\n\nReply to this message if you need any help or have feedback for us!";
             send_whatsapp_alert($wa_msg, $tx['phone']);
         }
         
@@ -200,7 +201,7 @@ if (date('d') == '01') {
     foreach ($monthly_users as $u) {
         if (!crm_already_sent($u['id'], 'month_review', $last_month)) {
             $month_name = date('F', strtotime('-1 month'));
-            $title = "Your $month_name with Gracehubtels 📊";
+            $title = "Your $month_name with {$site_name} 📊";
             $message = "You made {$u['total_txs']} transactions last month. Check your email for your full monthly summary!";
             
             $onesignal->send_push($title, $message, $u['id']);
@@ -209,7 +210,7 @@ if (date('d') == '01') {
                 $html = "<div style='font-family:Arial;max-width:480px;margin:0 auto;padding:24px;border:1px solid #E2E8F0;border-radius:12px;'>
                     <h2 style='color:#0A2A7A;'>Your {$month_name} Summary</h2>
                     <p>Hi <strong>{$u['full_name']}</strong>,</p>
-                    <p>Thank you for using Gracehubtels! Here is a quick summary of your spending for {$month_name}:</p>
+                    <p>Thank you for using {$site_name}! Here is a quick summary of your spending for {$month_name}:</p>
                     <div style='background:#F1F5F9;padding:16px;border-radius:8px;margin:20px 0;'>
                         <p style='margin:0;color:#64748B;'>Total Successful Transactions:</p>
                         <h3 style='margin:5px 0 15px 0;color:#0F172A;'>{$u['total_txs']}</h3>
@@ -218,7 +219,7 @@ if (date('d') == '01') {
                     </div>
                     <p>We look forward to serving you even better this month!</p>
                 </div>";
-                send_email($u['email'], "Your $month_name with Gracehubtels", $html);
+                send_email($u['email'], "Your $month_name with {$site_name}", $html);
             }
             
             crm_log_sent($u['id'], 'month_review', $last_month);

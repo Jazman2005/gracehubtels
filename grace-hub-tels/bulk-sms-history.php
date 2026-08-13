@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 
 auth_admin();
+require_feature_admin('bulk_sms');
 // Exposes recipient phone numbers and message content — same permission
 // used to gate the messaging-hub itself.
 require_permission('manage_messaging');
@@ -28,8 +29,8 @@ foreach($history as $h) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Bulk SMS History — Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Bulk SMS History — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

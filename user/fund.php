@@ -105,7 +105,7 @@ include __DIR__ . '/includes/sidebar.php';
             </a>
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Fund Wallet</h1>
-                <p class="text-sm text-slate-500">Add money to your Gracehubtels account</p>
+                <p class="text-sm text-slate-500">Add money to your <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> account</p>
             </div>
         </div>
     </div>
@@ -182,7 +182,7 @@ include __DIR__ . '/includes/sidebar.php';
         
         <div class="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3 text-sm text-blue-800">
             <i class="fas fa-info-circle text-blue-500 mt-0.5 shrink-0"></i>
-            <p>Transfer to any of the account numbers above from your bank app. Your Gracehubtels wallet will be credited automatically within seconds.</p>
+            <p>Transfer to any of the account numbers above from your bank app. Your <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> wallet will be credited automatically within seconds.</p>
         </div>
     </div>
 

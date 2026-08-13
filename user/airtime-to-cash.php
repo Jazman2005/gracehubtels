@@ -2,6 +2,7 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/airtime_to_cash.php';
 auth_user();
+require_feature_user('airtime_to_cash');
 $uid=(int)$_SESSION['user_id'];
 $user=get_user($uid);
 if($_SERVER['REQUEST_METHOD']==='POST'&&is_ajax()){ 
@@ -42,8 +43,15 @@ $unique_rates=[];
 foreach($rates as $r) $unique_rates[$r['network']]=$r;
 $rates=array_values($unique_rates);
 $rates_map=array_column($rates,'discount_percent','network');
+// A blank network on this row means "all networks" (same catch-all
+// convention every other service's provider lookup uses) — matching only the
+// literal empty string here used to mean the instant-A2C UI (share-PIN
+// field) never appeared for any network even when a catch-all AutosyncNG row
+// was actively serving all four.
 $auto_provs=[];$aq=db()->prepare("SELECT network FROM api_providers WHERE service='airtime_to_cash' AND is_active=1");$aq->execute();
-while($ar=$aq->fetch())$auto_provs[$ar['network']]=true;
+$auto_catchall=false;
+while($ar=$aq->fetch()){if($ar['network']==='')$auto_catchall=true;else $auto_provs[$ar['network']]=true;}
+if($auto_catchall)foreach(['MTN','GLO','AIRTEL','9MOBILE'] as $n)$auto_provs[$n]=true;
 
 $page_title = 'Airtime to Cash'; 
 include __DIR__ . '/includes/header.php'; 

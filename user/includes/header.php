@@ -6,9 +6,20 @@ $page_title = $page_title ?? 'Dashboard';
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($page_title) ?> - Gracehubtels</title>
-    <link rel="icon" type="image/png" href="/gracehubtels/assets/images/gracehubtels-favicon.png">
+    <title><?= htmlspecialchars($page_title) ?> - <?= htmlspecialchars(setting('site_name','Gracehubtels')) ?></title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     
+    <!-- SweetAlert2 — used by Swal.fire() across ~20 user-portal pages
+         (betting, airtime, cabletv, electricity, recharge/data card, fund,
+         transfers, etc.) for confirmation dialogs and post-purchase
+         redirects, but was never actually included anywhere in this
+         codebase. Every one of those Swal.fire() calls threw a silent
+         ReferenceError, which — for pages that gate their receipt redirect
+         inside .then() on the dialog closing — meant the money-moving
+         request completed successfully server-side but the page just sat
+         there with no visible feedback and no redirect. -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>

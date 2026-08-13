@@ -9,7 +9,7 @@
  * Setup:
  * 1. Sign up at https://twilio.com (free trial gives ~$15 credit)
  * 2. Go to Console → WhatsApp → Sandbox
- * 3. Set "When a message comes in" → https://gracehubtels.com/chatbot/twilio-webhook.php
+ * 3. Set "When a message comes in" → /chatbot/twilio-webhook.php (on this deployment's own domain)
  * 4. Users join by texting the sandbox join code to the sandbox number
  */
 

@@ -82,7 +82,7 @@ include __DIR__ . '/includes/sidebar.php';
                 ?>
                 <span class="<?= $u_bg ?> border text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider shadow-sm"><?= $u_label ?></span>
             </div>
-            <p class="text-[10px] sm:text-xs text-slate-500 mt-0.5">Welcome back to Gracehubtels</p>
+            <p class="text-[10px] sm:text-xs text-slate-500 mt-0.5">Welcome back to <?=htmlspecialchars(setting('site_name','Gracehubtels'))?></p>
         </div>
         <div class="flex items-center gap-3">
             <button id="darkModeToggle" class="text-slate-500 hover:text-brand-orange transition-colors w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100" onclick="toggleTheme()">
@@ -218,56 +218,64 @@ function closeAnnouncement() {
     <h3 class="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4">Quick Services</h3>
     <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 gap-2 sm:gap-4">
         
-        <a href="/user/airtime" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/airtime" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('airtime')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#EC4899]/10 text-[#EC4899] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-mobile-screen-button text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Buy Airtime</span>
         </a>
 
-        <a href="/user/data" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/data" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('data')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#2563EB]/10 text-[#2563EB] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-wifi text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Buy Data</span>
         </a>
 
-        <a href="/user/cabletv" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/cabletv" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('cabletv')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#F97316]/10 text-[#F97316] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-tv text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Cable TV</span>
         </a>
 
-        <a href="/user/electricity" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#7C3AED]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/electricity" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#7C3AED]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('electricity')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-bolt text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Electricity</span>
         </a>
 
-        <a href="/user/exam-pin" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/exam-pin" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('exam_pin')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#F97316]/10 text-[#F97316] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-graduation-cap text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Exam PINs</span>
         </a>
 
-        <a href="/user/betting" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-rose-500/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/betting" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-rose-500/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('betting')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-futbol text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Betting</span>
         </a>
 
-        <a href="/user/bulk-sms" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/bulk-sms" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('bulk_sms')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#EC4899]/10 text-[#EC4899] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-sms text-xl"></i>
             </div>
             <span class="text-xs sm:text-sm font-semibold text-slate-700 text-center whitespace-nowrap">Bulk SMS</span>
         </a>
 
-        <a href="/user/airtime-to-cash" class="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-1 group">
+        <a href="/user/airtime-to-cash" class="relative flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-1 group">
+            <?php if(!feature_enabled('airtime_to_cash')):?><span class="absolute top-1.5 right-1.5 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
             <div class="w-12 h-12 rounded-full bg-[#2563EB]/10 text-[#2563EB] flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                 <i class="fa-solid fa-exchange-alt text-xl"></i>
             </div>
@@ -293,43 +301,50 @@ function closeAnnouncement() {
             </button>
         </div>
         <div class="p-4 grid grid-cols-3 sm:grid-cols-4 gap-3">
-            <a href="/user/airtime" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/airtime" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('airtime')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#EC4899]/10 text-[#EC4899] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-mobile-screen-button"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Airtime</span>
             </a>
-            <a href="/user/data" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/data" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('data')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#2563EB]/10 text-[#2563EB] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-wifi"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Data</span>
             </a>
-            <a href="/user/cabletv" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/cabletv" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('cabletv')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#F97316]/10 text-[#F97316] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-tv"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Cable TV</span>
             </a>
-            <a href="/user/electricity" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#7C3AED]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/electricity" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#7C3AED]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('electricity')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#7C3AED]/10 text-[#7C3AED] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-bolt"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Electricity</span>
             </a>
-            <a href="/user/exam-pin" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/exam-pin" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#F97316]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('exam_pin')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#F97316]/10 text-[#F97316] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-graduation-cap"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Exam PIN</span>
             </a>
-            <a href="/user/virtual-card" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#14B8A6]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/virtual-card" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#14B8A6]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('virtual_card')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#14B8A6]/10 text-[#14B8A6] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-credit-card"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Virtual Card</span>
             </a>
-            <a href="/user/betting" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-rose-500/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/betting" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-rose-500/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('betting')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-futbol"></i>
                 </div>
@@ -341,29 +356,61 @@ function closeAnnouncement() {
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Send Money</span>
             </a>
-            <a href="/user/airtime-to-cash" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/airtime-to-cash" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#2563EB]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('airtime_to_cash')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#2563EB]/10 text-[#2563EB] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-exchange-alt"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">A2C</span>
             </a>
-            <a href="/user/recharge-card" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-brand-orange/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/recharge-card" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-brand-orange/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('recharge_card')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-brand-orangeLight text-brand-orange flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-print"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Recharge Card</span>
             </a>
-            <a href="/user/data-card" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#14B8A6]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/data-card" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#14B8A6]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('data_card')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#14B8A6]/10 text-[#14B8A6] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-sd-card"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Data Card</span>
             </a>
-            <a href="/user/bulk-sms" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-0.5 group">
+            <a href="/user/bulk-sms" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-[#EC4899]/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('bulk_sms')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
                 <div class="w-10 h-10 rounded-full bg-[#EC4899]/10 text-[#EC4899] flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                     <i class="fa-solid fa-sms"></i>
                 </div>
                 <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Bulk SMS</span>
+            </a>
+            <a href="/user/esim" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-indigo-500/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('esim')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
+                <div class="w-10 h-10 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-sim-card"></i>
+                </div>
+                <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">eSIM</span>
+            </a>
+            <a href="/user/international-airtime" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-teal-500/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('international_airtime')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
+                <div class="w-10 h-10 rounded-full bg-teal-50 text-teal-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-earth-americas"></i>
+                </div>
+                <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Intl. Airtime</span>
+            </a>
+            <a href="/user/giftcard-buy" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-fuchsia-500/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('giftcard_buy')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
+                <div class="w-10 h-10 rounded-full bg-fuchsia-50 text-fuchsia-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-gift"></i>
+                </div>
+                <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Buy Gift Card</span>
+            </a>
+            <a href="/user/giftcard-sell" class="relative flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-lime-500/30 transition-all hover:-translate-y-0.5 group">
+                <?php if(!feature_enabled('giftcard_sell')):?><span class="absolute top-1 right-1 bg-amber-100 text-amber-700 text-[8px] font-bold px-1.5 py-0.5 rounded-full">PRO</span><?php endif;?>
+                <div class="w-10 h-10 rounded-full bg-lime-50 text-lime-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-money-bill-transfer"></i>
+                </div>
+                <span class="text-[11px] font-semibold text-slate-700 text-center leading-tight">Sell Gift Card</span>
             </a>
             <a href="/user/cashback" class="flex flex-col items-center justify-center p-3 bg-white rounded-xl border border-slate-100 card-shadow hover:border-rose-500/30 transition-all hover:-translate-y-0.5 group">
                 <div class="w-10 h-10 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">

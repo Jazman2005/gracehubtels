@@ -25,7 +25,14 @@ try{db()->query("SELECT 1 FROM airtime_to_cash LIMIT 1");}catch(PDOException$e){
 }
 class AirtimeToCashService {
     public function get_our_number(string $network): string {$map=['MTN'=>'autopilot_mtn_number','GLO'=>'autopilot_glo_number','AIRTEL'=>'autopilot_airtel_number','9MOBILE'=>'autopilot_9mobile_number'];return setting($map[$network]??'','');}
-    private function get_provider(string $network): ?array {$s=db()->prepare("SELECT * FROM api_providers WHERE service='airtime_to_cash' AND network=? AND is_active=1 ORDER BY priority LIMIT 1");$s->execute([$network]);return $s->fetch()?:null;}
+    // A route saved with a blank network is meant as an "ALL networks"
+    // catch-all — this used to require an exact network match, so a single
+    // catch-all AutosyncNG row (the actual configured state for this
+    // service) never matched any real request and every A2C submission
+    // silently fell through to the manual admin-approval path regardless of
+    // network. Mirrors the same exact-match-first, blank-catches-rest
+    // pattern get_api_providers() already uses for every other service.
+    private function get_provider(string $network): ?array {$s=db()->prepare("SELECT * FROM api_providers WHERE service='airtime_to_cash' AND (network=? OR network IS NULL OR network='') AND is_active=1 ORDER BY CASE WHEN network=? THEN 0 ELSE 1 END, priority LIMIT 1");$s->execute([$network,$network]);return $s->fetch()?:null;}
     private function api_call(array $prov,string $endpoint,array $payload,bool $use_url_ref=false,string $url_ref=''): ?array {
         $base=rtrim($prov['api_base_url'],'/').'/api/v1/airtime/cash';
         $url=$use_url_ref?$base.'/'.$url_ref.$endpoint:$base.$endpoint;
@@ -66,7 +73,12 @@ class AirtimeToCashService {
         if($uses_api){
             $sharePin=trim($input['share_pin']??'');
             if(empty($sharePin))return['success'=>false,'message'=>"Enter the {$network} airtime share PIN to proceed"];
-            $productId='mtn';
+            // product_id used to be hardcoded to 'mtn' regardless of network,
+            // which — once the provider-lookup fallback below started
+            // matching AIRTEL/GLO/9MOBILE requests too — would have sent
+            // every non-MTN request to AutosyncNG under the wrong product.
+            $net_map=build_network_map($prov,'airtime_to_cash');
+            $productId=$net_map[$network]??strtolower($network);
             $api_payload=['request_ref'=>$ref,'phone'=>$phone,'product_id'=>$productId,'amount'=>$amount,'sharePin'=>$sharePin];
             $res=$this->api_call($prov,'',$api_payload);
             if($res&&in_array($res['_http_code']??0,[200,201])&&($res['status']??'')==='ok'&&!empty($res['data']['transaction']['reference'])){
@@ -121,10 +133,11 @@ class AirtimeToCashService {
             try{
                 $lk=db()->prepare("SELECT id,status FROM airtime_to_cash WHERE transaction_ref=? AND status='processing' LIMIT 1 FOR UPDATE");$lk->execute([$ref]);$locked=$lk->fetch();
                 if(!$locked){$db->rollback();return['success'=>false,'message'=>'Transaction already completed'];}
-                $cr=credit_wallet((int)$req['user_id'],$actual,'airtime_to_cash',"A2C: ₦{$req['airtime_amount']} {$req['network']} → ₦{$actual}",['a2c_ref'=>$ref,'network'=>$req['network'],'api_ref'=>$api_ref,'response'=>provider_response_text($res)]);
+                $cr=credit_wallet((int)$req['user_id'],$actual,'airtime_to_cash',"A2C: ₦{$req['airtime_amount']} {$req['network']} → ₦{$actual}",['a2c_ref'=>$ref,'network'=>$req['network'],'api_ref'=>$api_ref,'response'=>provider_response_text($res)],'a2c:'.$ref);
                 if($cr['success']){
                     $pd['complete_response']=$res;db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,provider_response=?,updated_at=NOW() WHERE transaction_ref=?")->execute([$actual,json_encode($pd),$ref]);
                     $db->commit();
+                    apply_cashback((int)$req['user_id'],(float)$req['airtime_amount'],'airtime_to_cash',$req['network']);
                     notify_user((int)$req['user_id'],'A2C Credited',number_format($actual,2)." credited for your {$req['network']} airtime",'success',null,$cr['balance_before'],$cr['balance_after']);
                     try{
                         $a2cUser = get_user((int)$req['user_id']);
@@ -173,8 +186,8 @@ class AirtimeToCashService {
         try{
             $lk=db()->prepare("SELECT * FROM airtime_to_cash WHERE transaction_ref=? AND status IN ('pending','processing') LIMIT 1 FOR UPDATE");$lk->execute([$ref]);$req=$lk->fetch();
             if(!$req){$db->rollback();return false;}
-            $r=credit_wallet((int)$req['user_id'],$actual_cash,'airtime_to_cash',"A2C: N{$req['airtime_amount']} {$req['network']} → N{$actual_cash}",['a2c_ref'=>$ref,'network'=>$req['network']]);
-            if($r['success']){db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,updated_at=NOW() WHERE transaction_ref=?")->execute([$actual_cash,$ref]);$db->commit();notify_user((int)$req['user_id'],'A2C Credited',number_format($actual_cash,2)." credited for your {$req['network']} airtime",'success',null,$r['balance_before'],$r['balance_after']);return true;}
+            $r=credit_wallet((int)$req['user_id'],$actual_cash,'airtime_to_cash',"A2C: N{$req['airtime_amount']} {$req['network']} → N{$actual_cash}",['a2c_ref'=>$ref,'network'=>$req['network']],'a2c:'.$ref);
+            if($r['success']){db()->prepare("UPDATE airtime_to_cash SET status='success',cash_amount=?,updated_at=NOW() WHERE transaction_ref=?")->execute([$actual_cash,$ref]);$db->commit();apply_cashback((int)$req['user_id'],(float)$req['airtime_amount'],'airtime_to_cash',$req['network']);notify_user((int)$req['user_id'],'A2C Credited',number_format($actual_cash,2)." credited for your {$req['network']} airtime",'success',null,$r['balance_before'],$r['balance_after']);return true;}
             $db->rollback();return false;
         }catch(\Throwable$e){$db->rollback();return false;}
     }

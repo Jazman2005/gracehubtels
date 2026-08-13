@@ -2,6 +2,7 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
 auth_admin('admin');
+require_feature_admin('admin_accounting');
 
 $tot_wallet = (float)db()->query("SELECT SUM(wallet_balance) FROM users")->fetchColumn() ?: 0;
 $tot_cashback = (float)db()->query("SELECT SUM(cashback_balance) FROM users")->fetchColumn() ?: 0;
@@ -17,7 +18,7 @@ $paystack_balance = 0;
 $discrepancy = ($tot_funding + $tot_profit) - $total_liability;
 ?>
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Accounting & Reconciliation — Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Accounting & Reconciliation — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
 <div class="main-wrap">

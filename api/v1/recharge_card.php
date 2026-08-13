@@ -4,6 +4,7 @@ require_once __DIR__ . '/auth.php';
 require_once dirname(__DIR__, 2) . '/user/core/recharge_card.php';
 
 $user = api_auth();
+require_feature_api('recharge_card');
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     echo json_encode([

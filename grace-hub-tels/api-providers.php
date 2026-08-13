@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/dashboard.php';
+require_once __DIR__.'/../user/core/api_router.php';
 auth_admin();
 require_permission('manage_api');
 
@@ -99,6 +100,23 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         json_response(['success'=>true]);
     }
 
+    if($action==='delete_all_routes'){
+        // Bulk-clear every route for one service at once — e.g. to wipe out a
+        // pile of confusing per-data-type rows and rebuild cleanly with the
+        // Universal + Override system, rather than deleting 5+ cards by hand.
+        // Scoped to a single service on purpose: this never touches other
+        // services' routes, so clearing 'data' can't accidentally break
+        // airtime/cabletv/etc.
+        $service = sanitize($_POST['service'] ?? '', 50);
+        if ($service === '') json_response(['success' => false, 'message' => 'Missing service'], 400);
+        $count_stmt = $db->prepare("SELECT COUNT(*) FROM api_providers WHERE service=?");
+        $count_stmt->execute([$service]);
+        $count = (int)$count_stmt->fetchColumn();
+        $db->prepare("DELETE FROM api_providers WHERE service=?")->execute([$service]);
+        audit_log((int)$_SESSION['admin_id'], 'DELETE_ALL_ROUTES', "Deleted all $count route(s) for service '$service'");
+        json_response(['success' => true, 'message' => "Deleted $count route(s) for " . $service, 'count' => $count]);
+    }
+
     if($action==='toggle_route'){
         $db->prepare("UPDATE api_providers SET is_active=NOT is_active WHERE id=?")->execute([(int)$_POST['id']]);
         json_response(['success'=>true]);
@@ -115,6 +133,34 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
             }
         }
         json_response($row);
+    }
+
+    if($action==='get_default_map'){
+        // Computes the network ID map the code will actually use for this
+        // service+provider+data_type combination, straight from
+        // build_network_map() in api_router.php — the same function
+        // try_api_providers() calls at purchase time. This used to be
+        // duplicated as a second, generic-only table in this file
+        // (_default_network_id_map() below), which always prefilled the
+        // wrong values for providers with special-cased IDs (e.g. AutosyncNG)
+        // and — because a route's own saved network_id_map always overrides
+        // the code's default — those wrong values then permanently silenced
+        // the correct built-in default the moment the route was saved.
+        $service = sanitize($_POST['service'] ?? '', 50);
+        $data_type = sanitize($_POST['data_type'] ?? '', 50);
+        $registry_id = (int)($_POST['registry_id'] ?? 0);
+        $provider_name = ''; $registry_map = '';
+        if ($registry_id) {
+            $reg = $db->prepare("SELECT name, network_id_map FROM api_registry WHERE id=?");
+            $reg->execute([$registry_id]);
+            if ($reg_row = $reg->fetch()) { $provider_name = $reg_row['name'] ?? ''; $registry_map = $reg_row['network_id_map'] ?? ''; }
+        }
+        // A route being newly created has no network_id_map of its own yet —
+        // the effective value at purchase time would be the registry's own
+        // map (if set) merged over the code default, same COALESCE order
+        // get_api_providers() uses, so mirror that here.
+        $map = build_network_map(['provider_name' => $provider_name, 'data_type' => $data_type, 'network_id_map' => $registry_map], $service);
+        json_response(['success' => true, 'map' => $map]);
     }
 
     json_response(['success'=>false,'message'=>'Unknown action']);
@@ -154,11 +200,9 @@ function _default_network_id_map(string $svc): array {
   ];
   return $m[$svc] ?? [];
 }
-$default_network_maps = [];
 $default_value_maps = [];
 foreach ($services as $svc) {
   $vm = _default_network_id_map($svc);
-  $default_network_maps[$svc] = json_encode($vm);
   $lines = [];
   foreach ($vm as $k => $v) $lines[] = "$k=$v";
   $default_value_maps[$svc] = implode("\n", $lines);
@@ -177,8 +221,8 @@ $default_value_maps['airtime_to_cash'] = "";
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>API Routes — Gracehubtels Admin</title>
-<link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+<title>API Routes — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+<link rel="icon" type="image/png" href="/assets/images/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
@@ -245,18 +289,19 @@ $default_value_maps['airtime_to_cash'] = "";
     <button class="btn-primary" style="margin-top:12px" onclick="openRouteModal('<?=$svc?>')"><i class="fas fa-plus"></i> Add First Route</button>
   </div>
   <?php else:?>
-  <?php foreach($networks as $net=>$net_routes):?>
-  <div style="margin-top:16px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <span style="font-size:13px;font-weight:700;color:var(--navy-dark);text-transform:uppercase"><?=htmlspecialchars($net)?></span>
-      <span style="font-size:11px;color:var(--text-muted)">— <?=count($net_routes)?> route<?=count($net_routes)>1?'s':''?></span>
-    </div>
-    <div class="api-grid">
-    <?php foreach($net_routes as $p):
+  <?php foreach($networks as $net=>$net_routes):
+    // Split each network's routes into the universal (no data_type — applies
+    // to every plan/type under this network) and type-specific overrides —
+    // previously shown as one flat, unlabeled list, which made e.g. 5 separate
+    // MTN data cards (Gifting/Awoof/SME/Corporate...) look like 5 competing
+    // routes instead of "1 default + a few narrow overrides".
+    $universal_routes = array_values(array_filter($net_routes, fn($p) => empty($p['data_type'])));
+    $override_routes = array_values(array_filter($net_routes, fn($p) => !empty($p['data_type'])));
+    $render_card = function($p) use ($slot_labels, $slot_colors) {
       $slot=$p['priority']<=1?'primary':($p['priority']<=2?'backup_1':($p['priority']<=3?'backup_2':'backup_3'));
       $slot_label=$slot_labels[$slot]??'Backup';
       $slot_color=$slot_colors[$slot]??'var(--text-muted)';
-    ?>
+      ?>
       <div class="api-card" id="card-<?=$p['id']?>">
         <div class="api-card-head">
           <span class="slot-badge" style="background:<?=$slot_color?>"><?=$slot_label?></span>
@@ -299,12 +344,31 @@ $default_value_maps['airtime_to_cash'] = "";
           <button class="btn-ghost" style="padding:5px 12px;font-size:11px;color:var(--danger)" onclick="deleteRoute(<?=$p['id']?>)"><i class="fas fa-trash"></i> Delete</button>
         </div>
       </div>
-    <?php endforeach;?>
+      <?php
+    };
+  ?>
+  <div style="margin-top:16px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:700;color:var(--navy-dark);text-transform:uppercase"><?=htmlspecialchars($net)?></span>
+      <span style="font-size:11px;color:var(--text-muted)">— <?=count($net_routes)?> route<?=count($net_routes)>1?'s':''?></span>
     </div>
+
+    <?php if(!empty($universal_routes)):?>
+    <div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:.4px;margin:6px 0 6px 2px"><i class="fas fa-globe"></i> Universal — applies to every type under <?=htmlspecialchars($net)?></div>
+    <div class="api-grid"><?php foreach($universal_routes as $p) $render_card($p); ?></div>
+    <?php endif;?>
+
+    <?php if(!empty($override_routes)):?>
+    <div style="font-size:11px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 6px 2px"><i class="fas fa-filter"></i> Type-Specific Overrides — only used for the exact type shown, otherwise falls back to Universal above</div>
+    <div class="api-grid"><?php foreach($override_routes as $p) $render_card($p); ?></div>
+    <?php endif;?>
   </div>
   <?php endforeach;?>
   <?php endif;?>
   <div style="margin-top:16px;text-align:right">
+    <?php if(!empty($routes)):?>
+    <button class="btn-ghost" style="color:var(--danger);border-color:var(--danger)" onclick="deleteAllRoutes('<?=$svc?>','<?=htmlspecialchars($service_labels[$svc]??$svc,ENT_QUOTES)?>',<?=count($routes)?>)"><i class="fas fa-trash"></i> Delete All <?=$service_labels[$svc]?> Routes (<?=count($routes)?>)</button>
+    <?php endif;?>
     <button class="btn-ghost" onclick="openRouteModal('<?=$svc?>')"><i class="fas fa-plus"></i> Add Route for <?=$service_labels[$svc]?></button>
   </div>
 </div>
@@ -373,6 +437,7 @@ $default_value_maps['airtime_to_cash'] = "";
               <option value="__custom__">Specific type...</option>
             </select>
             <input type="text" class="form-control" id="r_data_type" style="display:none;margin-top:6px" placeholder="e.g. SME, Gifting">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.4">Leave on <strong>ALL</strong> to make this the universal provider for the whole network — recommended for most routes. Only pick <strong>Specific type</strong> to override just that one type; it'll be tried first and automatically fall back to the network's Universal route if it fails.</div>
           </div>
           <div class="form-group colspan-2">
             <label>Network ID Map (JSON) <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
@@ -397,7 +462,6 @@ $default_value_maps['airtime_to_cash'] = "";
 </div>
 <script>
 const CSRF='<?=$csrf?>';
-const defaultNetworkMaps=<?=json_encode($default_network_maps)?>;
 const defaultValueMaps=<?=json_encode($default_value_maps)?>;
 // Network options per service for the dropdown
 const serviceNetworks={
@@ -422,12 +486,30 @@ function switchService(svc){
 }
 
 function prefillDefaults(svc){
-  const idMap=document.getElementById('r_network_id_map');
   const valMap=document.getElementById('r_value_map');
   if(!document.getElementById('r_id').value){
-    idMap.value=defaultNetworkMaps[svc]||'';
     valMap.value=defaultValueMaps[svc]||'';
   }
+  refreshNetworkIdMapDefault();
+}
+
+// Network ID Map is fetched live from build_network_map() on the server —
+// the exact function try_api_providers() calls at purchase time — instead of
+// a hardcoded generic table here, so the prefill can never disagree with
+// what the code will actually send (see get_default_map action above). Only
+// runs for a brand-new route; editing an existing route never overwrites
+// its saved value.
+async function refreshNetworkIdMapDefault(){
+  if(document.getElementById('r_id').value) return;
+  const svc=document.getElementById('r_service').value;
+  const registryId=document.getElementById('r_api_registry_id').value;
+  const dtSelect=document.getElementById('r_data_type_select');
+  const dataType=dtSelect.value==='__custom__'?document.getElementById('r_data_type').value:dtSelect.value;
+  const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','get_default_map');fd.append('service',svc);fd.append('registry_id',registryId);fd.append('data_type',dataType);
+  try {
+    const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+    if(r.success) document.getElementById('r_network_id_map').value=Object.keys(r.map).length?JSON.stringify(r.map):'';
+  } catch(e){}
 }
 
 // Fetch registry entry JSON and auto-fill the form
@@ -447,9 +529,9 @@ async function onRegistryChange(){
     const r=await fetch('<?= ADMIN_URL ?>/api-registry.php',{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
     if(!r.id) return;
     if(r.base_url && !document.getElementById('r_id').value) document.getElementById('r_api_base_url').value=r.base_url;
-    if(r.network_id_map) document.getElementById('r_network_id_map').value=r.network_id_map||'';
     if(r.value_map) document.getElementById('r_value_map').value=r.value_map||'';
   } catch(e){}
+  refreshNetworkIdMapDefault();
 }
 
 function openRouteModal(svc){
@@ -482,6 +564,7 @@ document.addEventListener('DOMContentLoaded',function(){
     updateNetworkOptions(this.value);
     if(!document.getElementById('r_id').value) prefillDefaults(this.value);
   });
+  document.getElementById('r_data_type').addEventListener('blur',refreshNetworkIdMapDefault);
   // Init network options for current service
   var initSvc=document.getElementById('r_service').value;
   if(initSvc) updateNetworkOptions(initSvc);
@@ -519,7 +602,7 @@ function onDataTypeChange(){
   const sel=document.getElementById('r_data_type_select');
   const inp=document.getElementById('r_data_type');
   if(sel.value==='__custom__'){ inp.style.display='block'; inp.focus(); }
-  else { inp.style.display='none'; inp.value=''; }
+  else { inp.style.display='none'; inp.value=''; refreshNetworkIdMapDefault(); }
 }
 async function saveRoute(e){
   e.preventDefault();
@@ -550,6 +633,16 @@ function deleteRoute(id){
   if(!confirm('Delete this API route?')) return;
   const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','delete_route');fd.append('id',id);
   fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json()).then(r=>{if(r.success)location.reload();else alert(r.message)});
+}
+
+function deleteAllRoutes(service,label,count){
+  // Bulk-clear one service's routes only — never all services at once — and
+  // require typing the service name so this can't be triggered by a stray
+  // click on a page full of other buttons.
+  const typed=prompt('This deletes all '+count+' '+label+' route(s). '+label+' purchases will stop working until you add new routes.\n\nType "'+service+'" to confirm:');
+  if(typed!==service) { if(typed!==null) alert('Did not match — nothing deleted.'); return; }
+  const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','delete_all_routes');fd.append('service',service);
+  fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json()).then(r=>{if(r.success){alert(r.message);location.reload();}else alert(r.message)});
 }
 
 async function toggleRoute(id){

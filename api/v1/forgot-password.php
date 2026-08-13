@@ -4,8 +4,8 @@ require_once dirname(__DIR__, 2) . '/user/core/auth.php';
 
 header("Content-Type: application/json");
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$allowed = ['https://gracehubtels.com', 'https://www.gracehubtels.com'];
-header("Access-Control-Allow-Origin: " . (in_array($origin, $allowed) ? $origin : 'https://gracehubtels.com'));
+$allowed = site_allowed_origins();
+header("Access-Control-Allow-Origin: " . (in_array($origin, $allowed) ? $origin : $allowed[0]));
 header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
@@ -44,7 +44,7 @@ if ($step === 'request') {
         db()->prepare("UPDATE users SET reset_token=?, reset_token_expiry=? WHERE id=?")->execute([$reset_token, $expiry, $user['id']]);
 
         $name = $user['full_name'];
-        $reset_url = 'https://gracehubtels.com/api/v1/forgot-password.php?step=reset&token=' . $reset_token;
+        $reset_url = site_url('/api/v1/forgot-password.php?step=reset&token=' . $reset_token);
         $html = "<div style='font-family:Arial;max-width:480px;margin:0 auto;padding:24px;background:#fff;border-radius:12px;border:1px solid #E2E8F0;'>
             <h2 style='color:#0A2A7A;margin-top:0;'>Password Reset</h2>
             <p style='color:#475569;font-size:14px;'>Hi <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>,</p>
@@ -55,7 +55,7 @@ if ($step === 'request') {
             <p style='color:#64748B;font-size:13px;'>Link expires in 1 hour.</p>
             <p style='color:#94A3B8;font-size:12px;'>If you didn't request this, ignore this email.</p>
         </div>";
-        send_email($user['email'], 'Password Reset - Gracehubtels', $html);
+        send_email($user['email'], 'Password Reset - '.setting('site_name','Gracehubtels'), $html);
     }
 
     echo json_encode(['status' => 'success', 'message' => 'If an account with that email/phone exists, a reset link has been sent.']);

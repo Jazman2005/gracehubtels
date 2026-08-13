@@ -2,6 +2,7 @@
 require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/virtual_card.php';
 auth_user();
+require_feature_user('virtual_card');
 $uid = (int)$_SESSION['user_id'];
 $user = get_user($uid);
 

@@ -3,8 +3,8 @@ require_once dirname(__DIR__, 2) . '/user/core/db.php';
 
 header("Content-Type: application/json");
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$allowed = ['https://gracehubtels.com', 'https://www.gracehubtels.com'];
-header("Access-Control-Allow-Origin: " . (in_array($origin, $allowed) ? $origin : 'https://gracehubtels.com'));
+$allowed = site_allowed_origins();
+header("Access-Control-Allow-Origin: " . (in_array($origin, $allowed) ? $origin : $allowed[0]));
 header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 

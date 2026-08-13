@@ -210,7 +210,7 @@ function show_menu(string $chat_id): void {
         $name = $user['full_name'] ?? 'User';
         $bal = (float)($user['wallet_balance'] ?? 0);
         if (!$welcome_sent) {
-            bot_send($chat_id, "🤖 *Gracehubtels Bot*\n\nWelcome back, {$name}!\n💰 Balance: ₦" . number_format($bal, 2));
+            bot_send($chat_id, "🤖 *" . setting('site_name','Gracehubtels') . " Bot*\n\nWelcome back, {$name}!\n💰 Balance: ₦" . number_format($bal, 2));
             usleep(300000);
         }
         bot_send_buttons($chat_id, "Choose a service:", [
@@ -232,7 +232,7 @@ function show_menu(string $chat_id): void {
     } else {
         // ── Unauthenticated: login / register ─────────────
         if (!$welcome_sent) {
-            bot_send($chat_id, "🤖 *Gracehubtels Bot*\n\nWelcome! Please login or create an account:");
+            bot_send($chat_id, "🤖 *" . setting('site_name','Gracehubtels') . " Bot*\n\nWelcome! Please login or create an account:");
             usleep(300000);
         }
         bot_send_buttons($chat_id, "Get Started:", [
@@ -800,7 +800,7 @@ function handle_message(string $phone, string $chat_id, string $msg): void {
     // ── FUND WALLET ────────────────────────────────────
     if ($step === 'menu' && $msg === 'fund_wallet') {
         if (!$uid) { bot_send($chat_id, "❌ Login first."); show_menu($chat_id); return; }
-        bot_send($chat_id, "💳 *Fund Wallet*\n\nTo fund your wallet, use the bank transfer option on our website:\n\nhttps://gracehubtels.com/user/fund\n\nOr send to any of our payment account numbers and the wallet will be credited automatically.\n\nType *menu* to go back.");
+        bot_send($chat_id, "💳 *Fund Wallet*\n\nTo fund your wallet, use the bank transfer option on our website:\n\n" . site_url('/user/fund') . "\n\nOr send to any of our payment account numbers and the wallet will be credited automatically.\n\nType *menu* to go back.");
         show_menu($chat_id);
         return;
     }

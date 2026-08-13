@@ -69,8 +69,8 @@ if($tab === 'users'){
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <title>Transactions — Gracehubtels Admin</title>
-  <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+  <title>Transactions — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+  <link rel="icon" type="image/png" href="/assets/images/favicon.png">
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -150,46 +150,40 @@ if($tab === 'users'){
 
   <div class="responsive-grid-wrapper">
     <table class="data-table">
-      <thead><tr><th>#</th><th>User Info</th><th>Ref Id</th><th>Description</th><?=$hide_sensitive?'':'<th>Profit</th>'?></tr></thead>
+      <thead><tr><th>#</th><th>Username &amp; Phone Number</th><th>Service Type</th><th>Description</th><th>Balance</th><th>Ref</th><th>Date &amp; Time</th><?=$hide_sensitive?'':'<th>Profit</th>'?></tr></thead>
       <tbody>
       <?php $i=($page-1)*25+1; foreach($data['data'] as $tx):
         $scls=['success'=>'badge-success','pending'=>'badge-pending','failed'=>'badge-danger','reversed'=>'badge-warning'][$tx['status']]??'badge-pending';
-        $sclr=['success'=>'var(--success)','pending'=>'var(--warning)','failed'=>'var(--danger)','reversed'=>'var(--warning)'][$tx['status']]??'var(--warning)';
       ?>
-      <tr>
+      <tr class="clickable-row" onclick="location.href='<?= ADMIN_URL ?>/transaction-details.php?ref=<?=urlencode($tx['transaction_ref'])?>'">
         <td class="text-muted" style="width:40px"><?=$i++?></td>
         <td>
-          <div class="user-cell" style="margin-bottom:4px">
+          <div class="user-cell">
             <div class="u-avatar"><?=strtoupper(substr($tx['full_name']??($tx['email']??'?'),0,1))?></div>
             <div>
-              <span class="u-name"><?=htmlspecialchars($tx['email']??$tx['full_name']??'—')?></span>
+              <span class="u-name"><?=htmlspecialchars($tx['full_name']??$tx['email']??'—')?></span>
               <span class="u-phone"><?=htmlspecialchars($tx['phone']??'')?></span>
             </div>
           </div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:4px">
-            Bal: ₦<?=number_format((float)$tx['balance_before'],2)?> → ₦<?=number_format((float)$tx['balance_after'],2)?>
-          </div>
         </td>
         <td>
-          <div style="font-weight:600;font-size:13px;color:<?=$sclr?>;margin-bottom:4px"><?=ucfirst($tx['status'])?></div>
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px"><?=htmlspecialchars($tx['transaction_ref'])?></div>
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px"><?=date('d M Y h:iA',strtotime($tx['created_at']))?></div>
-          <a href="<?= ADMIN_URL ?>/transaction-details.php?ref=<?=urlencode($tx['transaction_ref'])?>" class="card-link" style="font-size:12px">Details</a>
-        </td>
-        <td>
-          <div style="color:var(--primary);font-weight:600;font-size:13px;margin-bottom:4px">
+          <div style="font-weight:600;font-size:13px;color:var(--navy-dark);margin-bottom:4px">
             <?php if($tx['category']==='data_plan') echo 'Data'; elseif($tx['category']==='wallet_funding') echo 'Wallet Topup'; else echo ucwords(str_replace('_',' ',$tx['category'])); ?>
           </div>
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
-            <?=htmlspecialchars($tx['description'])?><br>
-            <span style="color:#9CA3AF">Amount: ₦<?=number_format((float)$tx['amount'])?></span>
-          </div>
+          <span class="badge <?=$scls?>" style="font-size:11px"><?=ucfirst($tx['status'])?></span>
         </td>
+        <td style="font-size:12px;color:var(--text-muted);line-height:1.6;max-width:220px">
+          <?=htmlspecialchars($tx['description'])?><br>
+          <span style="color:#9CA3AF">Amount: ₦<?=number_format((float)$tx['amount'])?></span>
+        </td>
+        <td style="font-size:12px;white-space:nowrap">₦<?=number_format((float)$tx['balance_before'],2)?> → ₦<?=number_format((float)$tx['balance_after'],2)?></td>
+        <td style="font-size:12px;font-family:monospace;color:var(--text-muted)"><?=htmlspecialchars($tx['transaction_ref'])?></td>
+        <td style="font-size:12px;white-space:nowrap;color:var(--text-muted)"><?=date('d M Y h:iA',strtotime($tx['created_at']))?></td>
         <?php if(!$hide_sensitive):?>
         <td style="font-weight:600;color:var(--navy-dark)">₦<?=$tx['profit']!==null?number_format((float)$tx['profit']):'0'?></td>
         <?php endif;?>
       </tr>
-      <?php endforeach;if(empty($data['data'])):?><tr><td colspan="<?=$hide_sensitive?4:5?>" class="empty-state">No transactions found</td></tr><?php endif;?>
+      <?php endforeach;if(empty($data['data'])):?><tr><td colspan="<?=$hide_sensitive?7:8?>" class="empty-state">No transactions found</td></tr><?php endif;?>
       </tbody>
     </table>
   </div>

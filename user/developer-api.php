@@ -60,7 +60,7 @@ include __DIR__ . '/includes/sidebar.php';
             </a>
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Developer API</h1>
-                <p class="text-sm text-slate-500">Integrate Gracehubtels into your own applications seamlessly.</p>
+                <p class="text-sm text-slate-500">Integrate <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> into your own applications seamlessly.</p>
             </div>
         </div>
         <div class="bg-brand-orangeLight text-brand-orangeHover px-4 py-2 rounded-xl font-bold border border-brand-orange/20 shadow-sm">
@@ -132,7 +132,7 @@ include __DIR__ . '/includes/sidebar.php';
     <div class="bg-white rounded-2xl border border-slate-200 p-6 card-shadow h-fit">
         <h3 class="text-lg font-bold text-slate-800 mb-4">Quick Start</h3>
         <div class="prose prose-sm text-slate-600">
-            <p><strong>Base URL:</strong><br><code class="bg-slate-100 text-brand-navy px-1.5 py-0.5 rounded text-xs">https://gracehubtels.com/api/v1</code></p>
+            <p><strong>Base URL:</strong><br><code class="bg-slate-100 text-brand-navy px-1.5 py-0.5 rounded text-xs"><?=htmlspecialchars(site_url('/api/v1'))?></code></p>
             
             <p class="mt-4"><strong>Authentication:</strong><br>Include your API key in the Authorization header of all requests:</p>
             <div class="bg-slate-800 text-green-400 p-3 rounded-lg text-xs font-mono overflow-x-auto mt-2">

@@ -40,9 +40,12 @@ try {
 class BettingService {
     private function api_post(array $prov, string $url, array $data): ?array {
         $headers = ['Content-Type: application/json', 'Accept: application/json'];
-        if (!empty($prov['api_token'])) $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
-        if (!empty($prov['api_key'])) {
-            $pname = strtolower($prov['provider_name'] ?? '');
+        $pname = strtolower($prov['provider_name'] ?? '');
+        if (strpos($pname, 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
+            $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (!empty($prov['api_token'])) {
+            $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
+        } elseif (!empty($prov['api_key'])) {
             if (stripos($pname, 'sagecloud') !== false) {
                 $headers[] = 'publicKey: ' . $prov['api_key'];
             } else {
@@ -111,6 +114,8 @@ class BettingService {
     }
 
     public function process(int $uid, array $input): array {
+      $debit = null; $total = 0;
+      try {
         $plan_id = (int)($input['plan_id'] ?? 0);
         $customerId = sanitize(trim($input['customer_id'] ?? ''), 50);
         $amount = (float)($input['amount'] ?? 0);
@@ -144,11 +149,18 @@ class BettingService {
         if($limit_err) return['success'=>false,'message'=>$limit_err];
 
         if (!claim_purchase_lock($uid, 'betting', [$plan_id, $customerId, $amount])) return ['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
+        $sig = purchase_signature('betting', [$plan_id, $customerId, $amount]);
         $desc = "₦{$amount} {$plan['platform_name']} funding for ID: {$customerId}";
-        $debit = debit_wallet($uid, $total, 'betting', $desc, ['platform' => $plan['platform_name'], 'customer_id' => $customerId, 'charge' => $charge]);
+        $debit = debit_wallet($uid, $total, 'betting', $desc, ['platform' => $plan['platform_name'], 'customer_id' => $customerId, 'charge' => $charge], $sig);
         if (!$debit['success']) return $debit;
 
-        $providers = get_api_providers('betting');
+        // Prefer a plan->provider mapping from the Plan ID Mapping page
+        // (plan_api_bindings) over any provider-name-keyed logic below — same
+        // precedence as data/cabletv purchases. Needed for Reteller, whose
+        // variation_code is an opaque per-account token that can't be derived
+        // from betting_plans.provider_code the way SageCloud's own branch does.
+        $plan_bindings = get_plan_bindings('betting', $plan_id);
+        $providers = array_merge($plan_bindings, get_api_providers('betting'));
         $success = false; $has_pending = false; $last_res = null; $last_prov = null;
         
         // Name validation prior to posting (some APIs need name in payload)
@@ -174,6 +186,15 @@ class BettingService {
                     'name' => $customerName,
                     'amount' => $amount
                 ];
+            } elseif (stripos($pname, 'reteller') !== false) {
+                $vcode = $prov['product_code'] ?? '';
+                if (!$vcode) { $last_res = ['message' => 'No Reteller variation_code mapped for this platform — set it under Plan ID Mapping.']; continue; }
+                $url = rtrim($prov['api_base_url'], '/') . '/purchase';
+                $api_payload = [
+                    'variation_code' => (string)$vcode,
+                    'recipient' => (string)$customerId,
+                    'amount' => $amount,
+                ];
             } else {
                 // Generic fallback structure
                 $url = rtrim($prov['api_base_url'], '/') . '/api/betting/';
@@ -190,7 +211,7 @@ class BettingService {
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
             save_tx_response($debit['ref'], provider_response_text($res));
-            if (update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? ''))) {
+            if (update_tx_status($debit['ref'], 'success', (string)($res['id'] ?? $res['data']['reference'] ?? ''))) {
                 notify_user($uid, 'Betting Funded', "{$plan['platform_name']} account ({$customerId}) funded with ₦{$amount}.", 'success', null, $debit['balance_before'], $debit['balance_after']);
                 $cb = apply_cashback($uid, $amount, 'betting', null);
                 return ['success'=>true, 'message'=>"Betting wallet funded successfully.", 'ref'=>$debit['ref'], 'cashback'=>$cb];
@@ -201,7 +222,7 @@ class BettingService {
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'], $debit['ref']]);
         $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
-            $prov_ref = $last_res['id'] ?? $last_res['data']['transaction']['reference'] ?? $last_res['reference'] ?? '';
+            $prov_ref = $last_res['id'] ?? $last_res['data']['transaction']['reference'] ?? $last_res['data']['reference'] ?? $last_res['reference'] ?? '';
             update_tx_status($debit['ref'], 'pending', $prov_ref);
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid, 'Betting Processing', "Funding for {$plan['platform_name']} ({$customerId}) is processing.", 'info', null, $debit['balance_before'], $debit['balance_after']);
@@ -214,7 +235,10 @@ class BettingService {
         // (betting platforms have no automated status-check integrated here,
         // so this will need cron_refund.php's manual-review escalation or an
         // admin to resolve it via Transaction Details).
-        if (!empty($last_res['_network_error'])) {
+        // A "duplicate reference" reply means the provider already has a
+        // record of this reference from somewhere — outcome unknown, not a
+        // clean decline — treated the same as a network error.
+        if (!empty($last_res['_network_error']) || is_duplicate_reference_response($last_res)) {
             update_tx_status($debit['ref'], 'processing');
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid, 'Betting Processing', "We're confirming your {$plan['platform_name']} funding with the provider. This can take a few minutes.", 'info', null, $debit['balance_before'], $debit['balance_after']);
@@ -227,6 +251,13 @@ class BettingService {
         refund_failed_transaction($debit['ref'], $uid, $total, $err);
         save_tx_response($debit['ref'], $provider_resp ?: $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
+      } catch (\Throwable $e) {
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $total, 'System error');
+        }
+        log_error('betting', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 

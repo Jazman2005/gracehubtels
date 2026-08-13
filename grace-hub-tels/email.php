@@ -13,7 +13,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     if($action === 'test_email'){
         $to = trim($_POST['to'] ?? '');
         if(!$to) json_response(['success'=>false,'message'=>'Recipient email required']);
-        $subject = 'Test Email from Gracehubtels';
+        $subject = 'Test Email from '.setting('site_name','Gracehubtels');
         $body = 'This is a test email to confirm your SMTP configuration is working correctly.';
         $ok = send_email($to, $subject, $body);
         $err = $GLOBALS['_last_email_error'] ?? '';
@@ -40,7 +40,7 @@ function k_secret(string $key):string{return has_permission('manage_messaging')?
 $csrf=admin_csrf();$campaigns=db()->query("SELECT * FROM email_campaigns ORDER BY created_at DESC LIMIT 20")->fetchAll();
 $smtp_encryption = setting('smtp_encryption', 'tls');
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Email Configuration – Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Email Configuration – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style>
 .smtp-guide{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:20px;margin-top:16px;}
 .smtp-guide h4{font-weight:700;font-size:14px;color:var(--navy-dark);margin:0 0 12px 0;}
 .smtp-guide code{background:#E2E8F0;padding:2px 6px;border-radius:4px;font-size:12px;}

@@ -7,7 +7,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $payload = file_get_contents('php://input');
-log_write('webhook_paymentpoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 
 if (empty($payload)) {
     http_response_code(400);
@@ -34,6 +33,11 @@ if (!hash_equals($expected, $signature)) {
     http_response_code(400);
     exit('Invalid signature');
 }
+
+// Only log the raw payload once the signature is verified — logging it
+// unconditionally let anyone spam the log file with arbitrary content via an
+// unauthenticated POST, with no proof it ever came from PaymentPoint.
+log_write('webhook_paymentpoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 
 $data = json_decode($payload, true);
 if (!$data) {

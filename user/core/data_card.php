@@ -19,33 +19,49 @@ class DataCardService {
         $d=$res?json_decode($res,true):($res===false?['_network_error'=>true,'message'=>"cURL Error: ".$err]:null);
         if($d)$d['_http_code']=$code;log_api($prov['provider_name']??'data_card_api','data_card',$data,$d,in_array($code,[200,201]));return $d;}
     public function process(int $uid,array $input): array {
+      $debit = null; $total = 0;
+      try {
         $plan_id=(int)($input['plan_id']??0);$qty=(int)($input['quantity']??1);$pin=(string)($input['pin']??'');
         if($plan_id<1)return['success'=>false,'message'=>'Select a plan'];if($qty<1||$qty>5)return['success'=>false,'message'=>'Quantity 1–5'];if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input'];if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid PIN'];
         $pl=db()->prepare("SELECT * FROM data_plans WHERE id=? AND is_active=1 LIMIT 1");$pl->execute([$plan_id]);$plan=$pl->fetch();if(!$plan)return['success'=>false,'message'=>'Plan not available'];
         $total=(float)$plan['selling_price']*$qty;
         if(!claim_purchase_lock($uid,'data_card',[$plan_id,$qty]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
-        $debit=debit_wallet($uid,$total,'data_card',"{$qty}x {$plan['data_size']} {$plan['network']} data card");if(!$debit['success'])return $debit;
+        $sig=purchase_signature('data_card',[$plan_id,$qty]);
+        $debit=debit_wallet($uid,$total,'data_card',"{$qty}x {$plan['data_size']} {$plan['network']} data card",[],$sig);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('data_card');
         $plan_bindings = get_plan_bindings('data_card', $plan['id']);
         $providers = array_merge($plan_bindings, $providers);
-        $success = false; $has_pending = false; $last_res = null; $last_prov = null;
+        $success = false; $has_pending = false; $last_res = null; $last_prov = null; $attempted = false;
         foreach ($providers as $prov) {
             if (empty($prov['api_key'])) continue;
-            $last_prov = $prov;
             $net_map = build_network_map($prov, 'data_card');
             $nid = $net_map[$plan['network']]??1;
             $pname = strtolower($prov['provider_name'] ?? '');
+            // AutosyncNG and Gladtidings both need a specific per-plan
+            // variation/plan code, which must come from an explicit Plan ID
+            // Mapping entry for this exact plan — data_plans.plan_id is a
+            // vestigial column that's always 0 for every plan created via
+            // the current admin form, so falling back to it used to send a
+            // guaranteed-wrong plan code (0) to any provider with no mapping
+            // configured, which providers correctly reject as an invalid
+            // plan ID. Skip to the next provider instead.
             if (strpos($pname, 'autosyncng') !== false) {
-                $payload = ['product_id' => $nid, 'variation_code' => (string)$plan['plan_id'], 'quantity' => $qty, 'request_ref' => $debit['ref'], 'type' => 'data', 'days' => '30'];
+                if (empty($prov['product_code'])) continue;
+                $last_prov = $prov; $attempted = true;
+                $payload = ['product_id' => $nid, 'variation_code' => (string)$prov['product_code'], 'quantity' => $qty, 'request_ref' => $debit['ref'], 'type' => 'data', 'days' => '30'];
                 if (!empty($prov['api_pin'])) $payload['pin'] = $prov['api_pin'];
             } elseif (strpos($pname, 'gladtidings') !== false) {
                 // Confirmed via Gladtidings' own Postman docs
                 // (GenerateDataCard) — plan/quantity/name_on_card only, no
                 // network field at all.
-                $plan_code = !empty($prov['product_code']) ? $prov['product_code'] : $plan['plan_id'];
-                $payload = ['plan' => $plan_code, 'quantity' => $qty, 'name_on_card' => "DataCard_{$plan['data_size']}_{$plan['network']}"];
+                if (empty($prov['product_code'])) continue;
+                $last_prov = $prov; $attempted = true;
+                $payload = ['plan' => $prov['product_code'], 'quantity' => $qty, 'name_on_card' => "DataCard_{$plan['data_size']}_{$plan['network']}"];
             } else {
+                // No plan-specific code needed here — identified purely by
+                // network + denomination, not a per-plan variation.
+                $last_prov = $prov; $attempted = true;
                 $payload = ['network'=>$nid,'network_amount'=>1,'quantity'=>$qty,'name_on_card'=>"DataCard_{$plan['data_size']}_{$plan['network']}"];
             }
             $res=$this->api_post($prov,$payload);
@@ -58,7 +74,7 @@ class DataCardService {
             $prov = $last_prov; $res = $last_res;
             save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'],'success')) {
-                $raw_pins=$res['data_pin']??$res['data']['pins']??[];$pins=[];foreach($raw_pins as $rp){if(is_array($rp)){$pins[]=['pin'=>$rp['pin']??json_encode($rp),'memo'=>$rp['memo']??''];}else{$pins[]=['pin'=>$rp,'memo'=>''];}}$costTotal=(float)$plan['cost_price']*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO data_cards (user_id,transaction_ref,network,plan_name,quantity,amount,pins,status) VALUES (?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$plan['network'],$plan['plan_name'],$qty,$total,json_encode($pins)]);notify_user($uid,'Data Cards Ready',"{$qty}x {$plan['data_size']} {$plan['network']} data card(s) purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} data card(s) ready",'pins'=>$pins,'ref'=>$debit['ref']];
+                $raw_pins=$res['data_pin']??$res['data']['pins']??[];$pins=[];foreach($raw_pins as $rp){if(is_array($rp)){$pins[]=['pin'=>$rp['pin']??json_encode($rp),'memo'=>$rp['memo']??''];}else{$pins[]=['pin'=>$rp,'memo'=>''];}}$costTotal=(float)$plan['cost_price']*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO data_cards (user_id,transaction_ref,network,plan_name,quantity,amount,pins,status) VALUES (?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$plan['network'],$plan['plan_name'],$qty,$total,json_encode($pins)]);$cb=apply_cashback($uid,$total,'data_card',$plan['network'],(int)$plan['id']);notify_user($uid,'Data Cards Ready',"{$qty}x {$plan['data_size']} {$plan['network']} data card(s) purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} data card(s) ready",'pins'=>$pins,'ref'=>$debit['ref'],'cashback'=>$cb];
             }
             return['success'=>true,'message'=>"{$qty} data card(s) ready",'ref'=>$debit['ref']];
         }
@@ -70,7 +86,10 @@ class DataCardService {
         // actually know whether that provider processed the request — leave
         // it 'processing' for the verification crons instead of refunding
         // blindly.
-        if (!empty($last_res['_network_error'])) {
+        // A "duplicate reference" reply means the provider already has a
+        // record of this reference from somewhere — outcome unknown, not a
+        // clean decline — treated the same as a network error.
+        if (!empty($last_res['_network_error']) || is_duplicate_reference_response($last_res)) {
             update_tx_status($debit['ref'],'processing');
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Data Card Processing',"We're confirming your data card purchase with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
@@ -78,11 +97,19 @@ class DataCardService {
         }
 
         $err='Purchase failed. Wallet reversed.';
-        if(!empty($last_res['message'])) $err=$last_res['message'];
+        if(!$attempted) $err='This plan has not been mapped to any active provider yet. Add its Plan ID under Plan ID Mapping.';
+        elseif(!empty($last_res['message'])) $err=$last_res['message'];
         elseif(!empty($last_res['error'])) $err=is_array($last_res['error'])?json_encode($last_res['error']):$last_res['error'];
         refund_failed_transaction($debit['ref'], $uid, $total, $err);
         save_tx_response($debit['ref'], $provider_resp ?: $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
+      } catch (\Throwable $e) {
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $total, 'System error');
+        }
+        log_error('data_card', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 function process_data_card(int $uid,array $input):array{return(new DataCardService())->process($uid,$input);}

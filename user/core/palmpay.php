@@ -127,12 +127,12 @@ class PalmPayAPI {
     public function create_order(array $user, float $amount, string $order_id, string $notify_url, string $callback_url = ''): ?array {
         if (empty($callback_url)) {
             $base = rtrim(dirname(dirname($_SERVER['SCRIPT_NAME'])), '/');
-            $callback_url = 'https://www.gracehubtels.com' . $base . '/user/dashboard';
+            $callback_url = site_url($base . '/user/dashboard');
         }
         $payload = [
             'orderId'       => $order_id,
             'title'         => 'Wallet Top-up',
-            'description'   => 'Deposit to Gracehubtels wallet',
+            'description'   => 'Deposit to '.setting('site_name','Gracehubtels').' wallet',
             'amount'        => (int)round($amount * 100),
             'currency'      => 'NGN',
             'notifyUrl'     => $notify_url,
@@ -233,7 +233,7 @@ class PalmPayAPI {
         if ($chk->fetch()) return;
 
         $bank_name = $data['bankName'] ?? $data['payerBankName'] ?? 'PalmPay';
-        $raw_name = $data['accountName'] ?? $data['payerAccountName'] ?? $data['customerName'] ?? 'Gracehubtels';
+        $raw_name = $data['accountName'] ?? $data['payerAccountName'] ?? $data['customerName'] ?? setting('site_name','Gracehubtels');
         // Strip palmPay's "(Pay NGN X.XX)" suffix for permanent accounts
         $acct_name = preg_replace('/\s*\(Pay\s+NGN[\d,.]*\)\s*$/i', '', $raw_name);
         $ref = $data['orderNo'] ?? $data['virtualAccountNo'] ?? $acct_no;

@@ -36,7 +36,7 @@ include __DIR__ . '/includes/sidebar.php';
         </a>
         <div>
             <h2 class="text-2xl font-bold text-slate-800">Full API Documentation</h2>
-            <p class="text-slate-500 mt-1">Detailed guide for integrating all Gracehubtels services.</p>
+            <p class="text-slate-500 mt-1">Detailed guide for integrating all <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> services.</p>
         </div>
     </div>
 </div>
@@ -48,7 +48,7 @@ include __DIR__ . '/includes/sidebar.php';
         Authorization: Bearer msj_live_...
     </div>
     <p class="text-slate-600 mb-4">All requests must be made over <strong>HTTPS</strong>. Content-Type for POST requests must be <code>application/json</code>.</p>
-    <p class="text-slate-600 mb-4"><strong>Base URL:</strong> <code>https://gracehubtels.com/api/v1</code></p>
+    <p class="text-slate-600 mb-4"><strong>Base URL:</strong> <code><?=htmlspecialchars(site_url('/api/v1'))?></code></p>
 </div>
 
 <div class="space-y-8">
@@ -424,7 +424,7 @@ include __DIR__ . '/includes/sidebar.php';
         <p class="text-slate-600 mb-4">Send bulk SMS messages.</p>
         <h4 class="font-bold text-slate-700 mb-2">Request Body (JSON)</h4>
         <pre class="bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm overflow-x-auto text-slate-800 mb-4">{
-  "sender_id": "Gracehubtels",
+  "sender_id": "<?=htmlspecialchars(setting('site_name','Gracehubtels'))?>",
   "message": "Hello world",
   "recipients": ["08012345678", "08098765432"]
 }</pre>
@@ -521,7 +521,7 @@ include __DIR__ . '/includes/sidebar.php';
             <span class="bg-green-100 text-green-700 font-bold px-3 py-1 rounded text-sm">POST</span>
             <h3 class="text-lg font-bold text-slate-800">/api/v1/internal_transfer.php</h3>
         </div>
-        <p class="text-slate-600 mb-4">Send money to another Gracehubtels user by username, email, or phone number.</p>
+        <p class="text-slate-600 mb-4">Send money to another <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> user by username, email, or phone number.</p>
         <h4 class="font-bold text-slate-700 mb-2">Request Body (JSON)</h4>
         <pre class="bg-slate-50 border border-slate-200 p-4 rounded-xl text-sm overflow-x-auto text-slate-800 mb-4">{
   "recipient": "username_or_phone_or_email",

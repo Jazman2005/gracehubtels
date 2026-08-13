@@ -4,7 +4,7 @@ auth_user();
 $uid = (int)$_SESSION['user_id'];
 $user = get_user($uid);
 
-$base_url = 'https://www.gracehubtels.com';
+$base_url = rtrim(site_url(), '/');
 $ref_code = $user['referral_code'] ?: $user['phone'];
 $ref_link = $base_url . "/user/signup?ref=" . urlencode($ref_code);
 
@@ -53,7 +53,7 @@ include __DIR__ . '/includes/sidebar.php';
         <div class="relative z-10">
             <div class="flex flex-col md:flex-row gap-6 items-center justify-between">
                 <div>
-                    <h2 class="text-2xl font-bold mb-2">Share the Gracehubtels Experience</h2>
+                    <h2 class="text-2xl font-bold mb-2">Share the <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Experience</h2>
                     <p class="text-blue-100 max-w-md">
                         Earn <span class="font-bold text-white bg-white/20 px-2 py-0.5 rounded">₦<?=number_format($bonus_amt, 2)?></span> for every friend who signs up with your link and funds their wallet.
                     </p>

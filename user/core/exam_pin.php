@@ -53,6 +53,7 @@ class ExamPinService {
             if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input'];
             if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid transaction PIN'];
             if(!claim_purchase_lock($uid,'exam_pin',[$exam,$qty]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
+            $sig=purchase_signature('exam_pin',[$exam,$qty]);
 
             $user=get_user($uid);$ut=$user['user_type']??'subscriber';
             $pr=db()->prepare("SELECT * FROM service_pricing WHERE service='exam_pin' AND plan_name=? AND is_active=1 LIMIT 1");
@@ -64,42 +65,78 @@ class ExamPinService {
             if($ut==='vendor'&&$p['vendor_price']>0)$price=(float)$p['vendor_price'];
             $amount=$price*$qty;
             
-            $debit=debit_wallet($uid,$amount,'exam_pin',"{$qty} {$exam} exam PIN(s)");
+            $debit=debit_wallet($uid,$amount,'exam_pin',"{$qty} {$exam} exam PIN(s)",[],$sig);
             if(!$debit['success'])return $debit;
             
-            // --- NEW LOCAL STOCK LOGIC ---
-            $stock_stmt = db()->prepare("SELECT * FROM exam_pins_stock WHERE exam_type=? AND is_used=0 LIMIT " . (int)$qty);
-            $stock_stmt->execute([$exam]);
-            $local_stock = $stock_stmt->fetchAll(PDO::FETCH_ASSOC);
+            // --- LOCAL STOCK LOGIC ---
+            // Stock rows are claimed atomically under FOR UPDATE inside their
+            // own transaction: the SELECT locks the candidate rows so no other
+            // concurrent purchase (from a different user — claim_purchase_lock()
+            // above only serializes THIS user's requests) can see them, and the
+            // claiming UPDATE additionally requires is_used=0 as a defensive
+            // second guard. Without both of these, two different users buying
+            // the last unit of an exam type's stock concurrently could both be
+            // handed the identical PIN — confirmed exploitable prior to this fix.
+            $stock_claimed = false;
+            $pins_arr = [];
+            db()->beginTransaction();
+            try {
+                $stock_stmt = db()->prepare("SELECT * FROM exam_pins_stock WHERE exam_type=? AND is_used=0 LIMIT " . (int)$qty . " FOR UPDATE");
+                $stock_stmt->execute([$exam]);
+                $local_stock = $stock_stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            if (count($local_stock) === $qty) {
-                $ids = array_column($local_stock, 'id');
-                $placeholders = str_repeat('?,', count($ids) - 1) . '?';
-                
-                $update_stmt = db()->prepare("UPDATE exam_pins_stock SET is_used=1, used_by=?, transaction_ref=?, used_at=NOW() WHERE id IN ($placeholders)");
-                $update_stmt->execute(array_merge([$uid, $debit['ref']], $ids));
+                if (count($local_stock) === $qty) {
+                    $ids = array_column($local_stock, 'id');
+                    $placeholders = str_repeat('?,', count($ids) - 1) . '?';
 
-                $pins_arr = [];
-                foreach ($local_stock as $s) {
-                    $token_str = "PIN: " . $s['pin'];
-                    if (!empty($s['serial']) && strtolower(trim($s['serial'])) !== 'null') {
-                        $token_str .= " | Serial: " . $s['serial'];
+                    $update_stmt = db()->prepare("UPDATE exam_pins_stock SET is_used=1, used_by=?, transaction_ref=?, used_at=NOW() WHERE id IN ($placeholders) AND is_used=0");
+                    $update_stmt->execute(array_merge([$uid, $debit['ref']], $ids));
+
+                    if ($update_stmt->rowCount() === count($ids)) {
+                        foreach ($local_stock as $s) {
+                            $token_str = "PIN: " . $s['pin'];
+                            if (!empty($s['serial']) && strtolower(trim($s['serial'])) !== 'null') {
+                                $token_str .= " | Serial: " . $s['serial'];
+                            }
+                            $pins_arr[] = $token_str;
+                        }
+                        db()->commit();
+                        $stock_claimed = true;
+                    } else {
+                        // Should be structurally unreachable with FOR UPDATE held
+                        // through this whole block — kept as a defensive rollback.
+                        db()->rollBack();
                     }
-                    $pins_arr[] = $token_str;
+                } else {
+                    db()->rollBack();
                 }
-                
+            } catch (\Throwable $e) {
+                if (db()->inTransaction()) db()->rollBack();
+                throw $e;
+            }
+
+            if ($stock_claimed) {
+                // The pins are now irrevocably handed out (is_used=1, committed
+                // above) — the status flip to 'success' must be the very next
+                // statement, before any other write that could throw. If it
+                // isn't, an exception here would reach the outer catch() with
+                // the row still 'pending', and refund_failed_transaction()'s
+                // atomic claim would refund a purchase whose pins were already
+                // delivered — a real double-credit that previously existed here
+                // because this ordering was reversed.
+                update_tx_status($debit['ref'],'success','LOCAL-'.time());
+
                 $meta = json_encode(['token' => $pins_arr[0], 'pins' => $pins_arr]);
                 db()->prepare("UPDATE transactions SET meta=? WHERE transaction_ref=?")->execute([$meta, $debit['ref']]);
-                
+
                 $costTotal=(float)($p['cost_price']??0)*$qty;
                 db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$amount-$costTotal,'Local Stock',$debit['ref']]);
-                
-                update_tx_status($debit['ref'],'success','LOCAL-'.time());
-                
+
                 db()->prepare("INSERT INTO exam_pins (user_id,transaction_ref,exam_name,quantity,amount,pins_data,status) VALUES (?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$exam,$qty,$amount,json_encode($pins_arr)]);
-                
+
+                $cb=apply_cashback($uid,$amount,'exam_pin',null);
                 notify_user($uid,'Exam PINs Ready',"{$qty} {$exam} PIN(s) purchased",'success');
-                return['success'=>true,'message'=>"{$qty} {$exam} PIN(s) purchased",'pins'=>$pins_arr,'ref'=>$debit['ref']];
+                return['success'=>true,'message'=>"{$qty} {$exam} PIN(s) purchased",'pins'=>$pins_arr,'ref'=>$debit['ref'],'cashback'=>$cb];
             }
             // --- END LOCAL STOCK LOGIC ---
             
@@ -126,6 +163,7 @@ class ExamPinService {
 
             if ($success && $last_prov) {
                 $res = $last_res;
+                $cb = 0;
                 save_tx_response($debit['ref'], $provider_resp);
                 // Guard against a duplicate/replayed resolution of this same
                 // ref (e.g. the catch block below firing after this branch
@@ -135,9 +173,10 @@ class ExamPinService {
                 if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
                     db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
                     db()->prepare("INSERT INTO exam_pins (user_id,transaction_ref,exam_name,quantity,amount,pins_data,status) VALUES (?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$exam,$qty,$amount,json_encode($res['pins']??[])]);
+                    $cb=apply_cashback($uid,$amount,'exam_pin',null);
                     notify_user($uid,'✅ Exam PINs Ready',"{$qty} {$exam} PIN(s) purchased.",'success');
                 }
-                return['success'=>true,'message'=>"{$qty} {$exam} PIN(s) purchased",'pins'=>$res['pins']??[],'ref'=>$debit['ref']];
+                return['success'=>true,'message'=>"{$qty} {$exam} PIN(s) purchased",'pins'=>$res['pins']??[],'ref'=>$debit['ref'],'cashback'=>$cb];
             }
 
             if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);

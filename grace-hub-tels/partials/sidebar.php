@@ -15,9 +15,9 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
 <aside class="sidebar" id="sidebar">
   <div class="sidebar-brand">
     <a href="<?= ADMIN_URL ?>/dashboard.php" class="brand-link">
-      <span class="brand-icon">G</span>
+      <span class="brand-icon"><?=htmlspecialchars(strtoupper(substr(setting('site_name','Gracehubtels'),0,1)))?></span>
       <span class="brand-info">
-        <span class="brand-name">Gracehubtels</span>
+        <span class="brand-name"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></span>
         <span class="brand-label">Admin Panel</span>
       </span>
     </a>
@@ -64,7 +64,7 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
     <a href="<?= ADMIN_URL ?>/withdrawals.php" class="nav-item <?=$cur==='withdrawals.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-money-bill-transfer"></i></span>
       <span class="nav-text">Withdrawals</span>
-      <?php if($pending_withdrawals>0):?><span class="nav-badge"><?=$pending_withdrawals?></span><?php endif;?>
+      <?php if(!feature_enabled('bank_transfer')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php elseif($pending_withdrawals>0):?><span class="nav-badge"><?=$pending_withdrawals?></span><?php endif;?>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_deposits')):?>
@@ -82,6 +82,7 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
     <div class="nav-item nav-dropdown" onclick="toggleNavSub(this)">
       <span class="nav-icon"><i class="fas fa-wifi"></i></span>
       <span class="nav-text">Data Plans</span>
+      <?php if(!feature_enabled('data')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?>
       <span class="nav-chevron"><i class="fas fa-chevron-down"></i></span>
     </div>
     <div class="nav-sub<?=($cur==='service-data.php'&&!empty($_GET['network']))?' open':''?>">
@@ -96,28 +97,62 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
     <a href="<?= ADMIN_URL ?>/service-cable.php" class="nav-item <?=$cur==='service-cable.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-tv"></i></span>
       <span class="nav-text">Cable TV</span>
+      <?php if(!feature_enabled('cabletv')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_electricity')):?>
     <a href="<?= ADMIN_URL ?>/service-electricity.php" class="nav-item <?=$cur==='service-electricity.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-bolt"></i></span>
       <span class="nav-text">Electricity</span>
+      <?php if(!feature_enabled('electricity')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
     <a href="<?= ADMIN_URL ?>/service-betting.php" class="nav-item <?=$cur==='service-betting.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-futbol"></i></span>
       <span class="nav-text">Betting</span>
+      <?php if(!feature_enabled('betting')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php if(_has_perm('manage_pricing')):?>
-    <a href="<?= ADMIN_URL ?>/service-pricing.php" class="nav-item <?=$cur==='service-pricing.php'?'active':''?>">
+    <a href="<?= ADMIN_URL ?>/service-esim.php" class="nav-item <?=$cur==='service-esim.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-sim-card"></i></span>
+      <span class="nav-text">eSIM</span>
+      <?php if(!feature_enabled('esim')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
+    </a>
+    <a href="<?= ADMIN_URL ?>/service-international-airtime.php" class="nav-item <?=$cur==='service-international-airtime.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-earth-americas"></i></span>
+      <span class="nav-text">Intl. Airtime</span>
+      <?php if(!feature_enabled('international_airtime')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
+    </a>
+    <a href="<?= ADMIN_URL ?>/service-giftcard-buy.php" class="nav-item <?=$cur==='service-giftcard-buy.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-gift"></i></span>
+      <span class="nav-text">Gift Cards (Buy)</span>
+      <?php if(!feature_enabled('giftcard_buy')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
+    </a>
+    <a href="<?= ADMIN_URL ?>/service-giftcard-sell.php" class="nav-item <?=$cur==='service-giftcard-sell.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-money-bill-transfer"></i></span>
+      <span class="nav-text">Gift Cards (Sell)</span>
+      <?php if(!feature_enabled('giftcard_sell')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
+    </a>
+    <?php endif;?>
+    <?php if(_has_perm('manage_pricing')):?>
+    <a href="<?= ADMIN_URL ?>/service-pricing.php<?=$pending_a2c>0?'#a2c-requests':''?>" class="nav-item <?=$cur==='service-pricing.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-tags"></i></span>
       <span class="nav-text">Pricing &amp; Margins</span>
+      <?php if($pending_a2c>0):?><span class="nav-badge" title="<?=$pending_a2c?> airtime-to-cash request(s) awaiting review"><?=$pending_a2c?></span><?php endif;?>
+    </a>
+    <?php endif;?>
+    <?php if(_has_perm('manage_cashback')):?>
+    <a href="<?= ADMIN_URL ?>/cashback.php" class="nav-item <?=$cur==='cashback.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-coins"></i></span>
+      <span class="nav-text">Cashback</span>
+      <?php if(!feature_enabled('admin_cashback')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_cards')):?>
     <a href="<?= ADMIN_URL ?>/virtual-cards.php" class="nav-item <?=$cur==='virtual-cards.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-credit-card"></i></span>
       <span class="nav-text">Virtual Cards</span>
+      <?php if(!feature_enabled('virtual_card')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_pricing')):?>
@@ -127,18 +162,22 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
       <span class="nav-chevron"><i class="fas fa-chevron-down"></i></span>
     </div>
     <div class="nav-sub<?=($cur==='service-pin-products.php'||$cur==='exam-pins-stock.php')?' open':''?>">
-      <a href="<?= ADMIN_URL ?>/service-pin-products.php" class="nav-sub-item <?=($cur==='service-pin-products.php'&&(!isset($_GET['tab'])||$_GET['tab']==='recharge'))?'active':''?>">Recharge Cards</a>
-      <a href="<?= ADMIN_URL ?>/service-pin-products.php?tab=data_card" class="nav-sub-item <?=($cur==='service-pin-products.php'&&isset($_GET['tab'])&&$_GET['tab']==='data_card')?'active':''?>">Data Cards</a>
-      <a href="<?= ADMIN_URL ?>/service-pin-products.php?tab=exam_pin" class="nav-sub-item <?=($cur==='service-pin-products.php'&&isset($_GET['tab'])&&$_GET['tab']==='exam_pin')?'active':''?>">Exam PINs History</a>
-      <a href="<?= ADMIN_URL ?>/exam-pins-stock.php" class="nav-sub-item <?=($cur==='exam-pins-stock.php'&&empty($_GET['exam']))?'active':''?>">Local Exam Stock (All)</a>
+      <a href="<?= ADMIN_URL ?>/service-pin-products.php" class="nav-sub-item <?=($cur==='service-pin-products.php'&&(!isset($_GET['tab'])||$_GET['tab']==='recharge'))?'active':''?>">Recharge Cards<?php if(!feature_enabled('recharge_card')):?> <span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?></a>
+      <a href="<?= ADMIN_URL ?>/service-pin-products.php?tab=data_card" class="nav-sub-item <?=($cur==='service-pin-products.php'&&isset($_GET['tab'])&&$_GET['tab']==='data_card')?'active':''?>">Data Cards<?php if(!feature_enabled('data_card')):?> <span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?></a>
+      <a href="<?= ADMIN_URL ?>/service-pin-products.php?tab=exam_pin" class="nav-sub-item <?=($cur==='service-pin-products.php'&&isset($_GET['tab'])&&$_GET['tab']==='exam_pin')?'active':''?>">Exam PINs History<?php if(!feature_enabled('exam_pin')):?> <span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?></a>
+      <a href="<?= ADMIN_URL ?>/exam-pins-stock.php" class="nav-sub-item <?=($cur==='exam-pins-stock.php'&&empty($_GET['exam']))?'active':''?>">Local Exam Stock (All)<?php if(!feature_enabled('exam_pin')):?> <span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?></a>
       <a href="<?= ADMIN_URL ?>/exam-pins-stock.php?exam=WAEC" class="nav-sub-item <?=($cur==='exam-pins-stock.php'&&($_GET['exam']??'')==='WAEC')?'active':''?>">- WAEC Stock</a>
       <a href="<?= ADMIN_URL ?>/exam-pins-stock.php?exam=NECO" class="nav-sub-item <?=($cur==='exam-pins-stock.php'&&($_GET['exam']??'')==='NECO')?'active':''?>">- NECO Stock</a>
       <a href="<?= ADMIN_URL ?>/exam-pins-stock.php?exam=NABTEB" class="nav-sub-item <?=($cur==='exam-pins-stock.php'&&($_GET['exam']??'')==='NABTEB')?'active':''?>">- NABTEB Stock</a>
-      <a href="<?= ADMIN_URL ?>/service-pin-products.php?tab=bulk_sms" class="nav-sub-item <?=($cur==='service-pin-products.php'&&isset($_GET['tab'])&&$_GET['tab']==='bulk_sms')?'active':''?>">Bulk SMS</a>
+      <a href="<?= ADMIN_URL ?>/service-pin-products.php?tab=bulk_sms" class="nav-sub-item <?=($cur==='service-pin-products.php'&&isset($_GET['tab'])&&$_GET['tab']==='bulk_sms')?'active':''?>">Bulk SMS<?php if(!feature_enabled('bulk_sms')):?> <span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?></a>
+      <?php if(_has_perm('manage_messaging')):?>
+      <a href="<?= ADMIN_URL ?>/bulk-sms-history.php" class="nav-sub-item <?=$cur==='bulk-sms-history.php'?'active':''?>">- SMS Send History</a>
+      <?php endif;?>
     </div>
     <a href="<?= ADMIN_URL ?>/service-recharge-cards.php" class="nav-item <?=$cur==='service-recharge-cards.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-credit-card"></i></span>
       <span class="nav-text">Recharge Cards</span>
+      <?php if(!feature_enabled('recharge_card')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
 
@@ -174,7 +213,8 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
       <span class="nav-text">Messaging</span>
       <span class="nav-chevron"><i class="fas fa-chevron-down"></i></span>
     </div>
-    <div class="nav-sub<?=($cur==='notifications.php'||$cur==='marketing.php'||$cur==='tickets.php')?' open':''?>">
+    <div class="nav-sub<?=($cur==='notifications.php'||$cur==='marketing.php'||$cur==='tickets.php'||$cur==='messaging-hub.php')?' open':''?>">
+      <a href="<?= ADMIN_URL ?>/messaging-hub.php" class="nav-sub-item <?=$cur==='messaging-hub.php'?'active':''?>">Broadcast (Push/Email/SMS/WhatsApp)<?php if(!feature_enabled('admin_messaging_hub')):?> <span class="badge badge-warning" style="font-size:9px;padding:1px 6px;">Premium</span><?php endif;?></a>
       <a href="<?= ADMIN_URL ?>/notifications.php" class="nav-sub-item <?=$cur==='notifications.php'?'active':''?>">Dashboard Announcements</a>
       <a href="<?= ADMIN_URL ?>/marketing.php" class="nav-sub-item <?=$cur==='marketing.php'?'active':''?>">Send Emails</a>
       <a href="<?= ADMIN_URL ?>/tickets.php" class="nav-sub-item <?=$cur==='tickets.php'?'active':''?>">Site Messages</a>
@@ -192,6 +232,7 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
     <a href="<?= ADMIN_URL ?>/promo-codes.php" class="nav-item <?=$cur==='promo-codes.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-ticket"></i></span>
       <span class="nav-text">Promo Codes</span>
+      <?php if(!feature_enabled('admin_promo_codes')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
 
@@ -225,11 +266,26 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
       <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
       <span class="nav-text">Profit Analysis</span>
     </a>
+    <a href="<?= ADMIN_URL ?>/accounting.php" class="nav-item <?=$cur==='accounting.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-scale-balanced"></i></span>
+      <span class="nav-text">Accounting</span>
+      <?php if(!feature_enabled('admin_accounting')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
+    </a>
     <?php endif;?>
     <?php if(_has_perm('view_apilogs')):?>
     <a href="<?= ADMIN_URL ?>/api-logs.php" class="nav-item <?=$cur==='api-logs.php'?'active':''?>">
       <span class="nav-icon"><i class="fas fa-bug"></i></span>
       <span class="nav-text">API Logs &amp; Errors</span>
+    </a>
+    <a href="<?= ADMIN_URL ?>/webhook-logs.php" class="nav-item <?=$cur==='webhook-logs.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-satellite-dish"></i></span>
+      <span class="nav-text">Webhook Logs</span>
+      <?php if(!feature_enabled('admin_webhook_logs')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
+    </a>
+    <a href="<?= ADMIN_URL ?>/provider-health.php" class="nav-item <?=$cur==='provider-health.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-heart-pulse"></i></span>
+      <span class="nav-text">System Health</span>
+      <?php if(!feature_enabled('admin_provider_health')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php endif;?>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_settings')):?>

@@ -192,10 +192,10 @@ function create_cashwyre_customer_if_needed(int $user_id): ?string {
     if (!$user) return null;
 
     $cw = new CashwyreAPI();
-    $parts = explode(' ', $user['full_name'] ?? 'User Gracehubtels');
+    $parts = explode(' ', $user['full_name'] ?? ('User '.setting('site_name','Gracehubtels')));
     $firstName = $parts[0] ?? 'User';
-    $lastName = count($parts) > 1 ? trim(substr($user['full_name'], strlen($firstName))) : 'Gracehubtels';
-    $email = $user['email'] ?? ($user['phone'] . '@gracehubtels.com');
+    $lastName = count($parts) > 1 ? trim(substr($user['full_name'], strlen($firstName))) : setting('site_name','Gracehubtels');
+    $email = $user['email'] ?? ($user['phone'] . '@'.site_domain());
 
     $r = $cw->create_customer($firstName, $lastName, $email, $user['phone']);
     if (!$r['success']) return null;
@@ -208,6 +208,8 @@ function create_cashwyre_customer_if_needed(int $user_id): ?string {
 }
 
 function process_create_virtual_card(int $user_id, array $post): array {
+  $debit = null; $total = 0;
+  try {
     if (detect_tamper($post)) return ['success' => false, 'message' => 'Invalid input detected'];
     $user = get_user($user_id);
     if (!$user) return ['success' => false, 'message' => 'User not found'];
@@ -215,6 +217,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
     $pin = $post['pin'] ?? '';
     if (!verify_pin($user_id, $pin)) return ['success' => false, 'message' => 'Incorrect transaction PIN'];
     if (!claim_purchase_lock($user_id, 'virtual_card_create', [$post['topup'] ?? 0])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
+    $sig = purchase_signature('virtual_card_create', [$post['topup'] ?? 0]);
 
     $existing = db()->prepare("SELECT COUNT(*) FROM virtual_cards WHERE user_id=? AND status!='terminated'");
     $existing->execute([$user_id]);
@@ -241,7 +244,7 @@ function process_create_virtual_card(int $user_id, array $post): array {
         return ['success' => false, 'message' => $msg];
     }
 
-    $debit = debit_wallet($user_id, $total, 'virtual_card', 'Virtual card creation: $' . number_format($setupUsd, 2) . ' setup' . ($topupUsd > 0 ? ' + $' . number_format($topupUsd, 2) . ' topup' : '') . ' @ ₦' . number_format($rate, 2) . '/$');
+    $debit = debit_wallet($user_id, $total, 'virtual_card', 'Virtual card creation: $' . number_format($setupUsd, 2) . ' setup' . ($topupUsd > 0 ? ' + $' . number_format($topupUsd, 2) . ' topup' : '') . ' @ ₦' . number_format($rate, 2) . '/$', [], $sig);
     if (!$debit['success']) return $debit;
 
     $cw = new CashwyreAPI();
@@ -253,8 +256,8 @@ function process_create_virtual_card(int $user_id, array $post): array {
 
     $parts = explode(' ', $user['full_name'] ?? 'User');
     $firstName = $parts[0] ?? 'User';
-    $lastName = count($parts) > 1 ? trim(substr($user['full_name'], strlen($firstName))) : 'Gracehubtels';
-    $email = $user['email'] ?? ($user['phone'] . '@gracehubtels.com');
+    $lastName = count($parts) > 1 ? trim(substr($user['full_name'], strlen($firstName))) : setting('site_name','Gracehubtels');
+    $email = $user['email'] ?? ($user['phone'] . '@'.site_domain());
 
     $result = $cw->create_card([
         'firstName' => $firstName,
@@ -272,6 +275,29 @@ function process_create_virtual_card(int $user_id, array $post): array {
     ]);
 
     if (!$result['success']) {
+        $isOffline = stripos($result['message'] ?? '', 'connection error') !== false
+                  || stripos($result['message'] ?? '', 'service unavailable') !== false
+                  || stripos($result['message'] ?? '', 'timed out') !== false
+                  || empty($result['message']);
+        if ($isOffline) {
+            // Network-level uncertainty talking to Cashwyre — we do NOT know
+            // whether the card was actually created (and the fee charged) on
+            // their side. Unlike the fund/withdraw branches, a card created
+            // here has no local card_id recorded yet, so there's nothing this
+            // request alone can poll to resolve itself — mirrors the fund
+            // branch's "never refund on an unconfirmed outcome" rule (a prior,
+            // now-fixed bug there let an unconfirmed timeout be silently
+            // treated as success/refunded, a real free-money vector), but here
+            // it also needs a human to check Cashwyre's dashboard directly for
+            // an orphaned card, since there's no automated card-creation
+            // status-check the way query_provider_status() covers VTU categories.
+            save_tx_response($debit['ref'], 'Uncertain outcome after create_card() (network error) — manual verification required.');
+            update_tx_status($debit['ref'], 'processing');
+            log_error('api_cashwyre', 'CARD_CREATE_OUTCOME_UNKNOWN', ['user_id' => $user_id, 'ref' => $debit['ref']]);
+            notify_admin('Virtual Card Creation Outcome Unknown', "User #$user_id's card creation timed out — check Cashwyre's dashboard for an orphaned card before this transaction (ref: {$debit['ref']}) is resolved. Do not refund until confirmed the card was not created.");
+            notify_user($user_id, 'Card Creation Under Review', 'We could not confirm your card creation due to a network issue. Your request is being verified and will be resolved shortly — you have not been charged twice.', 'info');
+            return ['success' => true, 'message' => 'Your card creation is being verified due to a network issue. This can take a few minutes — check back shortly.', 'ref' => $debit['ref'], 'processing' => true];
+        }
         refund_failed_transaction($debit['ref'], $user_id, $total, $result['message'] ?? 'Failed to create virtual card.');
         save_tx_response($debit['ref'], provider_response_text($result));
         log_error('api_cashwyre', 'CARD_CREATE_FAILED', ['user_id' => $user_id, 'error' => $result['message'] ?? '']);
@@ -341,19 +367,36 @@ function process_create_virtual_card(int $user_id, array $post): array {
     }
 
     if (!$card_id) {
-        refund_failed_transaction($debit['ref'], $user_id, $total, 'Could not retrieve card code.');
-        save_tx_response($debit['ref'], provider_response_text($result));
-        return ['success' => false, 'message' => 'Could not retrieve card code. You have been refunded.'];
+        // Cashwyre already confirmed create_card() succeeded ($result['success']
+        // was true above) — a real card and fee almost certainly exist on their
+        // side, we've just failed to resolve its card_id via get_cards()/
+        // get_card(). Refunding here would be a confirmed double-payout (the
+        // card exists AND the user gets their money back), not an ambiguous
+        // case — so this must never refund, only escalate for manual lookup.
+        save_tx_response($debit['ref'], 'Card created but card_id could not be retrieved — manual verification required. ' . provider_response_text($result));
+        update_tx_status($debit['ref'], 'processing');
+        log_error('api_cashwyre', 'CARD_CREATE_ID_LOOKUP_FAILED', ['user_id' => $user_id, 'ref' => $debit['ref'], 'create_resp' => $data]);
+        notify_admin('Virtual Card Created But Untracked', "User #$user_id's card was created by Cashwyre but its card_id could not be retrieved locally — find it on Cashwyre's dashboard and reconcile manually (ref: {$debit['ref']}). Do not refund; the card and fee are real.");
+        notify_user($user_id, 'Card Creation Under Review', 'Your card was created but we could not retrieve its details. Our team has been notified and will resolve this shortly.', 'info');
+        return ['success' => true, 'message' => 'Your card was created but details could not be retrieved. This is being resolved — check back shortly.', 'ref' => $debit['ref'], 'processing' => true];
     }
 
     if (!$card_number) {
         log_error('api_cashwyre', 'CARD_DETAILS_MISSING', ['card_id' => $card_id, 'create_resp' => $data, 'getcards_resp' => $cardsList ?? []]);
     }
 
+    // Cashwyre already confirmed the card was created (and the fee real) —
+    // the status flip must be the very next statement, before the local
+    // INSERT below or anything else that could throw. If the INSERT throws
+    // (duplicate card_id, DB blip, etc.) with the row already 'success',
+    // an exception-safety catch further up (which otherwise defensively
+    // refunds any exception on a still-'pending' debit) correctly no-ops
+    // instead of refunding a card that genuinely exists — the same class of
+    // live bug already found and fixed in exam_pin.php's stock-claim flow.
+    update_tx_status($debit['ref'], 'success');
     db()->prepare("INSERT INTO virtual_cards (user_id, card_id, masked_number, card_number, expiry, cvv, brand, balance, status, raw_response) VALUES (?,?,?,?,?,?,?,?,'active',?)")
         ->execute([$user_id, $card_id, $masked, $card_number, $expiry, $cvv, $brand, $topupUsd, json_encode($data)]);
 
-    update_tx_status($debit['ref'], 'success');
     save_tx_response($debit['ref'], provider_response_text($result));
     $baseRate = get_live_ngn_rate();
     if ($baseRate <= 0) $baseRate = $rate;
@@ -364,6 +407,19 @@ function process_create_virtual_card(int $user_id, array $post): array {
     notify_user($user_id, 'Virtual Card Created', 'Your virtual card is ready to use!' . ($topupUsd > 0 ? " \$$topupUsd has been added to your card." : ''), 'success', null, $debit['balance_before'], $debit['balance_after']);
 
     return ['success' => true, 'message' => 'Virtual card created successfully!' . ($topupUsd > 0 ? " \$$topupUsd topup added." : ''), 'card' => ['card_id' => $card_id, 'masked_number' => $masked], 'ref' => $debit['ref']];
+  } catch (\Throwable $e) {
+    // refund_failed_transaction() atomically claims the transaction (WHERE
+    // status IN ('pending','processing')) before crediting anything — every
+    // branch above that confirms Cashwyre actually created the card flips
+    // status to 'success'/'processing' before any statement that could
+    // throw (see the reordering above), so this only ever refunds a
+    // genuinely still-pending debit, never a card that's real.
+    if ($debit !== null && ($debit['success'] ?? false)) {
+        refund_failed_transaction($debit['ref'], $user_id, $total, 'System error');
+    }
+    log_error('virtual_card', 'Card creation exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'user_id' => $user_id]);
+    return ['success' => false, 'message' => 'Card creation failed. Please try again.'];
+  }
 }
 
 function get_user_virtual_cards(int $user_id): array {
@@ -446,11 +502,40 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
             return ['success' => false, 'message' => 'Could not process withdrawal. Please try again.'];
         }
 
+        // Generated once the local balance claim above commits, and reused
+        // as the credit_wallet() idempotency key below — closes the gap
+        // where this call site previously had no idempotency protection at
+        // all (unlike the funding webhooks). Withdraw has no debit_wallet()
+        // ref of its own to anchor to (money moves off the card's own
+        // balance ledger, not the wallet, until the confirmed-success credit
+        // below), so a dedicated reference is generated here instead.
+        $withdraw_ref = generate_ref('VCW');
+
         $r = $cw->withdraw_card($card_id, $usd_amount, 'Withdrawal by user');
         if (!$r['success']) {
-            // Provider declined/failed outright (not a network timeout — see
-            // the 'fund' branch below for how that uncertain case is handled
-            // differently) — release the local claim back onto the card.
+            $isOffline = stripos($r['message'] ?? '', 'connection error') !== false
+                      || stripos($r['message'] ?? '', 'service unavailable') !== false
+                      || stripos($r['message'] ?? '', 'timed out') !== false
+                      || empty($r['message']);
+            if ($isOffline) {
+                // Network-level uncertainty — we do NOT know whether Cashwyre
+                // actually processed the withdrawal. Unlike a confirmed
+                // decline, releasing the locally-claimed balance back here
+                // would risk a local-ledger-vs-real-balance desync in the
+                // user's favor if the withdrawal actually went through
+                // (local balance goes back up while the real Cashwyre balance
+                // stayed down). There's no existing 'pending' transaction row
+                // to flip the way the fund branch has (this branch only
+                // creates a transactions row via credit_wallet() after a
+                // CONFIRMED success, below) — so the conservative default is
+                // to leave the already-decremented local balance as-is and
+                // escalate for manual verification rather than guess.
+                log_error('api_cashwyre', 'WITHDRAW_OUTCOME_UNKNOWN', ['user_id' => $user_id, 'card_id' => $card_id, 'usd_amount' => $usd_amount]);
+                notify_admin('Virtual Card Withdrawal Outcome Unknown', "User #$user_id's withdrawal of \$$usd_amount from card $card_id timed out — check Cashwyre's dashboard to confirm whether it processed before crediting or releasing anything manually.");
+                return ['success' => false, 'message' => 'Your withdrawal is being verified due to a network issue — do not retry. Contact support with card ref: ' . $card_id . ' if not resolved shortly.'];
+            }
+            // Provider declined/failed outright (confirmed, not ambiguous) —
+            // release the local claim back onto the card.
             db()->prepare("UPDATE virtual_cards SET balance = balance + ? WHERE card_id=?")->execute([$usd_amount, $card_id]);
             return ['success' => false, 'message' => $r['message'] ?? 'Withdrawal from card failed'];
         }
@@ -458,7 +543,7 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
         $rate = get_exchange_rate();
         $ngn_amount = $usd_amount * $rate;
 
-        $credit = credit_wallet($user_id, $ngn_amount, 'virtual_card', 'Withdraw $' . number_format($usd_amount, 2) . ' from virtual card ' . substr($card_id, -6));
+        $credit = credit_wallet($user_id, $ngn_amount, 'virtual_card', 'Withdraw $' . number_format($usd_amount, 2) . ' from virtual card ' . substr($card_id, -6), [], 'vc_withdraw:' . $withdraw_ref);
         if (!$credit['success']) {
             // The provider-side withdrawal already happened — the real money
             // left the card at Cashwyre. Re-adding it to our local balance
@@ -483,6 +568,7 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
         $usd_amount = (float)($post['amount'] ?? 0);
         if ($usd_amount < 5) return ['success' => false, 'message' => 'Minimum funding is $5'];
         if (!claim_purchase_lock($user_id, 'virtual_card_fund', [$card_id, $usd_amount])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
+        $sig = purchase_signature('virtual_card_fund', [$card_id, $usd_amount]);
 
         $rate = get_exchange_rate();
         $ngn_amount = $usd_amount * $rate;
@@ -494,7 +580,7 @@ function process_card_action(int $user_id, string $action, string $card_id, arra
         
         $desc = 'Fund virtual card ' . substr($card_id, -6) . ' with $' . $usd_amount;
         if ($funding_fee > 0) $desc .= ' (+ ₦' . number_format($funding_fee, 2) . ' fee)';
-        $debit = debit_wallet($user_id, $total_ngn, 'virtual_card', $desc);
+        $debit = debit_wallet($user_id, $total_ngn, 'virtual_card', $desc, [], $sig);
         if (!$debit['success']) return $debit;
         
         $r = $cw->fund_card($card_id, $usd_amount);

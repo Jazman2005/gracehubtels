@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/airtime.php';
 require_once __DIR__.'/core/beneficiaries.php';
 auth_user();
+require_feature_user('airtime');
 $uid=(int)$_SESSION['user_id'];$user=get_user($uid);
 if($_SERVER['REQUEST_METHOD']==='POST'&&is_ajax()){
     if(!verify_csrf($_POST['csrf_token']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);

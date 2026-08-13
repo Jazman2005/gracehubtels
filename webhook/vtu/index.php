@@ -155,14 +155,58 @@ if ($is_success) {
 }
 
 if ($is_failed) {
-    $claimed = update_tx_status($ref, 'failed');
-    if ($claimed) {
-        if ($msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$msg, $ref]);
-        $uid = (int)$tx_row['user_id'];
-        $charge = (float)($tx_row['charge'] ?? 0);
-        $amount_to_refund = (float)$tx_row['amount'] + $charge;
-        $cat = $tx_row['category'];
-        credit_wallet($uid, $amount_to_refund, $cat, ucwords(str_replace('_', ' ', $cat)) . ' reversal - ' . ($msg ?: 'Provider declined'), [], 'vtu_refund:' . $ref);
+    // The status-claim and the refund credit must land in the same DB
+    // transaction — if the process died between two separate autocommitting
+    // statements here (as this used to be), the row could be left
+    // permanently 'failed' with no refund ever issued and no cron would ever
+    // pick it back up (both refund-sweep crons only scan pending/processing
+    // rows). Uses a raw claim UPDATE rather than update_tx_status() because
+    // that function's own 'failed' transition has a side effect (a
+    // send_whatsapp_alert() HTTP call) that must not run inside an open
+    // transaction — side effects fire after commit instead, below.
+    $uid = (int)$tx_row['user_id'];
+    $charge = (float)($tx_row['charge'] ?? 0);
+    $amount_to_refund = (float)$tx_row['amount'] + $charge;
+    $cat = $tx_row['category'];
+    $credit = null;
+    db()->beginTransaction();
+    try {
+        $claim = db()->prepare("UPDATE transactions SET status='failed', updated_at=NOW() WHERE transaction_ref=? AND status IN ('pending','processing')");
+        $claim->execute([$ref]);
+        if ($claim->rowCount() === 0) {
+            db()->rollBack();
+        } else {
+            if ($msg) db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")->execute([$msg, $ref]);
+            $credit = credit_wallet($uid, $amount_to_refund, $cat, ucwords(str_replace('_', ' ', $cat)) . ' reversal - ' . ($msg ?: 'Provider declined'), [], 'vtu_refund:' . $ref);
+            if (!$credit['success']) {
+                db()->rollBack();
+                log_error('webhook_vtu', 'Refund credit failed mid-transaction — rolled back, row remains pending/processing for retry', ['ref' => $ref]);
+            } else {
+                db()->commit();
+            }
+        }
+    } catch (\Throwable $e) {
+        if (db()->inTransaction()) db()->rollBack();
+        log_error('webhook_vtu', 'Failed-branch transaction error: ' . $e->getMessage(), ['ref' => $ref]);
+    }
+    if (!empty($credit['success'])) {
+        // update_tx_status() normally fires this WhatsApp alert as a side
+        // effect of its own 'failed' transition; since this branch claims
+        // status via a raw UPDATE instead (to keep the HTTP call out of the
+        // open transaction above), fire the equivalent alert here, after commit.
+        try {
+            $u = db()->prepare("SELECT full_name, email, phone FROM users WHERE id=? LIMIT 1");
+            $u->execute([$uid]);
+            $ud = $u->fetch();
+            send_whatsapp_alert("⚠️ *Transaction Failed!*\n"
+                . "Ref: {$ref}\n"
+                . "User: " . htmlspecialchars($ud['full_name'] ?? 'Unknown') . " (" . htmlspecialchars($ud['email'] ?? $ud['phone'] ?? '') . ")\n"
+                . "Amount: ₦" . number_format($amount_to_refund, 2) . "\n"
+                . "Category: {$cat}\n"
+                . "Time: " . date('d M Y, H:i:s'));
+        } catch (\Throwable $e) {
+            log_error('whatsapp', 'Failed to send tx failure alert: ' . $e->getMessage());
+        }
         notify_user($uid, ucwords(str_replace('_', ' ', $cat)) . ' Failed', $msg ?: "Your $cat transaction was not completed. Wallet refunded.", 'error', null, $tx_row['balance_before'], $tx_row['balance_after']);
     }
     db()->prepare("UPDATE webhook_logs SET processed=1 WHERE id=?")->execute([$log_id]);

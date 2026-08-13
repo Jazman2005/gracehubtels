@@ -4,6 +4,7 @@ require_once __DIR__ . '/auth.php';
 require_once dirname(__DIR__, 2) . '/user/core/airtime_to_cash.php';
 
 $user = api_auth();
+require_feature_api('airtime_to_cash');
 
 // GET — return rates, receiving numbers, autosyncng networks, and settings
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -16,12 +17,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $svc = new AirtimeToCashService();
     $nets = ['MTN','GLO','AIRTEL','9MOBILE'];
     $receiving_numbers = [];
+    // A blank network on this row means "all networks" (same catch-all
+    // convention every other service's provider lookup uses) — matching only
+    // an exact network name here used to report zero automated networks even
+    // when a catch-all AutosyncNG row was actively serving all four.
     $auto_nets = db()->prepare("SELECT network FROM api_providers WHERE service='airtime_to_cash' AND is_active=1");$auto_nets->execute();
-    $autosyncng_nets = [];$an=[];while($ar=$auto_nets->fetch()){$an[$ar['network']]=true;}
+    $autosyncng_nets = [];$an=[];$has_catchall=false;
+    while($ar=$auto_nets->fetch()){if($ar['network']==='')$has_catchall=true;else $an[$ar['network']]=true;}
     foreach ($nets as $n) {
         $num = $svc->get_our_number($n);
         if ($num) $receiving_numbers[$n] = $num;
-        if (!empty($an[$n])) $autosyncng_nets[] = $n;
+        if ($has_catchall || !empty($an[$n])) $autosyncng_nets[] = $n;
     }
     echo json_encode([
         'success' => true,

@@ -12,7 +12,9 @@ class CableTVService {
     }
     private function api_post(array $prov, string $url, array $data): ?array {
         $headers = ['Content-Type: application/json'];
-        if (!empty($prov['api_key'])) {
+        if (strpos(strtolower($prov['provider_name'] ?? ''), 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
+            $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (!empty($prov['api_key'])) {
             $headers[] = (strpos(strtolower($prov['provider_name'] ?? ''), 'autopilot') !== false) ? 'Authorization: Bearer ' . $prov['api_key'] : 'Authorization: Token ' . $prov['api_key'];
         } elseif (!empty($prov['api_token'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
@@ -72,6 +74,8 @@ class CableTVService {
         return['success'=>false,'message'=>$res['message']??$res['error']??'Invalid smartcard number'];
     }
     public function process(int $uid,array $input): array {
+      $debit = null; $price = 0;
+      try {
         $plan_id=(int)($input['plan_id']??0);$sc=preg_replace('/\D/','',$input['smartcard']??'');$pin=(string)($input['pin']??'');
         if($plan_id<1)return['success'=>false,'message'=>'Select a plan'];if(strlen($sc)<5)return['success'=>false,'message'=>'Invalid smartcard'];if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input'];if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid PIN'];
         $pl=db()->prepare("SELECT * FROM cable_plans WHERE id=? AND is_active=1 LIMIT 1");$pl->execute([$plan_id]);$plan=$pl->fetch();if(!$plan)return['success'=>false,'message'=>'Plan not available'];
@@ -82,7 +86,8 @@ class CableTVService {
         $limit_err = check_daily_limit($uid, $price, 'cabletv');
         if($limit_err) return['success'=>false,'message'=>$limit_err];
         if(!claim_purchase_lock($uid,'cabletv',[$plan_id,$sc]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
-        $debit=debit_wallet($uid,$price,'cabletv',"{$plan['plan_name']} for {$sc}",['plan_id'=>$plan_id,'provider'=>$plan['provider'],'smartcard'=>$sc]);if(!$debit['success'])return $debit;
+        $sig=purchase_signature('cabletv',[$plan_id,$sc]);
+        $debit=debit_wallet($uid,$price,'cabletv',"{$plan['plan_name']} for {$sc}",['plan_id'=>$plan_id,'provider'=>$plan['provider'],'smartcard'=>$sc],$sig);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('cabletv');
         $plan_bindings = get_plan_bindings('cabletv', $plan['id']);
@@ -123,8 +128,17 @@ class CableTVService {
             } elseif (stripos($prov['provider_name'] ?? '', 'telecomabode') !== false) {
                 $url=rtrim($prov['api_base_url'],'/').'/api/cable/';
                 $api_payload = ['cable' => (string)$plan['cable_id'], 'cable_plan' => (string)$plan['plan_id'], 'iuc' => $sc, 'ref' => $debit['ref']];
+            } elseif (stripos($prov['provider_name'] ?? '', 'reteller') !== false) {
+                // $prov['product_code'] (the plan_api_bindings value, merged in
+                // ahead of get_api_providers() above) takes precedence over the
+                // plan's own legacy product_code column, same precedence data.php
+                // already uses.
+                $vcode = $prov['product_code'] ?? $plan['product_code'] ?? '';
+                if (!$vcode) { $last_res = ['message' => 'No Reteller variation_code mapped for this plan — set it under Plan ID Mapping.']; continue; }
+                $url = rtrim($prov['api_base_url'], '/') . '/purchase';
+                $api_payload = ['variation_code' => (string)$vcode, 'recipient' => (string)$sc, 'subscription_type' => 'renew'];
             }
-            if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; if (stripos($prov['provider_name'] ?? '', 'autosyncng') === false && stripos($prov['provider_name'] ?? '', 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }
+            if (!empty($prov['api_pin']) && stripos($prov['provider_name'] ?? '', 'reteller') === false) { $api_payload['pin'] = $prov['api_pin']; if (stripos($prov['provider_name'] ?? '', 'autosyncng') === false && stripos($prov['provider_name'] ?? '', 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }
             $res=$this->api_post($prov,$url,$api_payload);
             if($res&&in_array($res['_http_code']??0,[200,201])&&!is_api_response_failure($res)&&!is_api_response_pending($res)){ $success=true; break; }
             if($res&&in_array($res['_http_code']??0,[200,201])&&is_api_response_pending($res)&&!$success){ $has_pending=true; $last_res=$res; continue; }
@@ -134,7 +148,7 @@ class CableTVService {
         if ($success && $last_prov) {
             $prov = $last_prov; $res = $last_res;
             save_tx_response($debit['ref'], provider_response_text($res));
-            if (update_tx_status($debit['ref'],'success',(string)($res['id']??''))) {
+            if (update_tx_status($debit['ref'],'success',(string)($res['id']??$res['data']['reference']??''))) {
                 db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
                 $cb=apply_cashback($uid,$price,'cabletv',null);
                 notify_user($uid,'✅ Cable TV Subscribed',"{$plan['plan_name']} activated on {$sc}",'success',null,$debit['balance_before'],$debit['balance_after']);
@@ -146,7 +160,7 @@ class CableTVService {
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
         $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
-            update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''));
+            update_tx_status($debit['ref'],'pending',(string)($last_res['id']??$last_res['data']['reference']??''));
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Cable TV Processing',"Your {$plan['plan_name']} subscription is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
@@ -158,7 +172,10 @@ class CableTVService {
         // subscription the provider still activates. Leave it 'processing'
         // for cron_check_vtu.php/cron_refund.php to resolve once the
         // provider's real status can be confirmed.
-        if (!empty($last_res['_network_error'])) {
+        // A "duplicate reference" reply means the provider already has a
+        // record of this reference from somewhere — outcome unknown, not a
+        // clean decline — so it's treated the same as a network error.
+        if (!empty($last_res['_network_error']) || is_duplicate_reference_response($last_res)) {
             update_tx_status($debit['ref'],'processing');
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Cable TV Processing',"We're confirming your {$plan['plan_name']} subscription with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
@@ -170,6 +187,13 @@ class CableTVService {
         refund_failed_transaction($debit['ref'], $uid, $price, $err_msg);
         save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return['success'=>true,'message'=>$err_msg,'ref'=>$debit['ref'],'refunded'=>true];
+      } catch (\Throwable $e) {
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $price, 'System error');
+        }
+        log_error('cabletv', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 function process_cabletv(int $uid,array $input):array{return(new CableTVService())->process($uid,$input);}

@@ -5,7 +5,7 @@
  * Fetches recent messages when webhooks aren't available.
  * Run via cron every 1-5 minutes:
  *   * * * * * php /path/to/chatbot/poll.php
- * Or via web: GET https://gracehubtels.com/chatbot/poll.php?key=YOUR_SECRET_KEY
+ * Or via web: GET /chatbot/poll.php?key=YOUR_SECRET_KEY (on this deployment's own domain)
  */
 
 declare(strict_types=1);

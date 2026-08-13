@@ -8,12 +8,18 @@ class DataService {
         } elseif (strpos($pname, 'autopilot') !== false) {
             $base = rtrim(str_ireplace('/api/live', '', $prov['api_base_url']), '/');
             $url = $base . '/api/live/v1/data';
+        } elseif (strpos($pname, 'reteller') !== false) {
+            // Reteller's docs: one shared /purchase endpoint for every local
+            // service (airtime/data/cable/electricity/betting) — no per-service path.
+            $url = rtrim($prov['api_base_url'], '/') . '/purchase';
         } else {
             $url = rtrim($prov['api_base_url'], '/') . '/api/data/';
         }
-        
+
         $headers = ['Content-Type: application/json'];
-        if (!empty($prov['api_key'])) {
+        if (strpos($pname, 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
+            $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (!empty($prov['api_key'])) {
             $headers[] = (strpos(strtolower($prov['provider_name'] ?? ''), 'autopilot') !== false) ? 'Authorization: Bearer ' . $prov['api_key'] : 'Authorization: Token ' . $prov['api_key'];
         } elseif (!empty($prov['api_token'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
@@ -25,7 +31,17 @@ class DataService {
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => json_encode($payload),
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_TIMEOUT => 25,
+            // AutoPilot in particular has been observed reliably taking
+            // longer than 25s to actually process a purchase (its duplicate-
+            // reference check responds almost instantly on retry, meaning the
+            // request WAS received — just slow to finish), which meant nearly
+            // every AutoPilot purchase hit our old 25s timeout, triggered the
+            // same-reference retry below, and landed on the ambiguous
+            // "duplicate reference" path instead of getting a clean answer.
+            // 45s gives slow providers a real chance to finish; fast
+            // providers are unaffected since this is a ceiling, not a fixed
+            // wait.
+            CURLOPT_TIMEOUT => 45,
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_SSL_VERIFYHOST => 2
         ]);
@@ -63,6 +79,15 @@ class DataService {
     public function get_plans(string $net='',string $type=''):array{$where='WHERE is_active=1';$p=[];if($net){$where.=' AND network=?';$p[]=$net;}if($type){$where.=' AND data_type=?';$p[]=$type;}$s=db()->prepare("SELECT * FROM data_plans $where ORDER BY data_type,display_order,selling_price");$s->execute($p);return $s->fetchAll();}
     public function get_types(string $net=''):array{$where='WHERE is_active=1';$p=[];if($net){$where.=' AND network=?';$p[]=$net;}$s=db()->prepare("SELECT DISTINCT data_type,COALESCE(display_type_name,data_type) as label FROM data_plans $where ORDER BY data_type");$s->execute($p);return $s->fetchAll();}
     public function process(int $uid,array $input): array {
+      $debit = null; $price = 0;
+      try {
+        // Two full 45s provider calls plus the 3s retry delay can exceed a
+        // shared-hosting default max_execution_time (commonly 30s), which
+        // would kill this script mid-purchase — after the wallet debit but
+        // before any of the success/refund/processing handling below runs,
+        // leaving the transaction stuck with no resolution at all. Explicit
+        // headroom, not reliant on whatever the server's php.ini happens to be.
+        @set_time_limit(120);
         $phone=sanitize_phone($input['phone']??'');$plan_id=(int)($input['plan_id']??0);$pin=trim((string)($input['pin']??''));
         if(!validate_phone($phone))return['success'=>false,'message'=>'Enter a valid phone number'];
         if($plan_id<1)return['success'=>false,'message'=>'Select a data plan'];
@@ -94,16 +119,27 @@ class DataService {
         }
 
         if(!claim_purchase_lock($uid,'data',[$plan_id,$phone]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
-        $desc_label = strtoupper($plan['network']) . ' ' . ($plan['plan_name'] ?: $plan['data_size']);$debit=debit_wallet($uid,$price,'data',"{$desc_label} for {$phone}",['network'=>$plan['network'],'phone'=>$phone,'plan_id'=>$plan_id,'data_size'=>$plan['data_size'],'plan_name'=>$plan['plan_name']]);if(!$debit['success'])return $debit;
+        $sig=purchase_signature('data',[$plan_id,$phone]);
+        $desc_label = strtoupper($plan['network']) . ' ' . ($plan['plan_name'] ?: $plan['data_size']);$debit=debit_wallet($uid,$price,'data',"{$desc_label} for {$phone}",['network'=>$plan['network'],'phone'=>$phone,'plan_id'=>$plan_id,'data_size'=>$plan['data_size'],'plan_name'=>$plan['plan_name']],$sig);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('data', $plan['network'], $plan['data_type']);
         $plan_bindings = get_plan_bindings('data', $plan_id);
         $providers = array_merge($plan_bindings, $providers);
-        $success = false; $has_pending = false; $last_res = null; $last_prov = null;
+        $success = false; $has_pending = false; $last_res = null; $last_prov = null; $attempted = false;
         foreach ($providers as $prov) {
             if (empty($prov['api_base_url'])) continue;
-            $last_prov = $prov;
-            $plan_code = !empty($prov['product_code']) ? $prov['product_code'] : $plan['plan_id'];
+            // A provider must have its own Plan ID explicitly set via the
+            // Plan ID Mapping page for THIS plan — data_plans.plan_id is a
+            // vestigial column that's always 0 for every plan created
+            // through the current admin form (the real per-provider ID lives
+            // in plan_api_bindings.product_code only), so falling back to it
+            // used to send a guaranteed-wrong "planId": 0/"0" to whichever
+            // provider had no mapping configured, which providers correctly
+            // reject as "Invalid Data Plan Id Provided". Skip straight to
+            // the next provider instead of wasting a call that can only fail.
+            if (empty($prov['product_code'])) continue;
+            $last_prov = $prov; $attempted = true;
+            $plan_code = $prov['product_code'];
             // The Add/Edit Data Plan admin form has no network_id input at all (only
             // a free-text Network name field), so data_plans.network_id is never
             // actually collected and silently defaults to 1 (MTN) for every plan —
@@ -141,13 +177,37 @@ class DataService {
                 // plan->data_plan) and caused the empty-body 500s seen live.
                 // Gladtidings now falls through with no override at all.
                 $api_payload['phone'] = $phone; $api_payload['data_plan'] = $plan_code; unset($api_payload['mobile_number']); unset($api_payload['plan']); $api_payload['ported_number'] = true; unset($api_payload['Ported_number']);
+            } elseif (strpos($pname, 'reteller') !== false) {
+                // No `amount` field — Reteller's docs mark amount required
+                // only for manual-amount services (airtime/electricity/betting);
+                // data-gifting is priced entirely by variation_code.
+                $api_payload = ['variation_code' => (string)$plan_code, 'recipient' => (string)$phone];
             }
-            if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; if (strpos($pname, 'autosyncng') === false && strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }
+            if (!empty($prov['api_pin']) && strpos($pname, 'reteller') === false) { $api_payload['pin'] = $prov['api_pin']; if (strpos($pname, 'autosyncng') === false && strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }
             
             $res=$this->api_call($prov, $api_payload);
             $is_timeout = !$res || !empty($res['_curl_errno']);
-            if($is_timeout){ usleep(3000000); $res=$this->api_call($prov, $api_payload); $is_timeout = !$res || !empty($res['_curl_errno']); }
-            
+            // Previously retried once here with the SAME reference after a
+            // timeout, on the theory that a brief resend might recover from a
+            // transient blip. In practice (confirmed live, repeatedly, with
+            // AutoPilot on AIRTEL Direct Gifting): when a provider is simply
+            // slow rather than actually down, the original request has
+            // already reached them and is still being processed, so the
+            // retry can only ever come back "duplicate reference" — it never
+            // yields new information, costs an extra few seconds, and
+            // replaces a clear "still confirming with provider" message with
+            // a confusing "duplicate reference" one. A genuine timeout is
+            // already the correct signal to stop and mark 'processing' for
+            // verification — retrying with the same reference doesn't change
+            // that outcome, it just obscures it.
+            // A "duplicate reference" reply on this single call (e.g. a
+            // genuinely repeated user submission slipping past
+            // claim_purchase_lock, or a cron re-check reusing this ref) means
+            // the provider already has a record of this reference from
+            // somewhere — its real outcome is still unknown, so treat it the
+            // same as a timeout rather than a clean decline.
+            if (!$is_timeout && is_duplicate_reference_response($res)) { $is_timeout = true; }
+
             if($res&&in_array($res['_http_code']??0,[200,201])&&!is_api_response_failure($res)&&!is_api_response_pending($res)){ $success=true; break; }
             if($res&&in_array($res['_http_code']??0,[200,201])&&is_api_response_pending($res)&&!$success){ $has_pending=true; $last_res=$res; continue; }
             if($is_timeout){ $last_res = $res; break; } // timeout = stop trying, mark processing
@@ -161,7 +221,7 @@ class DataService {
             // ref (e.g. cron_check_vtu.php already resolved it while this
             // request was mid-flight) — only award cashback/promo usage and
             // notify success if we actually won the transition here.
-            if (update_tx_status($debit['ref'],'success',(string)($res['id']??''),$plan['network'])) {
+            if (update_tx_status($debit['ref'],'success',(string)($res['id']??$res['data']['reference']??''),$plan['network'])) {
                 db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$plan['cost_price'],$price-$plan['cost_price'],$prov['provider_name'],$debit['ref']]);
                 $cb=apply_cashback($uid,$price,'data',$plan['network'],(int)$plan['id']);
                 if($promo_id > 0) { db()->prepare("INSERT INTO promo_usage (user_id, promo_id, transaction_ref, discount_applied) VALUES (?, ?, ?, ?)")->execute([$uid, $promo_id, $debit['ref'], $discount]); db()->prepare("UPDATE promo_codes SET used_count = used_count + 1 WHERE id=?")->execute([$promo_id]); }
@@ -171,14 +231,25 @@ class DataService {
             return['success'=>true,'message'=>"{$plan['data_size']} {$plan['network']} data sent to {$phone}",'ref'=>$debit['ref']];
         }
 
-        $is_timeout = $last_res && !empty($last_res['_curl_errno']);
+        // Must mirror the exact same "ambiguous outcome" test used inside the
+        // loop above — a genuine curl-level timeout OR a duplicate-reference
+        // reply from our own retry — otherwise this recomputation silently
+        // overwrites that in-loop decision and falls through to a refund
+        // anyway (which was live in production and is exactly why an
+        // AutoPilot timeout+retry+"duplicate reference" ended up refunded
+        // instead of held for verification).
+        $is_timeout = $last_res && (!empty($last_res['_curl_errno']) || is_duplicate_reference_response($last_res));
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
         $provider_resp = provider_response_text($last_res);
         if($is_timeout){ update_tx_status($debit['ref'],'processing'); save_tx_response($debit['ref'], $provider_resp); return['success'=>true,'message'=>"Transaction is being processed. Check status shortly.",'ref'=>$debit['ref'],'processing'=>true]; }
-        if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??'')); save_tx_response($debit['ref'], $provider_resp); notify_user($uid,'Data Processing',"Your data purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
+        if($has_pending){ update_tx_status($debit['ref'],'pending',(string)($last_res['id']??$last_res['data']['reference']??'')); save_tx_response($debit['ref'], $provider_resp); notify_user($uid,'Data Processing',"Your data purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']); return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true]; }
 
         $err_msg = 'Purchase failed. Wallet reversed.';
-        if (!empty($last_res['message'])) { $err_msg = $last_res['message']; }
+        if (!$attempted) {
+            $err_msg = 'This plan has not been mapped to any active provider yet. Add its Plan ID under Plan ID Mapping.';
+        } elseif (!empty($last_res['message'])) {
+            $err_msg = $last_res['message'];
+        }
         refund_failed_transaction($debit['ref'], $uid, $price, $err_msg);
         // refund_failed_transaction() already stamped meta.response with
         // $err_msg above — overwrite it with the full raw provider reply
@@ -187,6 +258,19 @@ class DataService {
         // shortened/defaulted failure reason.
         save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return['success'=>true,'message'=>$err_msg,'ref'=>$debit['ref'],'refunded'=>true];
+      } catch (\Throwable $e) {
+        // refund_failed_transaction() atomically claims the transaction
+        // (WHERE status IN ('pending','processing')) before crediting
+        // anything, so calling it here is a safe no-op if the purchase had
+        // already reached a terminal status before this exception was
+        // thrown — every branch above writes its terminal status before any
+        // statement that could realistically throw.
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $price, 'System error');
+        }
+        log_error('data', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 function process_data(int $uid,array $input):array{return(new DataService())->process($uid,$input);}

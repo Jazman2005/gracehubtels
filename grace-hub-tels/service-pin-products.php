@@ -16,7 +16,7 @@ $tab=$_GET['tab']??'recharge';
 $allowed=['recharge','data_card','exam_pin','bulk_sms'];
 if(!in_array($tab,$allowed))$tab='recharge';
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PIN Products – Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head><body>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>PIN Products – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head><body>
 <?php include __DIR__.'/partials/sidebar.php';?>
 <div class="main-wrap">
 <?php include __DIR__.'/partials/topbar.php';?>
@@ -33,6 +33,9 @@ if(!in_array($tab,$allowed))$tab='recharge';
   </div>
 
 <?php if($tab==='recharge'):?>
+  <?php if(!feature_enabled('recharge_card')):?>
+  <?=feature_locked_card_html('recharge_card','admin')?>
+  <?php else:?>
   <div class="responsive-grid-wrapper">
     <table class="data-table">
       <thead><tr><th>User</th><th>Network</th><th>Denom</th><th>Qty</th><th>Amount</th><th>Name on Card</th><th>PINs</th><th>Status</th><th>Date</th></tr></thead>
@@ -53,7 +56,11 @@ if(!in_array($tab,$allowed))$tab='recharge';
       </tbody>
     </table>
   </div>
+  <?php endif;?>
 <?php elseif($tab==='data_card'):?>
+  <?php if(!feature_enabled('data_card')):?>
+  <?=feature_locked_card_html('data_card','admin')?>
+  <?php else:?>
   <div class="responsive-grid-wrapper">
     <table class="data-table">
       <thead><tr><th>User</th><th>Network</th><th>Plan</th><th>Qty</th><th>Amount</th><th>PINs</th><th>Status</th><th>Date</th></tr></thead>
@@ -73,7 +80,11 @@ if(!in_array($tab,$allowed))$tab='recharge';
       </tbody>
     </table>
   </div>
+  <?php endif;?>
 <?php elseif($tab==='exam_pin'):?>
+  <?php if(!feature_enabled('exam_pin')):?>
+  <?=feature_locked_card_html('exam_pin','admin')?>
+  <?php else:?>
   <div class="responsive-grid-wrapper">
     <table class="data-table">
       <thead><tr><th>User</th><th>Exam</th><th>Qty</th><th>Amount</th><th>PINs</th><th>Status</th><th>Date</th></tr></thead>
@@ -92,7 +103,11 @@ if(!in_array($tab,$allowed))$tab='recharge';
       </tbody>
     </table>
   </div>
+  <?php endif;?>
 <?php elseif($tab==='bulk_sms'):?>
+  <?php if(!feature_enabled('bulk_sms')):?>
+  <?=feature_locked_card_html('bulk_sms','admin')?>
+  <?php else:?>
   <div class="responsive-grid-wrapper">
     <table class="data-table">
       <thead><tr><th>User</th><th>Sender ID</th><th>Message</th><th>Recipients</th><th>Pages</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
@@ -112,6 +127,7 @@ if(!in_array($tab,$allowed))$tab='recharge';
       </tbody>
     </table>
   </div>
+  <?php endif;?>
 <?php endif;?>
 </div>
 

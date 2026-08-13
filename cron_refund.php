@@ -13,11 +13,21 @@ if (php_sapi_name() !== 'cli' && !defined('STDIN')) {
     }
 }
 
+// A real flock() held for the whole run, not a check-then-act mtime window —
+// the OS releases the lock automatically the instant this process ends, crash
+// or clean exit alike, so there's no stale-lock cleanup to get wrong and no
+// risk of two overlapping runs both proceeding past a stale check.
 $lockFile = __DIR__ . '/cron_refund.lock';
-if (file_exists($lockFile) && (time() - filemtime($lockFile) < 300)) {
-    exit("Cron is already running or ran too recently.\n");
+$lockHandle = fopen($lockFile, 'c');
+if ($lockHandle === false || !flock($lockHandle, LOCK_EX | LOCK_NB)) {
+    exit("Cron is already running.\n");
 }
-touch($lockFile);
+
+// A run's completion (success or caught error) is recorded here so the admin
+// System Health page can show "last run Xm ago" and flag a cron that's
+// silently stopped firing — flock() alone releases cleanly on any exit but
+// leaves no trace of WHEN a run last actually happened.
+$heartbeat_status = 'ok'; $heartbeat_detail = '';
 
 try {
     // We target VTU transactions that have been pending/processing for more
@@ -27,10 +37,14 @@ try {
     // cabletv.php, electricity.php, recharge_card.php, data_card.php,
     // betting.php, virtual_card.php) — those must still eventually get
     // resolved or escalated by this sweep, not sit untouched forever.
+    // 'esim' is deliberately excluded — see the matching note in
+    // cron_check_vtu.php. Its stuck-pending resolution goes exclusively
+    // through resolve_esim_order() (a dedicated /esim/status/{reference}
+    // endpoint), never this generic provider-status sweep.
     $stmt = db()->prepare("
         SELECT * FROM transactions
         WHERE status IN ('pending', 'processing')
-        AND category IN ('data', 'airtime', 'cabletv', 'electricity', 'data_card', 'recharge_card', 'bulk_sms', 'exam_pin', 'betting', 'virtual_card')
+        AND category IN ('data', 'airtime', 'cabletv', 'electricity', 'data_card', 'recharge_card', 'bulk_sms', 'exam_pin', 'betting', 'virtual_card', 'international_airtime', 'giftcard_buy')
         AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)
     ");
     $stmt->execute();
@@ -148,10 +162,19 @@ try {
     }
 
     echo "Refunded $count provider-confirmed failures, escalated $escalated unverifiable transactions.\n";
+    $heartbeat_detail = "Refunded $count, escalated $escalated";
 
 } catch (Exception $e) {
     log_write('cron_refund', 'ERROR', "Cron error: " . $e->getMessage());
     echo "Error: " . $e->getMessage();
+    $heartbeat_status = 'error'; $heartbeat_detail = $e->getMessage();
 }
 
-if (file_exists($lockFile)) unlink($lockFile);
+@file_put_contents(LOG_DIR . '/cron_heartbeat_refund.json', json_encode([
+    'ran_at' => date('Y-m-d H:i:s'),
+    'status' => $heartbeat_status,
+    'detail' => $heartbeat_detail,
+]));
+
+flock($lockHandle, LOCK_UN);
+fclose($lockHandle);

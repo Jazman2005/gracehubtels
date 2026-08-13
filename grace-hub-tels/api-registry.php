@@ -59,6 +59,18 @@ try {
 $csrf = admin_csrf();
 $db = db();
 
+// Shows enough of a saved secret to visually confirm which key is on file
+// (e.g. "uhuiw****************89jl") without exposing the whole value to the
+// browser. Short values (<=9 chars) are fully masked — not enough length to
+// safely reveal both ends without leaking most of the secret.
+function mask_secret(string $s): string {
+    $len = strlen($s);
+    if ($len <= 9) return str_repeat('*', $len);
+    $head = substr($s, 0, 5);
+    $tail = substr($s, -4);
+    return $head . str_repeat('*', max(6, $len - 9)) . $tail;
+}
+
 // Handle AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
   if (!verify_admin_csrf($_POST['csrf'] ?? '')) json_response(['success' => false, 'message' => 'Invalid token']);
@@ -76,11 +88,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
       'notes' => sanitize($_POST['notes'] ?? '', 500) ?: null,
       'is_active' => isset($_POST['is_active']) ? 1 : 0,
     ];
-    // Sensitive fields — only update if non-empty (keeps existing on edit)
-    $sensitive = ['api_key','api_token','api_pin'];
+    // Sensitive fields — only update if non-empty (keeps existing on edit).
+    // The edit form pre-fills these with a masked preview (see mask_secret())
+    // rather than leaving them blank, so an admin who opens Edit and saves
+    // without touching a field would otherwise resubmit the mask string
+    // itself as if it were the real secret — clobbering the actual saved
+    // value with literal asterisks. Load the current row first and treat a
+    // resubmitted mask exactly like blank (keep existing).
+    $current = [];
+    if ($id) {
+      $cur_stmt = $db->prepare("SELECT api_key, api_token, api_pin, public_key, secret_key FROM api_registry WHERE id=?");
+      $cur_stmt->execute([$id]);
+      $current = $cur_stmt->fetch() ?: [];
+    }
+    $sensitive = ['api_key','api_token','api_pin','public_key','secret_key'];
     foreach ($sensitive as $f) {
       $v = sanitize($_POST[$f] ?? '', 255);
-      $data[$f] = $v !== '' ? $v : '__SKIP__';
+      if ($v === '') { $data[$f] = '__SKIP__'; continue; }
+      if ($id && !empty($current[$f]) && $v === mask_secret($current[$f])) { $data[$f] = '__SKIP__'; continue; }
+      $data[$f] = $v;
     }
     if ($id) {
       $sets = []; $params = [];
@@ -94,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
       $s->execute($params);
       
       // Sync down to api_providers to ensure services get the new token and pin
-      $sync = $db->prepare("UPDATE api_providers p JOIN api_registry r ON p.api_registry_id = r.id SET p.api_base_url = r.base_url, p.api_token = r.api_token, p.api_pin = r.api_pin, p.api_key = r.api_key, p.provider_name = r.name WHERE r.id = ?");
+      $sync = $db->prepare("UPDATE api_providers p JOIN api_registry r ON p.api_registry_id = r.id SET p.api_base_url = r.base_url, p.api_token = r.api_token, p.api_pin = r.api_pin, p.api_key = r.api_key, p.public_key = r.public_key, p.secret_key = r.secret_key, p.provider_name = r.name WHERE r.id = ?");
       $sync->execute([$id]);
     } else {
       // For insert, skip fields that are empty
@@ -124,10 +150,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
     $s = $db->prepare("SELECT * FROM api_registry WHERE id=?");
     $s->execute([(int)$_POST['id']]);
     $row = $s->fetch() ?: [];
-    // Do not expose sensitive field values — set to empty string
-    foreach (['api_key','api_token','api_pin'] as $f) {
-      if (isset($row[$f]) && $row[$f] !== null && $row[$f] !== '') {
-        $row[$f] = '';
+    // Never expose the real secret to the browser — show a masked preview
+    // (e.g. "uhuiw****************89jl") instead, so the admin can visually
+    // confirm which key is on file without it being fully blank. The save
+    // handler above recognizes a resubmitted mask as "unchanged" and won't
+    // overwrite the real value with it.
+    foreach (['api_key','api_token','api_pin','public_key','secret_key'] as $f) {
+      if (!empty($row[$f])) {
+        $row[$f] = mask_secret($row[$f]);
       }
     }
     json_response($row);
@@ -152,14 +182,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 }
 
 $registries = $db->query("SELECT * FROM api_registry ORDER BY name")->fetchAll();
+// A registry entry (API key/base URL) does nothing on its own — a service
+// only ever calls it if a matching row exists in API Route Manager
+// (api_providers) or a plan-specific override in Plan ID Mapping
+// (plan_api_bindings). It's easy to add a registry entry, test one plan via
+// a one-off binding, and never add the general routes — leaving every other
+// plan/network for that provider silently unrouted with no error anywhere.
+// Surface that gap here instead of leaving it invisible.
+$route_counts = $db->query("SELECT api_registry_id, COUNT(*) c FROM api_providers WHERE api_registry_id IS NOT NULL GROUP BY api_registry_id")->fetchAll(PDO::FETCH_KEY_PAIR);
+$binding_counts = $db->query("SELECT api_registry_id, COUNT(*) c FROM plan_api_bindings GROUP BY api_registry_id")->fetchAll(PDO::FETCH_KEY_PAIR);
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>API Registry — Gracehubtels Admin</title>
-<link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+<title>API Registry — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+<link rel="icon" type="image/png" href="/assets/images/favicon.png">
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
@@ -208,10 +247,28 @@ $registries = $db->query("SELECT * FROM api_registry ORDER BY name")->fetchAll()
       <label class="toggle"><input type="checkbox" <?=$r['is_active']?'checked':''?> onchange="toggleApi(<?=$r['id']?>)"><span class="slider"></span></label>
     </div>
     <div class="reg-card-body">
+      <?php $routes=(int)($route_counts[$r['id']]??0); $bindings=(int)($binding_counts[$r['id']]??0); ?>
+      <?php if ($routes===0 && $bindings===0):?>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--danger-bg,#fef2f2);border:1px solid var(--danger,#dc2626);border-radius:6px;font-size:11px;font-weight:600;color:var(--danger,#dc2626)">
+        <i class="fas fa-triangle-exclamation"></i> No API Route configured for any service — this API will never be called. Add one via <a href="<?= ADMIN_URL ?>/api-providers" style="color:inherit;text-decoration:underline">API Routes</a>.
+      </div>
+      <?php elseif ($routes===0):?>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--warning-bg,#fffbeb);border:1px solid var(--warning,#d97706);border-radius:6px;font-size:11px;font-weight:600;color:var(--warning,#d97706)">
+        <i class="fas fa-triangle-exclamation"></i> Only bound to <?=$bindings?> specific plan<?=$bindings>1?'s':''?> (Plan ID Mapping) — no general <a href="<?= ADMIN_URL ?>/api-providers" style="color:inherit;text-decoration:underline">API Route</a>, so every other plan/network skips this API entirely.
+      </div>
+      <?php endif;?>
+      <?php if (provider_locked($r['name'])):?>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#F3F4F6;border:1px solid #9CA3AF;border-radius:6px;font-size:11px;font-weight:600;color:#374151">
+        <i class="fas fa-lock"></i> This provider is locked for this installation and will never be selected for a purchase, regardless of routes/credentials configured here.
+      </div>
+      <?php endif;?>
       <div class="field-row"><span class="label">URL</span><span class="value"><?=htmlspecialchars($r['base_url']?:'-')?></span></div>
       <?php if ($r['api_key']):?><div class="field-row"><span class="label">Key</span><span class="value">••••<?=substr($r['api_key'],-3)?></span></div><?php endif;?>
       <?php if ($r['api_pin']):?><div class="field-row"><span class="label">PIN</span><span class="value">••••<?=substr($r['api_pin'],-3)?></span></div><?php endif;?>
+      <?php if (!empty($r['public_key'])):?><div class="field-row"><span class="label">Public Key</span><span class="value">••••<?=substr($r['public_key'],-3)?></span></div><?php endif;?>
+      <?php if (!empty($r['secret_key'])):?><div class="field-row"><span class="label">Secret Key</span><span class="value">••••<?=substr($r['secret_key'],-3)?></span></div><?php endif;?>
       <?php if ($r['notes']):?><div class="field-row"><span class="label">Notes</span><span class="value"><?=htmlspecialchars($r['notes'])?></span></div><?php endif;?>
+      <div class="field-row"><span class="label">Routes</span><span class="value"><?=$routes?> service route<?=$routes!==1?'s':''?><?=$bindings?', '.$bindings.' plan binding'.($bindings>1?'s':''):''?></span></div>
     </div>
     <div class="reg-card-foot">
       <button class="btn-ghost" style="padding:5px 12px;font-size:11px" onclick='editApi(<?=$r['id']?>)'><i class="fas fa-pen"></i> Edit</button>
@@ -255,6 +312,14 @@ $registries = $db->query("SELECT * FROM api_registry ORDER BY name")->fetchAll()
           <div class="form-group">
             <label>Account PIN</label>
             <input type="text" class="form-control" id="r_api_pin" name="api_pin" placeholder="e.g. 1234">
+          </div>
+          <div class="form-group">
+            <label>Public Key <span style="color:var(--text-muted)">(public_key:secret_key Bearer scheme)</span></label>
+            <input type="text" class="form-control" id="r_public_key" name="public_key" placeholder="Optional. e.g. Reteller Public Key">
+          </div>
+          <div class="form-group">
+            <label>Secret Key</label>
+            <input type="text" class="form-control" id="r_secret_key" name="secret_key" placeholder="Optional. e.g. Reteller Secret Key">
           </div>
           <div class="form-group full">
             <label>Network ID Map (JSON) <span style="color:var(--text-muted)">(optional)</span></label>
@@ -336,13 +401,24 @@ $registries = $db->query("SELECT * FROM api_registry ORDER BY name")->fetchAll()
 <script>
 const CSRF='<?=$csrf?>';
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('show');}
+const SENSITIVE_FIELDS=['api_key','api_token','api_pin','public_key','secret_key'];
+// Clicking into a field that's showing a masked preview clears it, so typing
+// always starts fresh rather than editing into the middle of the mask
+// string. Attached once at load — reads dataset.masked fresh each time, so
+// it works correctly across repeated Add/Edit opens of the same modal.
+SENSITIVE_FIELDS.forEach(k=>{
+  const el=document.getElementById('r_'+k);
+  if(el) el.addEventListener('focus',function(){
+    if(this.dataset.masked && this.value===this.dataset.masked) this.value='';
+  });
+});
 function openModal(){
   document.getElementById('modalTitle').innerHTML='<i class="fas fa-plug"></i> Add API Company';
   document.getElementById('r_id').value='';
   document.getElementById('apiForm').reset();
-  ['api_key','api_pin'].forEach(k=>{
+  SENSITIVE_FIELDS.forEach(k=>{
     const el=document.getElementById('r_'+k);
-    if(el) el.placeholder='Enter value';
+    if(el){ el.placeholder='Enter value'; el.dataset.masked=''; }
   });
   document.getElementById('r_is_active').checked=true;
   document.getElementById('apiModal').style.display='flex';
@@ -359,10 +435,13 @@ async function editApi(id){
       const el=document.getElementById('r_'+k);
       if(el) el.value=r[k]||'';
     });
-    // Sensitive fields — set placeholder only, leave value empty
-    ['api_key','api_token','api_pin'].forEach(k=>{
+    // Sensitive fields — pre-filled with a masked preview of the saved value
+    // (e.g. "uhuiw****************89jl") so the admin can see a key is on
+    // file without it being blank. Click into the field to clear it and type
+    // a new value; leave it untouched to keep the current one.
+    SENSITIVE_FIELDS.forEach(k=>{
       const el=document.getElementById('r_'+k);
-      if(el){ el.value=''; el.placeholder='•••••••• (leave blank to keep)'; }
+      if(el){ el.value=r[k]||''; el.dataset.masked=r[k]||''; el.placeholder=r[k]?'':'Enter value'; }
     });
     document.getElementById('r_is_active').checked=r.is_active==1;
     document.getElementById('apiModal').style.display='flex';

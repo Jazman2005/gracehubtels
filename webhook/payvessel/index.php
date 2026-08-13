@@ -1,17 +1,9 @@
 <?php
 require_once __DIR__ . '/../../user/core/db.php';
 
-// Debug: log incoming request details
 $payload = file_get_contents('php://input');
 $remote_ip = $_SERVER['REMOTE_ADDR'] ?? '';
 $all_headers = getallheaders();
-
-log_write('webhook_payvessel', 'INFO', 'Webhook received', [
-    'ip' => $remote_ip,
-    'headers' => $all_headers,
-    'payload' => $payload,
-    'uri' => $_SERVER['REQUEST_URI'] ?? ''
-]);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -66,6 +58,17 @@ if (!hash_equals($hash, $signature)) {
     http_response_code(400);
     exit('Invalid signature');
 }
+
+// Only log the raw payload/headers once the signature is verified — logging
+// it unconditionally let anyone spam the log file with arbitrary content
+// (including forged headers) via an unauthenticated POST, with no proof it
+// ever came from PayVessel.
+log_write('webhook_payvessel', 'INFO', 'Webhook received', [
+    'ip' => $remote_ip,
+    'headers' => $all_headers,
+    'payload' => $payload,
+    'uri' => $_SERVER['REQUEST_URI'] ?? ''
+]);
 
 $data = json_decode($payload, true);
 if (!$data || !isset($data['order'])) {

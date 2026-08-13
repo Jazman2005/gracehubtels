@@ -159,7 +159,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
             $id = (int)$id;
             if($b_action==='suspend') { db()->prepare("UPDATE users SET is_suspended=1, suspension_reason='Bulk suspension' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='unsuspend') { db()->prepare("UPDATE users SET is_suspended=0, suspension_reason=NULL WHERE id=?")->execute([$id]); $count++; }
-            if($b_action==='credit') { if($bulk_amt>0 && claim_purchase_lock($id,'admin_credit_bulk',[$bulk_amt])){ $r=credit_wallet($id, $bulk_amt, 'admin_credit', 'Bulk admin credit'); if($r['success'])$count++; } }
+            if($b_action==='credit') { if($bulk_amt>0 && claim_purchase_lock($id,'admin_credit_bulk',[$bulk_amt])){ $idem='admin_bulk_credit:'.$id.':'.($_SESSION['admin_id']??0).':'.date('YmdHi'); $r=credit_wallet($id, $bulk_amt, 'admin_credit', 'Bulk admin credit', [], $idem); if($r['success'])$count++; } }
             if($b_action==='debit') { if($bulk_amt>0 && claim_purchase_lock($id,'admin_debit_bulk',[$bulk_amt])){ $r=debit_wallet($id, $bulk_amt, 'admin_debit', 'Bulk admin debit'); if($r['success']){update_tx_status($r['ref'],'success');$count++;} } }
             if($b_action==='upgrade_vendor') { db()->prepare("UPDATE users SET user_type='vendor' WHERE id=?")->execute([$id]); $count++; }
             if($b_action==='downgrade_regular') { db()->prepare("UPDATE users SET user_type='regular' WHERE id=?")->execute([$id]); $count++; }
@@ -216,7 +216,7 @@ $stats = db()->query("
 ")->fetch(PDO::FETCH_ASSOC);
 
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Customers — Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Customers — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
 <div class="main-wrap">

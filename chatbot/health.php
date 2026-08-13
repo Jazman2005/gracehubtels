@@ -1,5 +1,5 @@
 <?php
-// Health check — visit https://gracehubtels.com/chatbot/health.php to verify bot is reachable
+// Health check — visit /chatbot/health.php on this deployment's own domain to verify bot is reachable
 require_once __DIR__ . '/../user/core/db.php';
 $diag_key = setting('bot_diag_key', '');
 if (empty($diag_key) || !isset($_GET['key']) || !hash_equals($diag_key, $_GET['key'])) {
@@ -43,5 +43,5 @@ echo json_encode([
     'whapi_credentials' => $creds,
     'bot_sessions_table' => $session_count,
     'errors' => $errors,
-    'webhook_url' => 'https://gracehubtels.com/chatbot/index.php',
+    'webhook_url' => site_url('/chatbot/index.php'),
 ], JSON_PRETTY_PRINT);

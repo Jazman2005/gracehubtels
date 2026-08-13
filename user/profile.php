@@ -120,8 +120,8 @@ include __DIR__ . '/includes/sidebar.php';
                     <div class="py-2 sm:py-3">
                         <span class="text-xs sm:text-sm font-semibold text-slate-500 block mb-1.5">Referral Link</span>
                         <div class="flex items-center gap-2">
-                            <input type="text" value="https://www.gracehubtels.com/user/signup?ref=<?= urlencode($ref_display) ?>" class="flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 font-medium outline-none" readonly onclick="this.select()">
-                            <button onclick="copyNum('https://www.gracehubtels.com/user/signup?ref=<?= urlencode($ref_display) ?>')" class="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-brand-orange bg-brand-orangeLight px-3 py-2 rounded-lg hover:bg-brand-orange hover:text-white transition-colors whitespace-nowrap">
+                            <input type="text" value="<?= htmlspecialchars(site_url('/user/signup?ref=' . urlencode($ref_display))) ?>" class="flex-1 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-700 font-medium outline-none" readonly onclick="this.select()">
+                            <button onclick="copyNum('<?= site_url('/user/signup?ref=' . urlencode($ref_display)) ?>')" class="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-brand-orange bg-brand-orangeLight px-3 py-2 rounded-lg hover:bg-brand-orange hover:text-white transition-colors whitespace-nowrap">
                                 <i class="fas fa-copy text-xs"></i> Copy
                             </button>
                         </div>

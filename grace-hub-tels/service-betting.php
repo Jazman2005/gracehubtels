@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 auth_admin();
+require_feature_admin('betting');
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
     require_permission('manage_pricing');
@@ -44,8 +45,8 @@ $platforms=db()->query("SELECT * FROM betting_plans ORDER BY platform_name")->fe
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Betting Platforms – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Betting Platforms – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

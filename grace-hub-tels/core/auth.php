@@ -49,12 +49,62 @@ function auth_admin(string $min_role=''):void{
 }
 function has_permission(string $perm):bool{admin_session();if(($_SESSION['admin_role']??'')==='superadmin')return true;$p=json_decode($_SESSION['admin_permissions']??'[]',true)?:[];return in_array($perm,$p);}
 function require_permission(string $perm):void{if(!has_permission($perm)){if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){http_response_code(403);echo json_encode(['success'=>false,'message'=>'Missing permission: '.$perm]);exit;}die('Access denied - Missing permission: '.$perm);}}
+// Per-install feature gate — distinct from require_permission() above, which
+// governs which STAFF MEMBER can do what. This governs whether the SERVICE
+// even exists on this client's install at all (see grace-hub-tels/vendor-access.php).
+// Full-page style: the client's own admin still sees the real sidebar/topbar
+// chrome (so the app doesn't look broken), just a locked card instead of the
+// real page content, matching the pattern exam-pins-stock.php already used
+// to gate a whole page.
+function require_feature_admin(string $key):void{
+    if(feature_enabled($key))return;
+    if(!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(['success'=>false,'message'=>'This feature isn\'t included in your plan.','feature_locked'=>true]);
+        exit;
+    }
+    ?><!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Premium Feature – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+<link rel="icon" type="image/png" href="/assets/images/favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
+</head>
+<body>
+<?php include __DIR__.'/../partials/sidebar.php';?>
+<div class="main-wrap">
+<?php include __DIR__.'/../partials/topbar.php';?>
+<div class="admin-fluid-container">
+<?= feature_locked_card_html($key,'admin') ?>
+</div></div>
+</body></html><?php
+    exit;
+}
 function audit_log(int $admin_id, string $action, string $details):void{db()->prepare("INSERT INTO admin_activity_logs (admin_id, action, details, ip_address) VALUES (?, ?, ?, ?)")->execute([$admin_id, $action, $details, get_ip()]);}
 function get_admin(int $id=0):array{$aid=$id?:(int)($_SESSION['admin_id']??0);if(!$aid)return[];$s=db()->prepare("SELECT * FROM admin WHERE id=? AND is_active=1 LIMIT 1");$s->execute([$aid]);return $s->fetch()?:[];}
 
 // --- Device fingerprint ---
+// Anchored to a persistent per-browser cookie, NOT the client IP. IPs on
+// mobile/residential connections (and even Cloudflare edge IPs) change
+// constantly, which previously made "known device" never actually stick —
+// every login looked like a brand-new device to is_known_device() even
+// though it was the same admin on the same browser, so OTP fired every time.
 function get_device_hash(): string {
-    return hash('sha256', (get_ip()?:'0.0.0.0') . '|' . (get_ua()?:'unknown'));
+    $cookie='gh_admin_dvc';
+    $token=$_COOKIE[$cookie]??'';
+    if(!preg_match('/^[a-f0-9]{64}$/',$token)){
+        $token=bin2hex(random_bytes(32));
+        if(!headers_sent()){
+            setcookie($cookie,$token,['expires'=>time()+60*60*24*365,'path'=>ADMIN_URL,'secure'=>isset($_SERVER['HTTPS']),'httponly'=>true,'samesite'=>'Strict']);
+        }
+        $_COOKIE[$cookie]=$token;
+    }
+    return hash('sha256', $token . '|' . (get_ua()?:'unknown'));
 }
 function is_known_device(int $admin_id, string $hash): bool {
     // Fail CLOSED: any DB error here must still require the OTP step, not

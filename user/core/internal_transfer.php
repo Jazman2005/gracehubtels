@@ -79,7 +79,7 @@ function process_internal_transfer(int $uid, array $post): array {
         $credit = credit_wallet($rec_id, $amount, 'wallet_transfer', $desc_receiver, [
             'sender_id' => $uid,
             'external_ref' => $debit['ref']
-        ]);
+        ], 'transfer:' . $debit['ref']);
         
         if(!$credit['success']) {
             update_tx_status($debit['ref'], 'failed');

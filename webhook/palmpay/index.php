@@ -15,8 +15,6 @@ try {
         exit('Missing payload');
     }
 
-    log_write('webhook_palmpay', 'INFO', 'Received webhook', ['payload' => $payload]);
-
     $data = json_decode($payload, true);
     if (!$data) {
         log_write('webhook_palmpay', 'ERROR', 'Invalid JSON', ['payload' => mb_substr($payload, 0, 1000)]);
@@ -65,6 +63,10 @@ try {
         http_response_code(400);
         exit('Invalid signature');
     }
+    // Only log the raw payload once the signature is verified — logging it
+    // unconditionally let anyone spam the log file with arbitrary content via
+    // an unauthenticated POST, with no proof it ever came from PalmPay.
+    log_write('webhook_palmpay', 'INFO', 'Received webhook', ['payload' => $payload]);
     log_write('webhook_palmpay', 'INFO', 'Signature verified via HMAC');
 
     // Try orderNo (dynamic VA) or virtualAccountNo (permanent VA)

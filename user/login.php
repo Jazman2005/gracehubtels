@@ -26,7 +26,7 @@ $csrf=csrf_token();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In - Gracehubtels</title>
+    <title>Sign In - <?=htmlspecialchars(setting('site_name','Gracehubtels'))?></title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -142,9 +142,9 @@ $csrf=csrf_token();
                 <div class="mb-4">
                     <a href="/index.php" class="inline-flex items-center gap-2 group">
                         <div class="w-9 h-9 bg-gradient-to-br from-brand-navy to-brand-navyDark rounded-lg flex items-center justify-center shadow group-hover:scale-105 transition-transform">
-                            <img src="/img/icon.png" alt="Gracehubtels" class="w-6 h-6 object-contain" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fas fa-bolt text-sm text-white\'></i>'">
+                            <img src="/img/icon.png" alt="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?>" class="w-6 h-6 object-contain" onerror="this.style.display='none'; this.parentElement.innerHTML='<i class=\'fas fa-bolt text-sm text-white\'></i>'">
                         </div>
-                        <span class="text-lg font-bold text-gray-800">Gracehubtels</span>
+                        <span class="text-lg font-bold text-gray-800"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></span>
                     </a>
                 </div>
                 
@@ -234,7 +234,7 @@ $csrf=csrf_token();
                 
                 <!-- Footer -->
                 <p class="text-center text-gray-400 text-xs mt-6">
-                    &copy; 2026 Gracehubtels. All rights reserved.
+                    &copy; 2026 <?=htmlspecialchars(setting('site_name','Gracehubtels'))?>. All rights reserved.
                 </p>
             </div>
         </div>

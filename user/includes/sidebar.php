@@ -5,8 +5,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
 <aside class="hidden md:flex flex-col w-64 bg-white border-r border-slate-200 h-full">
     <div class="h-16 flex items-center px-6 border-b border-slate-200">
         <a href="/index.php" class="flex items-center gap-2">
-            <img src="/assets/images/gracehubtels-logo.png" alt="Gracehubtels" class="h-8 w-auto">
-            <span class="text-xl font-bold text-brand-navy">Gracehubtels</span>
+            <img src="/assets/images/logo.png" alt="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?>" class="h-8 w-auto">
+            <span class="text-xl font-bold text-brand-navy"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></span>
         </a>
     </div>
     

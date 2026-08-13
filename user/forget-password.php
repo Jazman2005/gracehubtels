@@ -30,10 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $step === 'request') {
             // Send reset email via the site's configured SMTP (PHPMailer) — raw
             // mail() is unreliable on shared hosting and gets silently dropped
             // or spam-filtered by providers like Gmail, which most accounts use.
-            $reset_url = 'https://www.gracehubtels.com/user/forget-password.php?step=reset&token=' . $reset_token;
-            $subject = 'Gracehubtels Password Reset';
+            $reset_url = site_url('/user/forget-password.php?step=reset&token=' . $reset_token);
+            $site_name = setting('site_name', 'Gracehubtels');
+            $subject = $site_name . ' Password Reset';
             $body = "<p>Hello " . htmlspecialchars($user['full_name']) . ",</p>"
-                . "<p>Click the button below to reset your Gracehubtels password:</p>"
+                . "<p>Click the button below to reset your " . htmlspecialchars($site_name) . " password:</p>"
                 . "<p style='text-align:center;margin:24px 0;'><a href='{$reset_url}' style='background:#4F46E5;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;display:inline-block;'>Reset Password</a></p>"
                 . "<p style='font-size:12px;color:#94a3b8;'>Or copy this link into your browser:<br>{$reset_url}</p>"
                 . "<p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>";
@@ -96,7 +97,7 @@ $csrf = csrf_token();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-    <title>Reset Password - Gracehubtels</title>
+    <title>Reset Password - <?=htmlspecialchars(setting('site_name','Gracehubtels'))?></title>
     <!-- Tailwind CSS (via CDN for migration, replace with compiled CSS in production) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome -->
@@ -141,8 +142,8 @@ $csrf = csrf_token();
         
         <div class="text-center mb-8">
             <a href="/index.php" class="inline-flex items-center gap-2 mb-6">
-                <img src="/img/icon.png" alt="Gracehubtels" class="h-10 w-auto">
-                <span class="text-2xl font-black text-brand-navy tracking-tight">Gracehubtels</span>
+                <img src="/img/icon.png" alt="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?>" class="h-10 w-auto">
+                <span class="text-2xl font-black text-brand-navy tracking-tight"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></span>
             </a>
             
             <?php if ($step === 'request'): ?>

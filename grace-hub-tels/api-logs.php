@@ -99,6 +99,20 @@ if ($selected_path && file_exists($selected_path)) {
             if (isset($parsed['response']['message'])) {
                 $entry_resp = "Message: " . $parsed['response']['message'] . "\n\nFull:\n" . $entry_resp;
             }
+        } elseif (preg_match('/^\[([\d\-: ]+)\]\s*\[(OK|FAIL)\]\s*(\S+)\s*REQ:(.*?)\s*RES:(.*)$/s', $line, $m)) {
+            // log_api()'s actual format — "[timestamp] [OK|FAIL] endpoint
+            // REQ:{...} RES:{...}" — plain text, not JSON, so the branch
+            // above always missed it and every one of these lines fell into
+            // the generic guess below, which doesn't recognize the literal
+            // "[FAIL]"/"[OK]" markers (it only pattern-matches the words
+            // "error"/"exception"), so every provider call's real
+            // success/fail status was silently misreported in the KPI
+            // totals above and showed as an opaque "System Log Entry".
+            $entry_time = $m[1];
+            $entry_level = $m[2] === 'FAIL' ? 'FAIL' : 'OK';
+            $entry_title = $m[3];
+            $entry_payload = $m[4];
+            $entry_resp = $m[5];
         } else {
             // Raw string line (like PHP error log)
             $entry_time = substr($line, 1, 20); // guess timestamp
@@ -141,8 +155,8 @@ if ($selected_path && file_exists($selected_path)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Backend API & Error Diagnostics – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Backend API & Error Diagnostics – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

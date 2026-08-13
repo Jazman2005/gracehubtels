@@ -10,7 +10,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 $csrf=admin_csrf();
 ?>
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login – Gracehubtels</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Admin Login – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?></title><link rel="icon" type="image/png" href="/assets/images/favicon.png">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={theme:{extend:{fontFamily:{inter:['Inter','sans-serif'],outfit:['Outfit','sans-serif']},colors:{brand:{navy:'#051A52',navyLight:'#1640A6',navyDark:'#030F30',indigo:'#FF5A1F',indigoHover:'#E04815',indigoLight:'#FFF0EB',emerald:'#14B8A6',emeraldLight:'#CCFBF1'}}}}}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,7 +19,7 @@ $csrf=admin_csrf();
 <div class="min-h-screen flex flex-col lg:flex-row">
 <div class="w-full lg:w-1/2 honeycomb-bg flex items-center justify-center p-4 sm:p-6 min-h-screen lg:min-h-0">
 <div class="w-full max-w-sm">
-<div class="mb-4"><a href="/" class="inline-flex items-center gap-2 group"><div class="w-9 h-9 bg-gradient-to-br from-brand-indigo to-brand-navyDark rounded-lg flex items-center justify-center shadow group-hover:scale-105 transition-transform"><i class="fas fa-shield-halved text-sm text-white"></i></div><span class="text-lg font-bold text-gray-800">Gracehubtels <span class="text-brand-indigo font-semibold text-sm">Admin</span></span></a></div>
+<div class="mb-4"><a href="/" class="inline-flex items-center gap-2 group"><div class="w-9 h-9 bg-gradient-to-br from-brand-indigo to-brand-navyDark rounded-lg flex items-center justify-center shadow group-hover:scale-105 transition-transform"><i class="fas fa-shield-halved text-sm text-white"></i></div><span class="text-lg font-bold text-gray-800"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?> <span class="text-brand-indigo font-semibold text-sm">Admin</span></span></a></div>
 <div class="mb-4"><h1 class="text-xl font-bold text-gray-900 mb-1">Admin Portal</h1><p class="text-gray-500 text-sm">Sign in to manage your platform</p></div>
 <?php if($error):?>
 <div class="bg-red-50 border-l-4 border-red-500 p-3 mb-4 rounded-r-lg shadow-sm"><div class="flex items-center"><div class="flex-shrink-0"><i class="fas fa-exclamation-circle text-red-500"></i></div><div class="ml-3"><p class="text-xs text-red-700 font-medium"><?=htmlspecialchars($error)?></p></div></div></div>
@@ -30,7 +30,7 @@ $csrf=admin_csrf();
 <div><label for="id_password" class="block text-xs font-semibold text-gray-700 mb-1.5">Password</label><div class="relative"><input type="password" name="password" id="id_password" class="input-field w-full px-3 py-2.5 border-2 border-gray-200 rounded-lg bg-white focus:bg-white transition-all outline-none pr-10 text-gray-800 text-sm" placeholder="Enter admin password" required><button type="button" onclick="togglePassword()" class="password-toggle"><i class="fas fa-eye text-sm" id="toggleIcon"></i></button></div></div>
 <button type="submit" id="submitBtn" class="btn-primary w-full py-2.5 text-white text-sm font-semibold rounded-lg shadow flex items-center justify-center gap-1.5"><span id="sbtxt">Sign In</span><i class="fas fa-arrow-right text-xs" id="sbicn"></i><svg viewBox="0 0 24 24" class="spin" id="sbl" style="display:none;width:16px;height:16px;stroke:#fff;fill:none;stroke-width:2"><style>@keyframes spin{100%{transform:rotate(360deg)}}</style><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg></button>
 </form>
-<p class="text-center text-gray-400 text-xs mt-6">&copy; 2026 Gracehubtels. All rights reserved.</p>
+<p class="text-center text-gray-400 text-xs mt-6">&copy; 2026 <?=htmlspecialchars(setting('site_name','Gracehubtels'))?>. All rights reserved.</p>
 </div></div>
 <div class="hidden lg:flex w-1/2 hero-gradient relative overflow-hidden items-center justify-center">
 <div class="relative z-10 text-center px-6"><div class="mb-4"><div class="w-36 h-36 mx-auto bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center p-6 border border-white/20 shadow-2xl"><i class="fas fa-chart-line text-white" style="font-size:4rem"></i></div></div><h2 class="text-xl font-bold text-white mb-2">Manage with Ease</h2><p class="text-blue-100 text-sm max-w-xs mx-auto opacity-90">Monitor transactions, manage users, and control settings from a single dashboard.</p></div>

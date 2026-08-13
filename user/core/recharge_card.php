@@ -12,11 +12,13 @@ class RechargeCardService {
         $d=$res?json_decode($res,true):($res===false?['_network_error'=>true,'message'=>"cURL Error: ".$err]:null);
         if($d)$d['_http_code']=$code;log_api('recharge_card_api','recharge_card',$data,['response'=>$d,'curl_error'=>$err],in_array($code,[200,201]));return $d;}
     public function process(int $uid,array $input): array {
+      $debit = null; $total = 0;
+      try {
         // auto-migrate table columns to new schema
         try { db()->exec("CREATE TABLE IF NOT EXISTS recharge_cards (id INT AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,transaction_ref VARCHAR(60) NOT NULL,network VARCHAR(20) NOT NULL,denomination DECIMAL(10,2) NOT NULL,quantity TINYINT(2) NOT NULL DEFAULT 1,amount DECIMAL(15,2) NOT NULL DEFAULT 0,name_on_card VARCHAR(100) DEFAULT NULL,pins_data TEXT DEFAULT NULL,status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,KEY transaction_ref (transaction_ref))"); } catch (\Throwable $e) {}
         try { db()->exec("ALTER TABLE recharge_cards CHANGE COLUMN business_name name_on_card VARCHAR(100) DEFAULT NULL"); } catch (\Throwable $e) {}
         try { db()->exec("ALTER TABLE recharge_cards CHANGE COLUMN pins pins_data TEXT DEFAULT NULL"); } catch (\Throwable $e) {}
-        $net_id=(int)($input['network_id']??0);$denom=(int)($input['denomination']??0);$qty=(int)($input['quantity']??1);$name=sanitize($input['name_on_card']??'Gracehubtels',30);$pin=(string)($input['pin']??'');
+        $net_id=(int)($input['network_id']??0);$denom=(int)($input['denomination']??0);$qty=(int)($input['quantity']??1);$name=sanitize($input['name_on_card']??setting('site_name','Gracehubtels'),30);$pin=(string)($input['pin']??'');
         $net_names=[1=>'MTN',2=>'GLO',3=>'AIRTEL',4=>'9MOBILE'];
         if(!isset($net_names[$net_id]))return['success'=>false,'message'=>'Invalid network'];
         if(!in_array($denom,[100,200,500,1000]))return['success'=>false,'message'=>'Invalid denomination'];
@@ -29,7 +31,8 @@ class RechargeCardService {
         $unit_price=(float)($price['selling_price']?:$denom);$cost_price=(float)($price['cost_price']?:$denom);
         $total=$unit_price*$qty;
         if(!claim_purchase_lock($uid,'recharge_card',[$net_id,$denom,$qty]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
-        $debit=debit_wallet($uid,(float)$total,'recharge_card',"{$qty}x ₦{$denom} {$net_names[$net_id]} recharge card");if(!$debit['success'])return $debit;
+        $sig=purchase_signature('recharge_card',[$net_id,$denom,$qty]);
+        $debit=debit_wallet($uid,(float)$total,'recharge_card',"{$qty}x ₦{$denom} {$net_names[$net_id]} recharge card",[],$sig);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('recharge_card');
         $success = false; $has_pending = false; $last_res = null; $last_prov = null;
@@ -63,7 +66,7 @@ class RechargeCardService {
             $prov = $last_prov; $res = $last_res;
             save_tx_response($debit['ref'], provider_response_text($res));
             if (update_tx_status($debit['ref'],'success')) {
-                $pins=$res['data_pin']??$res['pin']??[];$costTotal=$cost_price*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO recharge_cards (user_id,transaction_ref,network,denomination,quantity,amount,name_on_card,pins_data,status) VALUES (?,?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$net_names[$net_id],$denom,$qty,$total,$name,json_encode($pins)]);notify_user($uid,'✅ Cards Ready',"{$qty}x {$denom} {$net_names[$net_id]} cards purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} card(s) ready",'pins'=>$pins,'ref'=>$debit['ref']];
+                $pins=$res['data_pin']??$res['pin']??[];$costTotal=$cost_price*$qty;db()->prepare("UPDATE transactions SET cost_price=?, profit=?, provider=? WHERE transaction_ref=?")->execute([$costTotal,$total-$costTotal,$last_prov['provider_name']??'System',$debit['ref']]);db()->prepare("INSERT INTO recharge_cards (user_id,transaction_ref,network,denomination,quantity,amount,name_on_card,pins_data,status) VALUES (?,?,?,?,?,?,?,?,'success')")->execute([$uid,$debit['ref'],$net_names[$net_id],$denom,$qty,$total,$name,json_encode($pins)]);$cb=apply_cashback($uid,$total,'recharge_card',$net_names[$net_id]);notify_user($uid,'✅ Cards Ready',"{$qty}x {$denom} {$net_names[$net_id]} cards purchased",'success',null,$debit['balance_before'],$debit['balance_after']);return['success'=>true,'message'=>"{$qty} card(s) ready",'pins'=>$pins,'ref'=>$debit['ref'],'cashback'=>$cb];
             }
             return['success'=>true,'message'=>"{$qty} card(s) ready",'ref'=>$debit['ref']];
         }
@@ -75,7 +78,10 @@ class RechargeCardService {
         // actually know whether that provider processed the request — leave
         // it 'processing' for the verification crons instead of refunding
         // blindly.
-        if (!empty($last_res['_network_error'])) {
+        // A "duplicate reference" reply means the provider already has a
+        // record of this reference from somewhere — outcome unknown, not a
+        // clean decline — treated the same as a network error.
+        if (!empty($last_res['_network_error']) || is_duplicate_reference_response($last_res)) {
             update_tx_status($debit['ref'],'processing');
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Recharge Card Processing',"We're confirming your recharge card purchase with the provider. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
@@ -88,6 +94,13 @@ class RechargeCardService {
         refund_failed_transaction($debit['ref'], $uid, $total, $err);
         save_tx_response($debit['ref'], $provider_resp ?: $err);
         return['success'=>true,'message'=>$err,'ref'=>$debit['ref'],'refunded'=>true];
+      } catch (\Throwable $e) {
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $total, 'System error');
+        }
+        log_error('recharge_card', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 function process_recharge_card(int $uid,array $input):array{return(new RechargeCardService())->process($uid,$input);}

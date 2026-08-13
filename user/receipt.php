@@ -182,9 +182,9 @@ include __DIR__ . '/includes/sidebar.php';
                 <!-- Header -->
                 <div class="flex items-center justify-between mb-6">
                     <div class="flex items-center gap-2.5">
-                        <div class="w-8 h-8 rounded-lg bg-brand-navy flex items-center justify-center text-white font-black text-xs">G</div>
+                        <div class="w-8 h-8 rounded-lg bg-brand-navy flex items-center justify-center text-white font-black text-xs"><?=htmlspecialchars(strtoupper(substr(setting('site_name','Gracehubtels'),0,1)))?></div>
                         <div>
-                            <p class="text-sm font-bold text-slate-800">Gracehubtels</p>
+                            <p class="text-sm font-bold text-slate-800"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></p>
                             <p class="text-[10px] text-slate-400">Receipt</p>
                         </div>
                     </div>
@@ -353,6 +353,7 @@ include __DIR__ . '/includes/sidebar.php';
 </style>
 
 <script>
+const SITE_NAME = <?=json_encode(setting('site_name','Gracehubtels'))?>;
 const txData = {
     amount: '₦<?=number_format((float)$tx['amount'],2)?>',
     description: '<?=addslashes(htmlspecialchars($rich_desc ?: ($tx['description']??'')))?>',
@@ -363,14 +364,14 @@ const txData = {
 };
 
 function makeMsg() {
-    return `Gracehubtels Receipt\n\nAmount: ${txData.amount}\n${txData.description}\nStatus: ${txData.status}\n${txData.date}\nRef: ${txData.ref}\n\nPowered by Gracehubtels`;
+    return `${SITE_NAME} Receipt\n\nAmount: ${txData.amount}\n${txData.description}\nStatus: ${txData.status}\n${txData.date}\nRef: ${txData.ref}\n\nPowered by ${SITE_NAME}`;
 }
 
 function shareReceipt() {
     if (navigator.share) {
-        navigator.share({ title: 'Gracehubtels Receipt', text: makeMsg(), url: txData.url }).catch(() => {});
+        navigator.share({ title: `${SITE_NAME} Receipt`, text: makeMsg(), url: txData.url }).catch(() => {});
     } else {
-        const sub = encodeURIComponent('Gracehubtels Transaction Receipt');
+        const sub = encodeURIComponent(`${SITE_NAME} Transaction Receipt`);
         const body = encodeURIComponent(makeMsg().replace(/\*/g,'').replace(/_/g,''));
         window.open('mailto:?subject=' + sub + '&body=' + body);
     }

@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__.'/core/auth.php';
 auth_admin();
+require_feature_admin('electricity');
 if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH'])){
 
     if(!verify_admin_csrf($_POST['csrf']??''))json_response(['success'=>false,'message'=>'Invalid token'],403);
@@ -15,9 +16,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
         foreach(['charge'=>(float)($_POST['charge']??100),'agent_charge'=>(float)($_POST['agent_charge']??0),'vendor_charge'=>(float)($_POST['vendor_charge']??0)] as $label=>$val){
             if($val<0)json_response(['success'=>false,'message'=>ucwords(str_replace('_',' ',$label)).' cannot be negative'],400);
         }
-        $f=[sanitize($_POST['disco_name']??'',100),(int)($_POST['disco_id']??0),sanitize($_POST['logo_key']??'',50),(float)($_POST['charge']??100),(float)($_POST['agent_charge']??0),(float)($_POST['vendor_charge']??0),isset($_POST['is_active'])?1:0];
-        if($id){db()->prepare("UPDATE electricity_discos SET disco_name=?,disco_id=?,logo_key=?,charge=?,agent_charge=?,vendor_charge=?,is_active=? WHERE id=?")->execute([...$f,$id]);}
-        else{db()->prepare("INSERT INTO electricity_discos (disco_name,disco_id,logo_key,charge,agent_charge,vendor_charge,is_active,product_code) VALUES (?,?,?,?,?,?,?,NULL)")->execute($f);}
+        // Blank means "no postpaid override" — falls back to the base charge
+        // for postpaid too, same as before this field existed.
+        $postpaid_raw=trim($_POST['postpaid_charge']??'');
+        if($postpaid_raw!==''&&(float)$postpaid_raw<0)json_response(['success'=>false,'message'=>'Postpaid Charge cannot be negative'],400);
+        $postpaid_charge=$postpaid_raw===''?null:(float)$postpaid_raw;
+        $f=[sanitize($_POST['disco_name']??'',100),(int)($_POST['disco_id']??0),(float)($_POST['charge']??100),$postpaid_charge,(float)($_POST['agent_charge']??0),(float)($_POST['vendor_charge']??0),isset($_POST['is_active'])?1:0];
+        if($id){db()->prepare("UPDATE electricity_discos SET disco_name=?,disco_id=?,charge=?,postpaid_charge=?,agent_charge=?,vendor_charge=?,is_active=? WHERE id=?")->execute([...$f,$id]);}
+        else{db()->prepare("INSERT INTO electricity_discos (disco_name,disco_id,charge,postpaid_charge,agent_charge,vendor_charge,is_active,product_code) VALUES (?,?,?,?,?,?,?,NULL)")->execute($f);}
         json_response(['success'=>true,'message'=>'Disco saved']);
     }
 
@@ -31,8 +37,8 @@ $discos=db()->query("SELECT * FROM electricity_discos ORDER BY disco_name")->fet
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Electricity Discos – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Electricity Discos – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -59,15 +65,15 @@ $discos=db()->query("SELECT * FROM electricity_discos ORDER BY disco_name")->fet
   </div>
   <div class="responsive-grid-wrapper">
     <table class="data-table">
-      <thead><tr><th>Disco Name</th><th>Disco ID</th><th>Product Code</th><th>Logo Key</th><th>Charge (₦)</th><th>Status</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Disco Name</th><th>Disco ID</th><th>Product Code</th><th>Charge (₦)</th><th>Postpaid Charge (₦)</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
       <?php foreach($discos as $d):?>
       <tr>
           <td><strong style="color:var(--navy-dark)"><?=htmlspecialchars($d['disco_name'])?></strong></td>
           <td><code style="background:var(--bg);padding:4px 6px;border-radius:4px;color:var(--text-muted);font-size:12px;font-weight:600;"><?=$d['disco_id']?></code></td>
           <td><code style="background:rgba(217,119,6,0.1);padding:4px 6px;border-radius:4px;color:var(--warning);font-size:12px;font-weight:600;"><?=htmlspecialchars($d['product_code']??'')?></code></td>
-          <td style="font-size:13px;color:var(--text-muted);"><?=htmlspecialchars($d['logo_key']??'')?></td>
           <td style="font-size:14px; color:var(--success); font-weight:bold;">₦<?=number_format((float)$d['charge'],2)?></td>
+          <td style="font-size:14px; color:var(--text-muted); font-weight:bold;"><?=$d['postpaid_charge']!==null?'₦'.number_format((float)$d['postpaid_charge'],2):'<span style="font-weight:400;font-style:italic;">Same as Charge</span>'?></td>
           <td><span class="badge <?=$d['is_active']?'badge-success':'badge-neutral'?>"><?=$d['is_active']?'Active':'Inactive'?></span></td>
           <td>
             <button class="btn-primary" style="background:var(--navy-light); padding:6px 12px; font-size:12px; border-radius:6px;" onclick='editDisco(<?=htmlspecialchars(json_encode($d),ENT_QUOTES)?>)'><i class="fas fa-edit"></i> Edit</button>
@@ -102,9 +108,11 @@ $discos=db()->query("SELECT * FROM electricity_discos ORDER BY disco_name")->fet
             <div style="padding:10px 14px;background:rgba(37,99,235,0.08);border:1px solid rgba(37,99,235,0.2);border-radius:6px;font-size:12px;color:var(--info);">
                 <i class="fas fa-circle-info" style="margin-right:6px;"></i> Provider Plan IDs are configured separately on the <a href="<?= ADMIN_URL ?>/data-plan-mapping" style="color:var(--info);font-weight:600;text-decoration:underline;">Plan ID Mapping</a> page after saving this disco.
             </div>
-            <div class="form-group"><label>Logo Key</label><input type="text" class="form-control" id="x_logo_key"></div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
-                <div class="form-group"><label>Base Charge</label><input type="number" class="form-control" id="x_charge"></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                <div class="form-group"><label>Base Charge (Prepaid)</label><input type="number" class="form-control" id="x_charge"></div>
+                <div class="form-group"><label>Postpaid Charge</label><input type="number" class="form-control" id="x_postpaid_charge" placeholder="Leave blank to use Base Charge"></div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
                 <div class="form-group"><label>Agent Charge</label><input type="number" class="form-control" id="x_agent_charge"></div>
                 <div class="form-group"><label>Vendor Charge</label><input type="number" class="form-control" id="x_vendor_charge"></div>
             </div>
@@ -125,12 +133,13 @@ const CSRF='<?=$csrf?>';
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');}
 
 // DISCOS
-function openDiscoModal(){document.getElementById('discoModalTitle').innerHTML='<i class="fas fa-plus"></i> Add Disco';['x_id','x_disco_id','x_disco_name','x_logo_key','x_charge','x_agent_charge','x_vendor_charge'].forEach(i=>document.getElementById(i).value='');document.getElementById('x_is_active').checked=true;document.getElementById('discoModal').style.display='flex';}
+function openDiscoModal(){document.getElementById('discoModalTitle').innerHTML='<i class="fas fa-plus"></i> Add Disco';['x_id','x_disco_id','x_disco_name','x_charge','x_postpaid_charge','x_agent_charge','x_vendor_charge'].forEach(i=>document.getElementById(i).value='');document.getElementById('x_is_active').checked=true;document.getElementById('discoModal').style.display='flex';}
 function editDisco(d){
     document.getElementById('discoModalTitle').innerHTML='<i class="fas fa-edit"></i> Edit Disco';
     document.getElementById('x_id').value=d.id;document.getElementById('x_disco_name').value=d.disco_name;
     document.getElementById('x_disco_id').value=d.disco_id;
-    document.getElementById('x_logo_key').value=d.logo_key||'';document.getElementById('x_charge').value=d.charge;
+    document.getElementById('x_charge').value=d.charge;
+    document.getElementById('x_postpaid_charge').value=(d.postpaid_charge===null||d.postpaid_charge===undefined)?'':d.postpaid_charge;
     document.getElementById('x_agent_charge').value=d.agent_charge||'0';document.getElementById('x_vendor_charge').value=d.vendor_charge||'0';
     document.getElementById('x_is_active').checked=d.is_active==1;
     document.getElementById('discoModal').style.display='flex';
@@ -139,7 +148,7 @@ let discosChanged=false;
 async function saveDisco(){
     const wasNew=!document.getElementById('x_id').value;
     const fd=new FormData();fd.append('csrf',CSRF);fd.append('action','save_disco');
-    ['id','disco_name','disco_id','logo_key','charge','agent_charge','vendor_charge'].forEach(k=>fd.append(k,document.getElementById('x_'+k).value));
+    ['id','disco_name','disco_id','charge','postpaid_charge','agent_charge','vendor_charge'].forEach(k=>fd.append(k,document.getElementById('x_'+k).value));
     if(document.getElementById('x_is_active').checked)fd.append('is_active','1');
     const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
     showToast(r.message,r.success);

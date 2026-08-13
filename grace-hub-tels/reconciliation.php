@@ -53,15 +53,12 @@ require_permission('manage_transactions');
 
 const TOL = 0.01; // rounding tolerance in Naira/USD
 
-function table_exists(string $name): bool {
-    static $cache = [];
-    if (isset($cache[$name])) return $cache[$name];
-    $s = db()->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
-    $s->execute([$name]);
-    return $cache[$name] = ((int)$s->fetchColumn() > 0);
-}
+// table_exists()/column_exists() now live in user/core/db.php (shared).
 
-$has_legacy_log = table_exists('legacy_migration_log');
+$has_legacy_log = table_exists('legacy_migration_log')
+    && column_exists('legacy_migration_log', 'new_user_id')
+    && column_exists('legacy_migration_log', 'old_wallet_snapshot')
+    && column_exists('legacy_migration_log', 'old_cashback_snapshot');
 
 // ---------------------------------------------------------------------
 // Per-user wallet & cashback ledger sums
@@ -173,11 +170,12 @@ $orphaned_count = db()->query("
 // UNIQUE constraint on transactions.idempotency_key, checked anyway as a
 // direct sanity check on that constraint actually being in place.
 // ---------------------------------------------------------------------
-$dup_idem = db()->query("
+$has_idempotency_key = column_exists('transactions', 'idempotency_key');
+$dup_idem = $has_idempotency_key ? db()->query("
     SELECT idempotency_key, COUNT(*) c FROM transactions
     WHERE idempotency_key IS NOT NULL
     GROUP BY idempotency_key HAVING c > 1
-")->fetchAll();
+")->fetchAll() : [];
 
 // ---------------------------------------------------------------------
 // Impossible / suspicious transaction states.
@@ -185,7 +183,8 @@ $dup_idem = db()->query("
 $bad_amount = db()->query("SELECT id, transaction_ref, user_id, amount, category, status, created_at FROM transactions WHERE amount <= 0 ORDER BY created_at DESC LIMIT 50")->fetchAll();
 $bad_amount_count = db()->query("SELECT COUNT(*) FROM transactions WHERE amount <= 0")->fetchColumn();
 
-$negative_cards = db()->query("SELECT card_id, user_id, balance, status FROM virtual_cards WHERE balance < 0")->fetchAll();
+$has_virtual_cards = table_exists('virtual_cards');
+$negative_cards = $has_virtual_cards ? db()->query("SELECT card_id, user_id, balance, status FROM virtual_cards WHERE balance < 0")->fetchAll() : [];
 
 // Long-stuck pending/processing transactions — operational, not necessarily
 // a ledger error, but a debit that has been sitting unresolved this long is
@@ -201,7 +200,7 @@ $stuck_count = db()->query("SELECT COUNT(*) FROM transactions WHERE status IN ('
 $csrf = admin_csrf();
 ?>
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Wallet Reconciliation — Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Wallet Reconciliation — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
 <div class="main-wrap">
@@ -213,6 +212,16 @@ $csrf = admin_csrf();
 <?php if (!$has_legacy_log): ?>
 <div class="save-toast show err" style="position:static;display:block;margin-bottom:16px;padding:12px 16px;">
   <i class="fas fa-triangle-exclamation"></i> <code>legacy_migration_log</code> not found on this database — opening balances are assumed to be ₦0 for every user. If any users were carried over from a previous system without a matching row in that table, they will show up below as a wallet mismatch that is not actually an error.
+</div>
+<?php endif; ?>
+<?php if (!$has_virtual_cards): ?>
+<div class="save-toast show err" style="position:static;display:block;margin-bottom:16px;padding:12px 16px;">
+  <i class="fas fa-triangle-exclamation"></i> <code>virtual_cards</code> table not found on this database — the negative-balance check below skips virtual cards entirely rather than failing the whole page.
+</div>
+<?php endif; ?>
+<?php if (!$has_idempotency_key): ?>
+<div class="save-toast show err" style="position:static;display:block;margin-bottom:16px;padding:12px 16px;">
+  <i class="fas fa-triangle-exclamation"></i> <code>transactions.idempotency_key</code> column not found on this database — the duplicate idempotency key check below is skipped rather than failing the whole page.
 </div>
 <?php endif; ?>
 

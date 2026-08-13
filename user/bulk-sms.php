@@ -3,6 +3,7 @@ require_once __DIR__.'/core/auth.php';
 require_once __DIR__.'/core/bulk_sms.php';
 
 auth_user();
+require_feature_user('bulk_sms');
 $uid = (int)$_SESSION['user_id'];
 $user = get_user($uid);
 

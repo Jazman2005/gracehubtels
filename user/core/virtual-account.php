@@ -260,7 +260,7 @@ class VirtualAccountManager
             $order_id = 'VA_' . $user['id'] . '_' . time();
             $rel_path = dirname(dirname($_SERVER['SCRIPT_NAME']));
             $rel_path = $rel_path === '/' || $rel_path === '\\' ? '' : rtrim($rel_path, '/');
-            $notify_url = 'https://www.gracehubtels.com' . $rel_path . '/webhook/palmpay/index.php';
+            $notify_url = site_url($rel_path . '/webhook/palmpay/index.php');
             $res = $api->create_order($user, 100, $order_id, $notify_url);
 
             if (!$res || empty($res['data']['payerVirtualAccNo'])) {
@@ -351,7 +351,7 @@ class VirtualAccountManager
 
         foreach ($banks_to_create as $bcode) {
             $payload = [
-                'email'       => $user['email'] ?? ($user['phone'].'@gracehubtels.com'),
+                'email'       => $user['email'] ?? ($user['phone'].'@'.site_domain()),
                 'name'        => $user['full_name'],
                 'phoneNumber' => $user['phone'],
                 'bankcode'    => [$bcode],
@@ -471,7 +471,7 @@ class VirtualAccountManager
             'accountName'      => $user['full_name'],
             'currencyCode'     => 'NGN',
             'contractCode'     => $contract,
-            'customerEmail'    => $user['email'] ?? ($user['phone'] . '@gracehubtels.com'),
+            'customerEmail'    => $user['email'] ?? ($user['phone'] . '@'.site_domain()),
             'customerName'     => $user['full_name'],
             'getAllAvailableBanks' => false,
             'preferredBanks'   => ['50515'] // Moniepoint
@@ -657,7 +657,7 @@ class VirtualAccountManager
 
         $account_type = $bank_code === '090175' ? 'DYNAMIC' : 'STATIC';
         $payload = [
-            'email'       => $u['email'] ?? ($u['phone'].'@gracehubtels.com'),
+            'email'       => $u['email'] ?? ($u['phone'].'@'.site_domain()),
             'name'        => $u['full_name'],
             'phoneNumber' => $u['phone'],
             'bankcode'    => [$bank_code],
@@ -777,7 +777,7 @@ class VirtualAccountManager
             'accountName'      => $u['full_name'],
             'currencyCode'     => 'NGN',
             'contractCode'     => $contract,
-            'customerEmail'    => $u['email'] ?? ($u['phone'] . '@gracehubtels.com'),
+            'customerEmail'    => $u['email'] ?? ($u['phone'] . '@'.site_domain()),
             'customerName'     => $u['full_name'],
             'getAllAvailableBanks' => false,
             'preferredBanks'   => ['50515']

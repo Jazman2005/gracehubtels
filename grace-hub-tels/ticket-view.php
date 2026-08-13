@@ -45,7 +45,7 @@ $messages = $messages->fetchAll();
 $badgeColor = $ticket['status'] === 'open' ? 'danger' : ($ticket['status'] === 'pending' ? 'warning' : 'success');
 ?>
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Ticket #<?=$ticket_id?> — Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Ticket #<?=$ticket_id?> — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
 <style>
 .chat-box{height:calc(100vh - 280px);min-height:400px;background:#F9FAFB;border-radius:12px;padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px;border:1px solid #E5E7EB}
 .msg{max-width:70%;padding:14px;border-radius:14px;font-size:14px;line-height:1.5}

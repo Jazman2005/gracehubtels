@@ -5,7 +5,11 @@ auth_admin();
 require_permission('manage_api');
 $csrf = admin_csrf();
 
-const MAPPING_SERVICES = ['data', 'cabletv', 'electricity'];
+// data_card shares the same data_plans table as data (a data_card purchase
+// is just a prepaid-PIN version of the same plan), but needs its own
+// provider mappings since a plan's product_code can differ between the two
+// purchase types — kept as its own service scope in plan_api_bindings.
+const MAPPING_SERVICES = ['data', 'data_card', 'cabletv', 'electricity', 'betting'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
     if (!verify_admin_csrf($_POST['csrf'] ?? '')) json_response(['success' => false, 'message' => 'Invalid token'], 403);
@@ -41,22 +45,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         }
 
         if ($service === 'electricity') {
+            // Prepaid and postpaid can need entirely different provider Plan
+            // IDs for the same disco (see migration_v31.sql) — returned as
+            // two rows per disco so the existing type_label grouping renders
+            // them as separate "PREPAID PLANS" / "POSTPAID PLANS" sections,
+            // same as the Data page already does for data categories.
             $stmt = db()->prepare(
                 "SELECT ed.id, 'Electricity' AS group_label, ed.disco_name AS item_label,
-                        NULL AS type_label, pb.product_code
+                        'Prepaid' AS type_label, pb.product_code, 'prepaid' AS meter_type
                  FROM electricity_discos ed
                  LEFT JOIN plan_api_bindings pb
-                        ON pb.plan_id = ed.id AND pb.service = 'electricity' AND pb.api_registry_id = ?
+                        ON pb.plan_id = ed.id AND pb.service = 'electricity' AND pb.api_registry_id = ? AND pb.meter_type = 'prepaid'
                  WHERE ed.is_active = 1
-                 ORDER BY ed.disco_name"
+                 UNION ALL
+                 SELECT ed.id, 'Electricity' AS group_label, ed.disco_name AS item_label,
+                        'Postpaid' AS type_label, pb.product_code, 'postpaid' AS meter_type
+                 FROM electricity_discos ed
+                 LEFT JOIN plan_api_bindings pb
+                        ON pb.plan_id = ed.id AND pb.service = 'electricity' AND pb.api_registry_id = ? AND pb.meter_type = 'postpaid'
+                 WHERE ed.is_active = 1
+                 ORDER BY item_label, FIELD(type_label, 'Prepaid', 'Postpaid')"
+            );
+            $stmt->execute([$registry_id, $registry_id]);
+            json_response(['success' => true, 'plans' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        }
+
+        if ($service === 'betting') {
+            // Betting has no per-plan type dimension (unlike electricity's
+            // prepaid/postpaid split) — one row per platform, same shape as
+            // the cabletv block above.
+            $stmt = db()->prepare(
+                "SELECT bp.id, 'Betting' AS group_label, bp.platform_name AS item_label,
+                        NULL AS type_label, pb.product_code
+                 FROM betting_plans bp
+                 LEFT JOIN plan_api_bindings pb
+                        ON pb.plan_id = bp.id AND pb.service = 'betting' AND pb.api_registry_id = ?
+                 WHERE bp.is_active = 1
+                 ORDER BY bp.platform_name"
             );
             $stmt->execute([$registry_id]);
             json_response(['success' => true, 'plans' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
         }
 
-        // Data is filtered down to a single network at a time (chosen via the
-        // network tabs on the page) — same pattern as the Add Data Plan page's
-        // network filter, and avoids ever having to guess/merge network values.
+        // Data and Data Card are filtered down to a single network at a time
+        // (chosen via the network tabs on the page) — same pattern as the Add
+        // Data Plan page's network filter, and avoids ever having to
+        // guess/merge network values. Both share the data_plans table (a
+        // data_card purchase is the prepaid-PIN version of the same plan)
+        // but are mapped as separate service scopes in plan_api_bindings.
         $network = strtoupper(trim($_POST['network'] ?? ''));
         if (!in_array($network, ['MTN', 'GLO', 'AIRTEL', '9MOBILE'], true)) {
             json_response(['success' => false, 'message' => 'Select a network'], 400);
@@ -67,11 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
                     COALESCE(dp.display_type_name, dp.data_type) AS type_label, pb.product_code
              FROM data_plans dp
              LEFT JOIN plan_api_bindings pb
-                    ON pb.plan_id = dp.id AND pb.service = 'data' AND pb.api_registry_id = ?
+                    ON pb.plan_id = dp.id AND pb.service = ? AND pb.api_registry_id = ?
              WHERE dp.is_active = 1 AND UPPER(TRIM(dp.network)) = ?
              ORDER BY dp.data_type, dp.selling_price"
         );
-        $stmt->execute([$registry_id, $network]);
+        $stmt->execute([$service, $registry_id, $network]);
         json_response(['success' => true, 'plans' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
     }
 
@@ -81,32 +117,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         $rows = json_decode($_POST['rows'] ?? '[]', true);
         if ($registry_id < 1 || $service === '' || !is_array($rows)) json_response(['success' => false, 'message' => 'Invalid request'], 400);
 
-        // Upsert on the (service, plan_id, api_registry_id) unique key — an existing
-        // mapping just gets its product_code refreshed, a new one is inserted with
-        // priority 1 (this page doesn't expose failover ordering; ties between
-        // multiple mapped providers for the same plan fall back to insertion order,
-        // matching "first one you map is effectively tried first").
+        // Upsert on the (service, plan_id, api_registry_id, meter_type) unique key —
+        // an existing mapping just gets its product_code refreshed, a new one is
+        // inserted with priority 1 (this page doesn't expose failover ordering; ties
+        // between multiple mapped providers for the same plan fall back to insertion
+        // order, matching "first one you map is effectively tried first"). meter_type
+        // is always '' outside electricity — every other service binds one row per
+        // plan, same as before this column existed.
         $upsert = db()->prepare(
-            "INSERT INTO plan_api_bindings (service, plan_id, api_registry_id, priority, product_code)
-             VALUES (?, ?, ?, 1, ?)
+            "INSERT INTO plan_api_bindings (service, plan_id, meter_type, api_registry_id, priority, product_code)
+             VALUES (?, ?, ?, ?, 1, ?)
              ON DUPLICATE KEY UPDATE product_code = VALUES(product_code)"
         );
         // A blank box means "this provider doesn't handle this plan" — clear any
         // existing mapping rather than leaving a stale product_code behind.
         $remove = db()->prepare(
-            "DELETE FROM plan_api_bindings WHERE service=? AND plan_id=? AND api_registry_id=?"
+            "DELETE FROM plan_api_bindings WHERE service=? AND plan_id=? AND meter_type=? AND api_registry_id=?"
         );
 
         $saved = 0; $cleared = 0;
         foreach ($rows as $row) {
             $plan_id = (int)($row['plan_id'] ?? 0);
             $code = trim((string)($row['product_code'] ?? ''));
+            $meter_type = in_array($row['meter_type'] ?? '', ['prepaid', 'postpaid'], true) ? $row['meter_type'] : '';
             if ($plan_id < 1) continue;
             if ($code !== '') {
-                $upsert->execute([$service, $plan_id, $registry_id, $code]);
+                $upsert->execute([$service, $plan_id, $meter_type, $registry_id, $code]);
                 $saved++;
             } else {
-                $remove->execute([$service, $plan_id, $registry_id]);
+                $remove->execute([$service, $plan_id, $meter_type, $registry_id]);
                 $cleared++;
             }
         }
@@ -124,8 +163,8 @@ $api_regs = db()->query("SELECT id, name FROM api_registry WHERE is_active=1 ORD
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Plan ID Mapping – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Plan ID Mapping – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -139,7 +178,7 @@ $api_regs = db()->query("SELECT id, name FROM api_registry WHERE is_active=1 ORD
     <div class="section-header">
         <div>
             <h2>Plan ID Mapping</h2>
-            <p>Map every Data, Cable TV, and Electricity item to its Plan ID for each API provider</p>
+            <p>Map every Data, Cable TV, Electricity, and Betting item to its Plan ID for each API provider</p>
         </div>
     </div>
 
@@ -158,8 +197,10 @@ $api_regs = db()->query("SELECT id, name FROM api_registry WHERE is_active=1 ORD
               <label>Service</label>
               <select class="form-control" id="service_select" onchange="loadProviderPlans()">
                   <option value="data">Data</option>
+                  <option value="data_card">Data Card</option>
                   <option value="cabletv">Cable TV</option>
                   <option value="electricity">Electricity</option>
+                  <option value="betting">Betting</option>
               </select>
           </div>
           <div class="form-group" style="min-width:280px; margin:0;">
@@ -189,7 +230,8 @@ $api_regs = db()->query("SELECT id, name FROM api_registry WHERE is_active=1 ORD
 
 <script>
 const CSRF = <?=json_encode($csrf)?>;
-const SERVICE_LABELS = { data: 'data plans', cabletv: 'cable plans', electricity: 'discos' };
+const SERVICE_LABELS = { data: 'data plans', data_card: 'data card plans', cabletv: 'cable plans', electricity: 'discos', betting: 'betting platforms' };
+const NETWORK_SCOPED_SERVICES = ['data', 'data_card'];
 let currentNetwork = 'MTN';
 function showToast(msg, ok) { const t = document.getElementById('toast'); t.textContent = msg; t.className = 'save-toast show ' + (ok ? 'ok' : 'err'); setTimeout(() => t.classList.remove('show'), 2500); }
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
@@ -208,20 +250,20 @@ async function loadProviderPlans() {
     const btn = document.getElementById('saveMappingBtn');
     const networkWrap = document.getElementById('network_filter_wrap');
 
-    // Network tabs only make sense for Data — every other service is grouped
-    // by its own column (provider for cable, or a single group for electricity).
-    networkWrap.style.display = (svc === 'data') ? 'flex' : 'none';
+    // Network tabs only make sense for Data/Data Card — every other service is
+    // grouped by its own column (provider for cable, or a single group for electricity).
+    networkWrap.style.display = NETWORK_SCOPED_SERVICES.includes(svc) ? 'flex' : 'none';
 
     if (!sel.value) { wrap.innerHTML = ''; btn.style.display = 'none'; return; }
 
     wrap.innerHTML = '<div style="padding:20px;color:var(--text-muted);">Loading...</div>';
     btn.style.display = 'none';
     const fd = new FormData(); fd.append('csrf', CSRF); fd.append('action', 'load_provider_plans'); fd.append('api_registry_id', sel.value); fd.append('service', svc);
-    if (svc === 'data') fd.append('network', currentNetwork);
+    if (NETWORK_SCOPED_SERVICES.includes(svc)) fd.append('network', currentNetwork);
     const r = await fetch(location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd }).then(r => r.json());
     if (!r.success) { wrap.innerHTML = '<div style="padding:20px;color:var(--danger);">' + escapeHtml(r.message || 'Failed to load') + '</div>'; return; }
 
-    if (!r.plans.length) { wrap.innerHTML = '<div style="padding:20px;color:var(--text-muted);">No active ' + (SERVICE_LABELS[svc] || 'items') + ' found' + (svc === 'data' ? ' for ' + currentNetwork : '') + '.</div>'; return; }
+    if (!r.plans.length) { wrap.innerHTML = '<div style="padding:20px;color:var(--text-muted);">No active ' + (SERVICE_LABELS[svc] || 'items') + ' found' + (NETWORK_SCOPED_SERVICES.includes(svc) ? ' for ' + currentNetwork : '') + '.</div>'; return; }
 
     wrap.innerHTML = '<div style="padding:0 20px 20px;">' + renderGroupedTables(r.plans) + '</div>';
     btn.style.display = 'inline-flex';
@@ -267,7 +309,7 @@ function renderGroupedTables(plans) {
                 + '<th style="width:52px;">#</th><th>Plan</th><th style="width:240px;">Plan ID</th>'
                 + '</tr></thead><tbody>';
             rows.forEach((p, i) => {
-                html += '<tr data-plan-id="' + p.id + '">'
+                html += '<tr data-plan-id="' + p.id + '" data-meter-type="' + escapeHtml(p.meter_type || '') + '">'
                     + '<td>' + (i + 1) + '</td>'
                     + '<td>' + escapeHtml(p.item_label) + '</td>'
                     + '<td><input type="text" class="form-control mapping-input" value="' + escapeHtml(p.product_code || '') + '" placeholder="Plan ID"></td>'
@@ -286,7 +328,7 @@ async function saveProviderPlans() {
     const rows = [];
     document.querySelectorAll('#mappingTableWrap tbody tr').forEach(tr => {
         const input = tr.querySelector('.mapping-input');
-        rows.push({ plan_id: tr.getAttribute('data-plan-id'), product_code: input.value.trim() });
+        rows.push({ plan_id: tr.getAttribute('data-plan-id'), product_code: input.value.trim(), meter_type: tr.getAttribute('data-meter-type') || '' });
     });
     const fd = new FormData(); fd.append('csrf', CSRF); fd.append('action', 'save_provider_plans');
     fd.append('api_registry_id', sel.value); fd.append('service', svc); fd.append('rows', JSON.stringify(rows));

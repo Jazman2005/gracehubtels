@@ -143,12 +143,219 @@ function setting_set(string $key, string $value): void
     }
 }
 
+function table_exists(string $name): bool {
+    static $cache = [];
+    if (isset($cache[$name])) return $cache[$name];
+    $s = db()->prepare("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?");
+    $s->execute([$name]);
+    return $cache[$name] = ((int)$s->fetchColumn() > 0);
+}
+function column_exists(string $table, string $column): bool {
+    static $cache = [];
+    $key = "$table.$column";
+    if (isset($cache[$key])) return $cache[$key];
+    $s = db()->prepare("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
+    $s->execute([$table, $column]);
+    return $cache[$key] = ((int)$s->fetchColumn() > 0);
+}
+
+// Per-install feature flags — this codebase is resold to multiple clients,
+// each on their own separate database, so this table has no tenant column;
+// "per install" simply means "per database". Absence of a row = enabled
+// (fail open), so shipping this never breaks an already-live install that
+// has never had a flag explicitly set — only a brand-new client, where the
+// vendor deliberately disables what hasn't been paid for via
+// grace-hub-tels/vendor-access.php, ends up with anything actually locked.
+const FEATURE_REGISTRY = [
+    'airtime' => 'Airtime',
+    'data' => 'Data Bundles',
+    'cabletv' => 'Cable TV',
+    'electricity' => 'Electricity',
+    'betting' => 'Betting',
+    'virtual_card' => 'Virtual Cards',
+    'exam_pin' => 'Exam PINs',
+    'recharge_card' => 'Recharge Cards',
+    'data_card' => 'Data Cards',
+    'airtime_to_cash' => 'Airtime to Cash',
+    'bank_transfer' => 'Bank Transfer',
+    'bulk_sms' => 'Bulk SMS',
+    'esim' => 'eSIM',
+    'international_airtime' => 'International Airtime',
+    'giftcard_buy' => 'Gift Cards (Buy)',
+    'giftcard_sell' => 'Gift Cards (Sell for Cash)',
+];
+
+// Separate from FEATURE_REGISTRY above — these gate ADMIN-side tooling
+// pages, not customer-facing purchase services. Kept as a distinct registry
+// (rather than merged into FEATURE_REGISTRY) so vendor-access.php can group
+// them visibly apart from services, and so it's obvious at a glance which
+// keys are safe to lock without risking a client being unable to run their
+// business — deliberately excludes anything operationally essential
+// (Withdrawals, KYC, Settings, Staff Management, Security, API Registry).
+const ADMIN_FEATURE_REGISTRY = [
+    'admin_accounting' => 'Accounting (Liability Overview)',
+    'admin_cashback' => 'Cashback Management',
+    'admin_messaging_hub' => 'Messaging Hub (Broadcast Composer)',
+    'admin_webhook_logs' => 'Webhook Logs',
+    'admin_provider_health' => 'System Health',
+    'admin_promo_codes' => 'Promo Codes',
+];
+
+// Known upstream VTU/service provider identifiers — the exact substrings
+// every service file's provider loop already keys on (stripos($pname,'x')).
+// This is a DIFFERENT kind of lock than FEATURE_REGISTRY/ADMIN_FEATURE_REGISTRY:
+// a client's own admin has full control of their own api_providers/api_registry
+// tables (each client runs a separate DB), so nothing stops them from adding
+// a row for any provider whose integration code ships in this codebase. This
+// registry lets the vendor block specific provider INTEGRATIONS from ever
+// being routed through on a given install, regardless of what the client's
+// own admin configures — enforced centrally in get_api_providers() and
+// get_plan_bindings() (api_router.php), not per service file.
+const PROVIDER_REGISTRY = [
+    'reteller' => 'Reteller',
+    'autosyncng' => 'AutoSyncNG',
+    'autopilot' => 'AutoPilot',
+    'gladtidings' => 'Gladtidings',
+    'msjdatasubs' => 'MsjDataSubs',
+    'telecomabode' => 'TelecomAbode',
+    'sagecloud' => 'SageCloud',
+];
+
+// True if ANY locked provider key is a substring of $provider_name — same
+// matching convention as every stripos($pname,'x') check throughout the
+// service files, so this stays in lockstep with however they identify a
+// provider row. Fails open (unlocked) on a DB hiccup — a vendor's config
+// error must never be able to take down a client's live purchase flow.
+function provider_locked(?string $provider_name): bool {
+    if (!$provider_name) return false;
+    static $locked = null;
+    if ($locked === null) {
+        $locked = [];
+        try {
+            db()->exec("CREATE TABLE IF NOT EXISTS provider_locks (
+                provider_key VARCHAR(50) NOT NULL PRIMARY KEY,
+                is_locked TINYINT(1) NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )");
+            $rows = db()->query("SELECT provider_key FROM provider_locks WHERE is_locked=1")->fetchAll(PDO::FETCH_COLUMN);
+            $locked = $rows ?: [];
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+    $pname = strtolower($provider_name);
+    foreach ($locked as $key) {
+        if (stripos($pname, $key) !== false) return true;
+    }
+    return false;
+}
+
+// Shared response for a service that's wired into the nav/feature-flag
+// system but has no real upstream provider connected yet — used instead of
+// a fake/mocked purchase so nothing ever debits a wallet for a purchase that
+// can't actually be fulfilled. Swap the call site to a real
+// try_api_providers()/debit_wallet() flow once the provider is integrated.
+function service_not_live_yet(string $label): array {
+    return ['success' => false, 'message' => "$label isn't live yet — check back soon!"];
+}
+
+function feature_enabled(string $key): bool {
+    static $flags = null;
+    if ($flags === null) {
+        $flags = [];
+        try {
+            db()->exec("CREATE TABLE IF NOT EXISTS feature_flags (
+                feature_key VARCHAR(50) NOT NULL PRIMARY KEY,
+                is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+                label VARCHAR(100) DEFAULT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )");
+            $rows = db()->query("SELECT feature_key, is_enabled FROM feature_flags")->fetchAll();
+            foreach ($rows as $r) $flags[$r['feature_key']] = (bool)$r['is_enabled'];
+        } catch (\Throwable $e) {
+            return true; // fail open — a DB hiccup must never lock out a paying client
+        }
+    }
+    return $flags[$key] ?? true;
+}
+
+// Shared "you don't have this yet" fragment — no <html>/chrome, just the
+// inner card, so every surface (admin/user full page, or a single tab of a
+// multi-service admin page like service-pin-products.php) can drop it into
+// whatever shell is already rendering.
+function feature_locked_card_html(string $key, string $context = 'user'): string {
+    $label = htmlspecialchars(FEATURE_REGISTRY[$key] ?? ADMIN_FEATURE_REGISTRY[$key] ?? ucwords(str_replace('_', ' ', $key)), ENT_QUOTES);
+    $site = htmlspecialchars(setting('site_name', 'Gracehubtels'), ENT_QUOTES);
+    if ($context === 'admin') {
+        // The reader here is the business owner/staff running THIS install —
+        // not a customer of theirs. "Contact our team" (site_email) would
+        // point them at their own support inbox, which is wrong; only show a
+        // CTA if the vendor has configured a real contact channel for
+        // themselves (VENDOR_CONTACT_EMAIL, per-install, set alongside
+        // VENDOR_ACCESS_KEY in db_config.php) — otherwise omit it rather
+        // than link somewhere meaningless.
+        $body = $label . ' isn\'t active on this ' . $site . ' installation yet. Contact your platform provider to have it enabled for your account.';
+        $cta = (defined('VENDOR_CONTACT_EMAIL') && VENDOR_CONTACT_EMAIL !== '')
+            ? '<a href="mailto:' . htmlspecialchars(VENDOR_CONTACT_EMAIL, ENT_QUOTES) . '" class="btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;">Contact Provider</a>'
+            : '';
+    } else {
+        $body = $label . ' isn\'t included in your current ' . $site . ' plan. Contact our team to unlock it for your account.';
+        $cta = '<a href="/user/support" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;background:var(--brand-navy,#1E293B);color:#fff;padding:12px 24px;border-radius:9999px;font-weight:600;">Contact Support</a>';
+    }
+    return '
+    <div style="max-width:480px;margin:60px auto;text-align:center;padding:40px 32px;background:#fff;border:1px solid #e2e8f0;border-radius:16px;">
+        <div style="width:64px;height:64px;margin:0 auto 20px;border-radius:9999px;background:#fef3c7;display:flex;align-items:center;justify-content:center;">
+            <i class="fas fa-lock" style="font-size:24px;color:#d97706;"></i>
+        </div>
+        <h2 style="font-size:20px;font-weight:700;margin:0 0 8px;color:#0f172a;">This is a Premium Feature</h2>
+        <p style="color:#64748b;font-size:14px;line-height:1.6;margin:0 0 24px;">' . $body . '</p>
+        ' . $cta . '
+    </div>';
+}
+
+// Builds an absolute site URL without ever hardcoding a domain — prefers an
+// explicit site_domain setting (needed for cron/CLI contexts with no
+// $_SERVER, or to force a canonical domain), otherwise auto-detects from the
+// current request's own Host header. This means a fresh deploy to a new
+// domain needs zero configuration for links (password resets, webhook
+// callbacks, CORS) to already point at the right place.
+function site_url(string $path = ''): string {
+    $domain = setting('site_domain', '') ?: ($_SERVER['HTTP_HOST'] ?? 'gracehubtels.com');
+    return 'https://' . rtrim($domain, '/') . '/' . ltrim($path, '/');
+}
+
+// Bare domain only (no scheme/path) — used for placeholder emails sent to
+// third-party provider APIs that require an email field even when the user
+// never gave us one, so the placeholder stays consistent with whatever
+// domain this deployment is actually running on.
+function site_domain(): string {
+    return setting('site_domain', '') ?: ($_SERVER['HTTP_HOST'] ?? 'gracehubtels.com');
+}
+
+// CORS allow-list of both www and bare variants of this deployment's own
+// domain — used by every api/v1/*.php endpoint's Access-Control-Allow-Origin
+// check instead of a hardcoded domain list.
+function site_allowed_origins(): array {
+    $bare = preg_replace('/^www\./i', '', site_domain());
+    return ['https://' . $bare, 'https://www.' . $bare];
+}
+
 // ============================================
 // UTILITY FUNCTIONS
 // ============================================
 function generate_ref(string $prefix = 'MSJ'): string
 {
-    return $prefix . strtoupper(bin2hex(random_bytes(6))) . time();
+    for ($attempt = 0; $attempt < 3; $attempt++) {
+        $ref = $prefix . strtoupper(bin2hex(random_bytes(6))) . time();
+        try {
+            $stmt = db()->prepare("SELECT 1 FROM transactions WHERE transaction_ref = ? LIMIT 1");
+            $stmt->execute([$ref]);
+            if (!$stmt->fetch()) return $ref;
+        } catch (\Throwable $e) {
+            return $ref; // DB unavailable — fall back to the raw value, unique constraint still backstops it on insert
+        }
+    }
+    return $ref; // exhausted retries (astronomically unlikely) — insert will fail cleanly on the UNIQUE constraint
 }
 
 // Atomically claims a one-time key, for webhook handlers that mutate state outside
@@ -466,7 +673,7 @@ function log_security(string $event, array $data = []): void
 
 function log_api(string $provider, string $endpoint, array $request, $response, bool $success): void
 {
-    $channel = 'api_' . strtolower(preg_replace('/[^a-z0-9]/', '', $provider));
+    $channel = 'api_' . preg_replace('/[^a-z0-9]/', '', strtolower($provider));
     $log_file = LOG_DIR . '/' . $channel . '.log';
 
     $sanitized_request = redact_sensitive($request);
@@ -896,35 +1103,81 @@ function check_transaction_limits(int $user_id, float $amount, string $category,
 
         $custom_transfer = $user_data['custom_transfer_limit'];
         $transfer_limit = $custom_transfer !== null ? (float)$custom_transfer : (float)setting('limit_transfer_daily', '0');
-        
+
         if ($transfer_limit > 0 && $proposed_service_spent > $transfer_limit) {
             return ['success' => false, 'message' => 'Transaction limit reached. Contact Admin.'];
+        }
+    }
+
+    // Generic per-category daily cap for every other category (betting,
+    // bulk_sms, cabletv, electricity, data, exam_pin, ...). No admin UI
+    // currently exposes a limit_<category>_daily setting for these the way
+    // it does for airtime/bank_transfer above, so this defaults to 0
+    // (disabled) and is a no-op today — but it's checked under the same row
+    // lock as the two blocks above, so the moment such a setting IS
+    // configured (directly or via a future admin UI addition), it's
+    // enforced atomically from day one rather than only via the separate,
+    // unlocked check_daily_limit() pre-check that per-transaction bounds
+    // currently rely on.
+    if (!in_array($category, ['airtime', 'bank_transfer'], true)) {
+        $cat_limit = (float)setting("limit_{$category}_daily", '0');
+        if ($cat_limit > 0) {
+            $service_spent_stmt = $db->prepare("SELECT SUM(amount) as spent FROM transactions WHERE user_id = ? AND category = ? AND DATE(created_at) = CURDATE() AND status != 'failed' AND type = 'debit'");
+            $service_spent_stmt->execute([$user_id, $category]);
+            $service_spent = (float)($service_spent_stmt->fetch()['spent'] ?? 0);
+            if (($service_spent + $amount) > $cat_limit) {
+                return ['success' => false, 'message' => 'Transaction limit reached. Contact Admin.'];
+            }
         }
     }
 
     return ['success' => true];
 }
 
-function debit_wallet(int $user_id, float $amount, string $category, string $description, array $meta = []): array
+// Single definition of "what makes two purchases the same" — shared by
+// claim_purchase_lock() (cheap first-pass, fixed 5s window) and
+// debit_wallet()'s $dedupe_signature check (state-based, no time window).
+function purchase_signature(string $category, array $fields): string {
+    return $category . ':' . md5(json_encode($fields));
+}
+
+function debit_wallet(int $user_id, float $amount, string $category, string $description, array $meta = [], ?string $dedupe_signature = null): array
 {
     if ($amount <= 0) {
         return ['success' => false, 'message' => 'Invalid amount'];
     }
-    
+
     $db = db();
     $in_transaction = $db->inTransaction();
     if (!$in_transaction) {
         $db->beginTransaction();
     }
-    
+
     try {
         // Lock user record for update
         $stmt = $db->prepare("SELECT wallet_balance, user_type, custom_daily_limit, custom_airtime_limit, custom_transfer_limit FROM users WHERE id = ? AND is_active = 1 FOR UPDATE");
         $stmt->execute([$user_id]);
         $user = $stmt->fetch();
-        
+
         if (!$user) {
             throw new RuntimeException('User not found');
+        }
+
+        // claim_purchase_lock() (called earlier by every service, before this
+        // function) only dedupes within a fixed 5-second window — a provider
+        // call slower than that, followed by a retry after the window rolls
+        // over, computes a different lock key and would otherwise sail
+        // through as a "new" purchase. This check has no time window at all:
+        // it's protected by the row lock just acquired above (which already
+        // serializes every debit_wallet() call for this user), and only
+        // clears once the prior matching transaction reaches a terminal
+        // status (success/failed/refunded) — exactly the guarantee needed.
+        if ($dedupe_signature !== null) {
+            $dupe = $db->prepare("SELECT transaction_ref FROM transactions WHERE user_id = ? AND status IN ('pending','processing') AND dedupe_signature = ? LIMIT 1");
+            $dupe->execute([$user_id, $dedupe_signature]);
+            if ($dupe->fetch()) {
+                throw new RuntimeException('A similar transaction is already being processed. Please wait for it to complete before retrying.');
+            }
         }
 
         // Limit Check
@@ -935,31 +1188,31 @@ function debit_wallet(int $user_id, float $amount, string $category, string $des
                 throw new RuntimeException($limit_check['message']);
             }
         }
-        
+
         $balance_before = (float)$user['wallet_balance'];
-        
+
         if ($balance_before < $amount) {
             throw new RuntimeException('Insufficient balance. Please top up your wallet.');
         }
-        
+
         $balance_after = $balance_before - $amount;
-        
+
         // Update wallet
         $db->prepare("UPDATE users SET wallet_balance = ? WHERE id = ?")
            ->execute([$balance_after, $user_id]);
-        
+
         // Create transaction record
         $ref = generate_ref('MSJ');
         $db->prepare(
             "INSERT INTO transactions (
-                user_id, transaction_ref, type, category, amount, 
-                balance_before, balance_after, description, meta, 
-                ip_address, user_agent, status
-            ) VALUES (?, ?, 'debit', ?, ?, ?, ?, ?, ?, ?, ?, 'pending')"
+                user_id, transaction_ref, type, category, amount,
+                balance_before, balance_after, description, meta,
+                ip_address, user_agent, status, dedupe_signature
+            ) VALUES (?, ?, 'debit', ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)"
         )->execute([
-            $user_id, $ref, $category, $amount, 
-            $balance_before, $balance_after, $description, 
-            json_encode($meta), get_ip(), get_ua()
+            $user_id, $ref, $category, $amount,
+            $balance_before, $balance_after, $description,
+            json_encode($meta), get_ip(), get_ua(), $dedupe_signature
         ]);
         
         $tx_id = (int)$db->lastInsertId();
@@ -1071,9 +1324,22 @@ function credit_wallet(int $user_id, float $amount, string $category, string $de
 function save_tx_response(string $ref, string $response_msg): void {
     if (!$response_msg) return;
     try {
-        db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?")
-            ->execute([$response_msg, $ref]);
-    } catch (\Throwable $e) {}
+        $stmt = db()->prepare("UPDATE transactions SET meta = JSON_SET(COALESCE(meta, '{}'), '$.response', ?) WHERE transaction_ref=?");
+        $stmt->execute([$response_msg, $ref]);
+        // A silent catch here previously meant this write could fail with
+        // zero trace anywhere — confirmed live: a successful data purchase's
+        // meta never got its 'response' key set, with no error surfaced
+        // (refund/failure cases masked the same class of failure because
+        // refund_failed_transaction() also writes meta.response itself as a
+        // second, redundant path — success has no such backup). If this ever
+        // affects zero rows, or throws, we now have a real trace instead of
+        // silently losing the write.
+        if ($stmt->rowCount() === 0) {
+            log_error('db', 'save_tx_response: UPDATE affected 0 rows — ref not found?', ['ref' => $ref, 'len' => strlen($response_msg)]);
+        }
+    } catch (\Throwable $e) {
+        log_error('db', 'save_tx_response failed: ' . $e->getMessage(), ['ref' => $ref, 'len' => strlen($response_msg)]);
+    }
 }
 function refund_failed_transaction(string $ref, int $uid, float $amount, string $err_msg = ''): array
 {
@@ -1101,6 +1367,20 @@ function refund_failed_transaction(string $ref, int $uid, float $amount, string 
             log_info('wallet', 'refund_failed_transaction: ref already resolved, skipping duplicate refund', ['ref' => $ref, 'uid' => $uid]);
             return ['success' => false, 'duplicate' => true, 'message' => 'Transaction already resolved'];
         }
+
+        // Trust the amount actually debited (recorded on the row itself) over
+        // whatever the caller passed in — a caller-side bug computing the wrong
+        // figure (e.g. forgetting to include a charge) would otherwise silently
+        // under- or over-refund the user. Mismatches are logged so a genuine bug
+        // still surfaces, but the wallet always gets made whole by the true amount.
+        $orig = $db->prepare("SELECT amount FROM transactions WHERE transaction_ref = ? AND user_id = ? LIMIT 1");
+        $orig->execute([$ref, $uid]);
+        $orig_row = $orig->fetch();
+        $recorded_amount = $orig_row ? (float)$orig_row['amount'] : $amount;
+        if ($orig_row && abs($recorded_amount - $amount) > 0.01) {
+            log_error('wallet', 'refund_failed_transaction: caller-supplied amount does not match recorded transaction amount — using recorded amount', ['ref' => $ref, 'uid' => $uid, 'caller_amount' => $amount, 'recorded_amount' => $recorded_amount]);
+        }
+        $amount = $recorded_amount;
 
         $stmt = $db->prepare("SELECT wallet_balance FROM users WHERE id = ? AND is_active = 1 FOR UPDATE");
         $stmt->execute([$uid]);

@@ -18,3 +18,8 @@ database/*.sql.bak
 # write showed up as a diff and the repo grew unboundedly over time. Untracked
 # via `git rm --cached`; the files themselves are untouched on disk.
 logs/*.log
+
+# Cron heartbeat files (written fresh by every cron run) and flock()
+# lock files (held only while a cron is mid-run) — runtime state, not source.
+logs/*.json
+*.lock

@@ -7,7 +7,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $payload = file_get_contents('php://input');
-log_write('webhook_moniepoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 
 $secret = setting('gw_moniepoint_secret');
 $signature = $_SERVER['HTTP_X_MONIEPOINT_SIGNATURE'] ?? '';
@@ -28,6 +27,11 @@ if (!hash_equals($hash, $signature)) {
     http_response_code(400);
     exit('Invalid signature');
 }
+
+// Only log the raw payload once the signature is verified — logging it
+// unconditionally let anyone spam the log file with arbitrary content via an
+// unauthenticated POST, with no proof it ever came from Moniepoint.
+log_write('webhook_moniepoint', 'INFO', 'Received webhook', ['payload' => $payload]);
 
 $data = json_decode($payload, true);
 if (!$data || !isset($data['eventType'])) {

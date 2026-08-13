@@ -50,7 +50,7 @@ if ($step === 'request') {
     </div>";
     
     if (function_exists('send_email')) {
-        send_email($u['email'], 'PIN Reset OTP - Gracehubtels', $html);
+        send_email($u['email'], 'PIN Reset OTP - '.setting('site_name','Gracehubtels'), $html);
     }
     
     echo json_encode(['status' => 'success', 'message' => 'An OTP has been sent to your registered email address.']);

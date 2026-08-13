@@ -15,12 +15,18 @@ class AirtimeService {
         } elseif (strpos($pname, 'gladtidings') !== false) {
             // Confirmed via Gladtidings' own Postman docs (BuyAirtime).
             $url = rtrim($prov['api_base_url'], '/') . '/api/topup/';
+        } elseif (strpos($pname, 'reteller') !== false) {
+            // Reteller's docs: one shared /purchase endpoint for every local
+            // service (airtime/data/cable/electricity/betting) — no per-service path.
+            $url = rtrim($prov['api_base_url'], '/') . '/purchase';
         } else {
             $url = $prov['api_base_url'];
         }
-        
+
         $headers = ['Content-Type: application/json'];
-        if (!empty($prov['api_key'])) {
+        if (strpos($pname, 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
+            $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (!empty($prov['api_key'])) {
             $headers[] = (strpos(strtolower($prov['provider_name'] ?? ''), 'autopilot') !== false) ? 'Authorization: Bearer ' . $prov['api_key'] : 'Authorization: Token ' . $prov['api_key'];
         } elseif (!empty($prov['api_token'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
@@ -57,6 +63,8 @@ class AirtimeService {
         return $d;
     }
     public function process(int $uid,array $input): array {
+      $debit = null; $charge_amount = 0;
+      try {
         $phone=sanitize_phone($input['phone']??'');$amount=(float)($input['amount']??0);$network=strtoupper(trim($input['network']??''));$pin=(string)($input['pin']??'');
         if(!validate_phone($phone))return['success'=>false,'message'=>'Enter a valid 11-digit phone number'];
         $min = (float)setting('limit_airtime_min', '50');
@@ -66,6 +74,7 @@ class AirtimeService {
         if(detect_tamper($input))return['success'=>false,'message'=>'Invalid input detected'];
         if(!verify_pin($uid,$pin))return['success'=>false,'message'=>'Invalid transaction PIN'];
         if(!claim_purchase_lock($uid,'airtime',[$phone,$network,$amount]))return['success'=>false,'message'=>'Duplicate request detected. Please wait a moment and try again.'];
+        $sig=purchase_signature('airtime',[$phone,$network,$amount]);
         $pr=db()->prepare("SELECT * FROM service_pricing WHERE service='airtime' AND network=? LIMIT 1");$pr->execute([$network]);$p=$pr->fetch();
         $user=get_user($uid);$ut=$user['user_type']??'subscriber';
         $discount=(float)($p['discount_percent']??0);
@@ -73,7 +82,7 @@ class AirtimeService {
         if($ut==='vendor'&&isset($p['vendor_discount']))$discount=(float)$p['vendor_discount'];
         $charge_amount=$amount*((100-$discount)/100);
         $cost=$p?$amount*((100-(float)$p['discount_percent'])/100):$amount;
-        $debit=debit_wallet($uid,$charge_amount,'airtime',"₦{$amount} {$network} airtime to {$phone}",['network'=>$network,'phone'=>$phone]);if(!$debit['success'])return $debit;
+        $debit=debit_wallet($uid,$charge_amount,'airtime',"₦{$amount} {$network} airtime to {$phone}",['network'=>$network,'phone'=>$phone],$sig);if(!$debit['success'])return $debit;
         
         $providers = get_api_providers('airtime', $network);
         $success = false; $has_pending = false; $last_res = null; $last_prov = null;
@@ -94,6 +103,17 @@ class AirtimeService {
                     'reference' => (string)$debit['ref']
                 ];
                 if (!empty($prov['api_pin'])) $api_payload['pin'] = (string)$prov['api_pin'];
+            } elseif (strpos($pname, 'reteller') !== false) {
+                // Reteller's variation_code is an opaque per-account catalog
+                // token (their own docs: "send it back exactly as received;
+                // do not parse or construct it") — there is no numeric
+                // default to fall back to like every other provider here.
+                // Deliberately `?? null`, not `?? $network`: sending Reteller
+                // the generic default would guarantee a decline; skipping to
+                // the next provider is strictly better than wasting the call.
+                $variation_code = $net_map[$network] ?? null;
+                if (!$variation_code) { $last_res = ['message' => "No Reteller variation_code configured for {$network} — set it in this route's Network ID Map."]; continue; }
+                $api_payload = ['variation_code' => (string)$variation_code, 'recipient' => (string)$phone, 'amount' => $amount];
             } else {
                 $api_payload = ['network' => $net_map[$network]??$network, 'amount' => $amount, 'mobile_number' => $phone, 'Ported_number' => true, 'airtime_type' => 'VTU', 'ref' => $debit['ref']];
                 // Confirmed via Gladtidings' own Postman docs that its real
@@ -119,7 +139,7 @@ class AirtimeService {
             // Guard against a duplicate/concurrent resolution of this same
             // ref — only proceed to award cashback and notify success if we
             // actually won the pending/processing -> success transition.
-            if (update_tx_status($debit['ref'],'success',(string)($res['id']??''),$network)) {
+            if (update_tx_status($debit['ref'],'success',(string)($res['id']??$res['data']['reference']??''),$network)) {
                 db()->prepare("UPDATE transactions SET cost_price=?,profit=?,provider=? WHERE transaction_ref=?")->execute([$cost,$charge_amount-$cost,$prov['provider_name'],$debit['ref']]);
                 $cb=apply_cashback($uid,$charge_amount,'airtime',$network);
                 notify_user($uid,'✅ Airtime Sent',"₦{$amount} {$network} airtime sent to {$phone}",'success',null,$debit['balance_before'],$debit['balance_after']);
@@ -131,7 +151,7 @@ class AirtimeService {
         if ($last_prov) db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$last_prov['provider_name'],$debit['ref']]);
         $provider_resp = provider_response_text($last_res);
         if ($has_pending) {
-            update_tx_status($debit['ref'],'pending',(string)($last_res['id']??''),$network);
+            update_tx_status($debit['ref'],'pending',(string)($last_res['id']??$last_res['data']['reference']??''),$network);
             save_tx_response($debit['ref'], $provider_resp);
             notify_user($uid,'Airtime Processing',"Your {$amount} {$network} airtime purchase is being processed.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'Transaction is being processed. Check receipt for updates.','ref'=>$debit['ref'],'pending'=>true];
@@ -143,10 +163,16 @@ class AirtimeService {
         // money back on top of airtime the provider still delivers. Leave it
         // 'processing' for cron_check_vtu.php to resolve once the provider's
         // real status can be confirmed, instead of refunding blindly.
-        if (!empty($last_res['_network_error'])) {
+        // A "duplicate reference" reply is treated the same as a network
+        // error — it means the provider already has a record of this
+        // reference from somewhere, so its real outcome is unknown, not a
+        // clean decline (see data.php for the confirmed-live scenario this
+        // covers: a retry/re-check reusing the same ref against a provider
+        // that's simply slow, not down).
+        if (!empty($last_res['_network_error']) || is_duplicate_reference_response($last_res)) {
             update_tx_status($debit['ref'],'processing');
             save_tx_response($debit['ref'], $provider_resp);
-            if ($last_prov) log_error('airtime', 'Network error on final provider attempt — left processing pending verification', ['ref'=>$debit['ref'],'provider'=>$last_prov['provider_name']]);
+            if ($last_prov) log_error('airtime', 'Network error/duplicate-reference on final provider attempt — left processing pending verification', ['ref'=>$debit['ref'],'provider'=>$last_prov['provider_name']]);
             notify_user($uid,'Airtime Processing',"We're confirming your {$amount} {$network} airtime purchase with the network. This can take a few minutes.",'info',null,$debit['balance_before'],$debit['balance_after']);
             return['success'=>true,'message'=>'We could not immediately confirm this purchase due to a network issue. It is being verified — check your receipt shortly.','ref'=>$debit['ref'],'pending'=>true];
         }
@@ -160,6 +186,20 @@ class AirtimeService {
         // provider reply so the receipt always shows the real response.
         save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return['success'=>true,'message'=>$err_msg,'ref'=>$debit['ref'],'refunded'=>true];
+      } catch (\Throwable $e) {
+        // refund_failed_transaction() atomically claims the transaction
+        // (WHERE status IN ('pending','processing')) before crediting
+        // anything, so calling it here is a safe no-op if the purchase had
+        // already reached a terminal status (success/failed/processing)
+        // before this exception was thrown — every branch above writes its
+        // terminal status before any statement that could realistically
+        // throw, so this only ever fires for a genuinely still-pending debit.
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $charge_amount, 'System error');
+        }
+        log_error('airtime', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 function process_airtime(int $uid,array $input):array{return(new AirtimeService())->process($uid,$input);}

@@ -29,6 +29,23 @@ function auth_user():void{
         exit;
     }
 }
+// Per-install feature gate for the customer-facing portal (see
+// grace-hub-tels/vendor-access.php for how the vendor toggles these). Call
+// right after auth_user() — blocks both the page render AND the POST/AJAX
+// action dispatch below it, since every user/*.php file handles both in one
+// script.
+function require_feature_user(string $key): void {
+    if (feature_enabled($key)) return;
+    if (is_ajax()) {
+        json_response(['success' => false, 'message' => "This feature isn't included in your plan.", 'feature_locked' => true], 403);
+    }
+    $page_title = 'Premium Feature';
+    include __DIR__.'/../includes/header.php';
+    include __DIR__.'/../includes/sidebar.php';
+    echo feature_locked_card_html($key, 'user');
+    include __DIR__.'/../includes/footer.php';
+    exit;
+}
 function login_user(string $identifier, string $password): array {
     check_blocked_ip();
     if (!rate_limit('login', MAX_LOGIN, LOCKOUT)) return ['success' => false, 'message' => 'Too many attempts. Try in 15 min.'];
@@ -104,7 +121,7 @@ function login_user(string $identifier, string $password): array {
         // Table may not exist yet
     }
     log_info('auth', 'LOGIN', ['uid' => $user['id'], 'identifier' => $identifier]);
-    try{notify_user($user['id'],'New Login','You logged into your Gracehubtels account.','info');}catch(\Throwable$e){}
+    try{notify_user($user['id'],'New Login','You logged into your '.setting('site_name','Gracehubtels').' account.','info');}catch(\Throwable$e){}
     return ['success' => true, 'user' => $user];
 }
 function register_user(array $data):array{
@@ -133,7 +150,7 @@ function register_user(array $data):array{
     $name_h=htmlspecialchars($name,ENT_QUOTES);$username_h=htmlspecialchars($username,ENT_QUOTES);
     $phone_h=htmlspecialchars($phone,ENT_QUOTES);$email_h=htmlspecialchars($email,ENT_QUOTES);
     try{
-        notify_user($uid,'Welcome to Gracehubtels!',"
+        notify_user($uid,'Welcome to '.setting('site_name','Gracehubtels').'!',"
 <div style='text-align:center;padding:10px 0 20px;'>
 <div style='width:64px;height:64px;background:#e8f5e9;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;'><span style='font-size:24px;font-weight:800;color:#16a34a;'>OK</span></div>
 <h3 style='color:#4F46E5;font-size:20px;margin:0 0 4px;'>Welcome, {$name_h}!</h3>

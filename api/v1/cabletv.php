@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+require_feature_api('cabletv');
 
 if (!rate_limit('api_purchase_' . $user['id'], 30, 60)) {
     http_response_code(429);

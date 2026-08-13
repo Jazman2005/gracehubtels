@@ -190,8 +190,8 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Service Pricing – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Service Pricing – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -217,10 +217,15 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
     <table class="data-table">
       <thead><tr><th>Service</th><th>Network/Plan</th><th>Cost</th><th>Selling</th><th>Discount %</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
-      <?php foreach($pricing as $p):if(in_array($p['service'],['airtime_to_cash','recharge_card','betting']))continue;?>
-      <tr>
+      <?php foreach($pricing as $p):if(in_array($p['service'],['airtime_to_cash','recharge_card','betting']))continue;
+      $p_locked=!feature_enabled($p['service']);?>
+      <tr<?=$p_locked?' style="opacity:.55"':''?>>
           <td style="font-weight:600; color:var(--navy-dark);"><i class="fas fa-cube" style="color:#CBD5E1; margin-right:6px;"></i> <?=ucwords(str_replace('_',' ',$p['service']))?></td>
           <td style="font-weight:600; font-size:13px;"><?=htmlspecialchars($p['network']??$p['plan_name']??'')?></td>
+          <?php if($p_locked):?>
+          <td colspan="4" style="font-size:12px;color:#B45309;"><i class="fas fa-lock" style="margin-right:6px;"></i> Locked — disabled for this install</td>
+          <td></td>
+          <?php else:?>
           <td style="font-size:13px; color:var(--danger);">₦<?=number_format((float)$p['cost_price'],2)?></td>
           <td style="font-size:14px; color:var(--success); font-weight:bold;">₦<?=number_format((float)$p['selling_price'],2)?></td>
           <td><span class="badge badge-info" style="font-weight:bold"><?=$p['discount_percent']?>%</span></td>
@@ -228,6 +233,7 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
           <td>
             <button class="btn-primary" style="background:var(--navy-light); padding:6px 12px; font-size:12px; border-radius:6px;" onclick='editPricing(<?=htmlspecialchars(json_encode($p),ENT_QUOTES)?>)'><i class="fas fa-edit"></i> Edit</button>
           </td>
+          <?php endif;?>
       </tr>
       <?php endforeach;?>
       </tbody>
@@ -239,13 +245,18 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
 <div class="data-panel" style="margin-top:24px;">
   <div class="panel-title-bar" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
     <h3><i class="fas fa-ticket" style="color:var(--primary);margin-right:8px"></i> Recharge Card Pricing</h3>
+    <?php if(feature_enabled('recharge_card')):?>
     <div class="filter-tabs" style="margin-left:auto;">
       <span class="filter-tab rc-tab active" data-net="" onclick="showRCTab(this,'')">All</span>
       <?php foreach(['MTN','GLO','AIRTEL','9MOBILE'] as $net):?>
       <span class="filter-tab rc-tab" data-net="<?=$net?>" onclick="showRCTab(this,'<?=$net?>')"><?=$net?></span>
       <?php endforeach;?>
     </div>
+    <?php endif;?>
   </div>
+  <?php if(!feature_enabled('recharge_card')):?>
+  <?=feature_locked_card_html('recharge_card','admin')?>
+  <?php else:?>
   <div class="responsive-grid-wrapper">
     <table class="data-table">
       <thead><tr><th>Network</th><th>Denomination</th><th>Cost</th><th>Selling</th><th>Discount %</th><th>Status</th><th>Actions</th></tr></thead>
@@ -266,11 +277,15 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
       </tbody>
     </table>
   </div>
+  <?php endif;?>
 </div>
 
 <!-- A2C Management -->
 <div class="data-panel" style="margin-top:24px;">
   <div class="panel-title-bar"><h3><i class="fas fa-exchange-alt" style="color:var(--primary);margin-right:8px"></i> Airtime to Cash – Rates & Receiving Numbers</h3></div>
+  <?php if(!feature_enabled('airtime_to_cash')):?>
+  <?=feature_locked_card_html('airtime_to_cash','admin')?>
+  <?php else:?>
   <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
     <div class="form-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr 80px;gap:16px;font-weight:600;font-size:13px;color:#6B7280;padding:0 4px;">
       <div>Network</div><div>Rate (%)</div><div>Receiving Number</div><div style="text-align:center">Active</div>
@@ -303,10 +318,14 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
     </div>
     <button class="btn-primary" onclick="saveRates()" style="max-width:200px;">Save Rates & Numbers</button>
   </div>
+  <?php endif;?>
 </div>
 
-<div class="data-panel">
+<div class="data-panel" id="a2c-requests">
   <div class="panel-title-bar"><h3><i class="fas fa-clock" style="color:var(--primary);margin-right:8px"></i> Airtime to Cash – Pending Requests</h3></div>
+  <?php if(!feature_enabled('airtime_to_cash')):?>
+  <?=feature_locked_card_html('airtime_to_cash','admin')?>
+  <?php else:?>
   <div style="padding:16px">
     <div class="filter-tabs" style="margin-bottom:16px">
       <span class="filter-tab a2c-tab active" data-status="pending" onclick="showA2CTab('pending')">Pending (<?=$a2c_cmap['pending']??0?>)</span>
@@ -341,6 +360,7 @@ $net_list=['MTN','GLO','AIRTEL','9MOBILE'];
       </table>
     </div>
   </div>
+  <?php endif;?>
 </div>
 
 </div></div>

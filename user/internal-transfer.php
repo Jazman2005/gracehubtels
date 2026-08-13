@@ -46,7 +46,7 @@ include __DIR__ . '/includes/sidebar.php';
                 <i class="fas fa-arrow-left text-xs sm:text-sm"></i>
             </a>
             <div>
-                <h1 class="text-lg sm:text-xl font-bold text-slate-800">Gracehubtels Transfer</h1>
+                <h1 class="text-lg sm:text-xl font-bold text-slate-800"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Transfer</h1>
                 <p class="text-xs sm:text-sm text-slate-500">Send money instantly for <?= $fee > 0 ? "₦$fee fee" : "free" ?></p>
             </div>
         </div>

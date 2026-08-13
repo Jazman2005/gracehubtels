@@ -14,14 +14,14 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&!empty($_SERVER['HTTP_X_REQUESTED_WITH']
     // user/core/db.php's check_daily_limit()) — these fields used to save
     // under internal_transfer_charge(_enabled)/limit_daily_regular instead,
     // which meant editing them here had zero effect on real enforcement.
-    $allowed=['site_name','site_tagline','site_email','site_phone','site_address','maintenance_mode','registration_enabled','min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee','vendor_upgrade_fee','kyc_tier1_limit_daily','kyc_tier1_limit_single','kyc_tier2_limit_daily','kyc_tier2_limit_single','kyc_tier3_limit_daily','kyc_tier3_limit_single','p2p_transfer_charge','p2p_transfer_charge_enabled', 'limit_daily_user', 'limit_daily_agent', 'limit_daily_vendor', 'limit_airtime_daily', 'limit_airtime_min', 'limit_airtime_max', 'limit_transfer_daily', 'green_api_id_instance', 'green_api_token_instance', 'green_api_recipient', 'wa_notif_withdrawals', 'wa_notif_manual_funding', 'wa_notif_a2c', 'wa_notif_admin_login', 'wa_notif_failed_tx', 'network_prefixes_mtn', 'network_prefixes_glo', 'network_prefixes_airtel', 'network_prefixes_9mobile'];
+    $allowed=['site_name','site_tagline','site_email','site_phone','site_address','site_domain','maintenance_mode','registration_enabled','min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee','vendor_upgrade_fee','kyc_tier1_limit_daily','kyc_tier1_limit_single','kyc_tier2_limit_daily','kyc_tier2_limit_single','kyc_tier3_limit_daily','kyc_tier3_limit_single','p2p_transfer_charge','p2p_transfer_charge_enabled', 'limit_daily_user', 'limit_daily_agent', 'limit_daily_vendor', 'limit_airtime_daily', 'limit_airtime_min', 'limit_airtime_max', 'limit_transfer_daily', 'green_api_id_instance', 'green_api_token_instance', 'green_api_recipient', 'wa_notif_withdrawals', 'wa_notif_manual_funding', 'wa_notif_a2c', 'wa_notif_admin_login', 'wa_notif_failed_tx', 'network_prefixes_mtn', 'network_prefixes_glo', 'network_prefixes_airtel', 'network_prefixes_9mobile'];
     foreach($_POST as $key=>$val){if(in_array($key,$allowed))setting_set($key,trim((string)$val));}
     json_response(['success'=>true,'message'=>'Settings saved']);
 }
 $csrf=admin_csrf();
 ?><!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Settings &ndash; Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Settings &ndash; <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
 <div class="main-wrap">
@@ -39,6 +39,7 @@ $csrf=admin_csrf();
 <div class="form-group"><label>Support Email</label><input type="text" class="form-control" id="site_email" value="<?=k('site_email')?>"></div>
 <div class="form-group"><label>Support Phone</label><input type="text" class="form-control" id="site_phone" value="<?=k('site_phone')?>"></div>
 <div class="form-group"><label>Address</label><input type="text" class="form-control" id="site_address" value="<?=k('site_address')?>"></div>
+<div class="form-group"><label>Domain <span style="color:var(--text-muted);font-weight:400">(optional — leave blank to auto-detect from the current request; only set this to force a specific domain, e.g. for emails sent from a cron job)</span></label><input type="text" class="form-control" id="site_domain" placeholder="e.g. gracehubtels.com" value="<?=k('site_domain')?>"></div>
 <div class="flex items-center justify-between" style="padding:12px 0"><label style="font-size:13px;font-weight:600">Maintenance Mode</label><label class="toggle"><input type="checkbox" id="maintenance_mode" <?=setting('maintenance_mode')==='1'?'checked':''?>><span class="slider"></span></label></div>
 <div class="flex items-center justify-between" style="padding:12px 0;border-top:1px solid var(--border-light)"><label style="font-size:13px;font-weight:600">Registration Enabled</label><label class="toggle"><input type="checkbox" id="registration_enabled" <?=setting('registration_enabled','1')==='1'?'checked':''?>><span class="slider"></span></label></div>
 <div class="form-group"><label>Vendor Upgrade Fee (&#8358;)</label><input type="number" class="form-control" id="vendor_upgrade_fee" value="<?=k('vendor_upgrade_fee','1000')?>"></div>
@@ -121,7 +122,7 @@ $csrf=admin_csrf();
 <script>
 const CSRF='<?=$csrf?>';
 async function postSave(ids,toggles=[]){const fd=new FormData();fd.append('csrf',CSRF);ids.forEach(id=>fd.append(id,document.getElementById(id).value));toggles.forEach(id=>fd.append(id,document.getElementById(id).checked?'1':'0'));const r=await fetch(location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());showToast(r.message,r.success);}
-function saveGeneral(){postSave(['site_name','site_tagline','site_email','site_phone','site_address','vendor_upgrade_fee'],['maintenance_mode','registration_enabled']);}
+function saveGeneral(){postSave(['site_name','site_tagline','site_email','site_phone','site_address','site_domain','vendor_upgrade_fee'],['maintenance_mode','registration_enabled']);}
 function saveLimits(){postSave(['min_wallet_funding','max_wallet_funding','min_transfer_amount','max_transfer_amount','limit_transfer_daily','transfer_charge','p2p_transfer_charge','min_a2c_amount','max_a2c_amount','virtual_card_creation_fee'],['p2p_transfer_charge_enabled']);}
 function saveRoleLimits(){postSave(['limit_daily_user','limit_daily_agent','limit_daily_vendor']);}
 function saveAirtimeLimits(){postSave(['limit_airtime_daily','limit_airtime_min','limit_airtime_max']);}

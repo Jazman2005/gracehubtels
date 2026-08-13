@@ -5,6 +5,7 @@ require_once __DIR__.'/../user/core/bank_transfer.php';
 require_once __DIR__.'/../user/core/api_router.php';
 
 auth_admin();
+require_feature_admin('bank_transfer');
 $csrf = admin_csrf();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
@@ -63,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
             update_tx_status($ref, 'pending'); // release the claim — nothing was sent
             json_response(['success'=>false,'message'=>'PalmPay not configured']);
         }
-        $notify = 'https://www.gracehubtels.com/webhook/palmpay/index.php';
+        $notify = site_url('/webhook/palmpay/index.php');
         $res = $api->transfer($ref, $meta['payee_name'] ?? '', $meta['bank_code'], $meta['account_number'], $tx['phone'], $amount, $notify, $meta['narration'] ?? '');
         if ($res && ($res['respCode']??'') === '00000000') {
             save_tx_response($ref, provider_response_text($res));
@@ -180,8 +181,8 @@ foreach($txs as $t) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Bank Withdrawals – Gracehubtels Admin</title>
-    <link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png">
+    <title>Bank Withdrawals – <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title>
+    <link rel="icon" type="image/png" href="/assets/images/favicon.png">
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

@@ -4,11 +4,11 @@ require_once dirname(__DIR__, 2) . '/user/core/auth.php';
 
 header("Content-Type: application/json");
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$allowed = ['https://gracehubtels.com', 'https://www.gracehubtels.com'];
+$allowed = site_allowed_origins();
 if (preg_match('/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/', $origin) || preg_match('/^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/', $origin)) {
     $allowed[] = $origin;
 }
-header("Access-Control-Allow-Origin: " . (in_array($origin, $allowed) ? $origin : 'https://gracehubtels.com'));
+header("Access-Control-Allow-Origin: " . (in_array($origin, $allowed) ? $origin : $allowed[0]));
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Authorization, Content-Type, Accept");
 
@@ -46,4 +46,14 @@ function api_auth() {
     }
 
     return $user;
+}
+
+// Per-install feature gate for the public partner API — call right after
+// api_auth(). Matches api_auth()'s own two-key response shape (status +
+// success) so partner integrations checking either key behave consistently.
+function require_feature_api(string $key): void {
+    if (feature_enabled($key)) return;
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'success' => false, 'message' => "This feature isn't included in your plan."]);
+    exit;
 }

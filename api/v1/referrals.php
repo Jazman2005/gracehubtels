@@ -11,7 +11,7 @@ $user = api_auth();
 $uid = (int)$user['id'];
 
 $ref_code = $user['referral_code'] ?: $user['phone'];
-$ref_link = 'https://www.gracehubtels.com/user/signup?ref=' . urlencode($ref_code);
+$ref_link = site_url('/user/signup?ref=' . urlencode($ref_code));
 
 $tr = db()->prepare("SELECT COUNT(*) FROM users WHERE referred_by = ?");
 $tr->execute([$uid]);

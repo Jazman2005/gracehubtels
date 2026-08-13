@@ -46,6 +46,8 @@ class BulkSMSService {
     }
 
     public function process(int $uid, array $input): array {
+      $debit = null; $total_amount = 0;
+      try {
         $sender = sanitize(trim($input['sender'] ?? $input['sender_id'] ?? ''), 11);
         $message = sanitize(trim($input['message'] ?? ''), 1000);
         $recipients = trim($input['recipients'] ?? '');
@@ -101,12 +103,13 @@ class BulkSMSService {
         if($limit_err) return['success'=>false,'message'=>$limit_err];
 
         if (!claim_purchase_lock($uid, 'bulk_sms', [$sender, $message, $valid_recipients])) return ['success' => false, 'message' => 'Duplicate request detected. Please wait a moment and try again.'];
+        $sig = purchase_signature('bulk_sms', [$sender, $message, $valid_recipients]);
 
         $debit = debit_wallet($uid, $total_amount, 'bulk_sms', "Bulk SMS ({$pages} pages to {$rec_count} numbers)", [
             'sender' => $sender,
             'pages' => $pages,
             'recipients' => $rec_count
-        ]);
+        ], $sig);
 
         if (!$debit['success']) return $debit;
 
@@ -205,7 +208,10 @@ class BulkSMSService {
         // actually know whether that provider processed the request — leave
         // it 'processing' for the verification crons instead of refunding
         // blindly.
-        if (!empty($last_res['_network_error'])) {
+        // A "duplicate reference" reply means the provider already has a
+        // record of this reference from somewhere — outcome unknown, not a
+        // clean decline — treated the same as a network error.
+        if (!empty($last_res['_network_error']) || is_duplicate_reference_response($last_res)) {
             update_tx_status($debit['ref'], 'processing');
             save_tx_response($debit['ref'], $provider_resp);
             db()->prepare("UPDATE bulk_sms_history SET status='pending', provider_response=? WHERE transaction_ref=?")->execute([json_encode($last_res), $debit['ref']]);
@@ -222,6 +228,13 @@ class BulkSMSService {
         refund_failed_transaction($debit['ref'], $uid, $total_amount, $err_msg);
         save_tx_response($debit['ref'], $provider_resp ?: $err_msg);
         return ['success' => true, 'message' => $err_msg, 'ref' => $debit['ref'], 'refunded' => true];
+      } catch (\Throwable $e) {
+        if ($debit !== null && ($debit['success'] ?? false)) {
+            refund_failed_transaction($debit['ref'], $uid, $total_amount, 'System error');
+        }
+        log_error('bulk_sms', 'Purchase exception: ' . $e->getMessage(), ['line' => $e->getLine(), 'uid' => $uid]);
+        return ['success' => false, 'message' => 'Purchase failed. Please try again.'];
+      }
     }
 }
 

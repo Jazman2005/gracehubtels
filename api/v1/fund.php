@@ -91,7 +91,7 @@ if ($action === 'create_dynamic_va') {
         }
 
         $order_id = 'DYN_' . time() . '_' . $uid;
-        $notify_url = 'https://www.gracehubtels.com/webhook/palmpay/index.php';
+        $notify_url = site_url('/webhook/palmpay/index.php');
         $res = $api->create_order($user, $amount, $order_id, $notify_url);
 
         if ($res && !empty($res['data']['payerVirtualAccNo'])) {

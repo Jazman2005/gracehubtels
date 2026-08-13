@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $user = api_auth();
+require_feature_api('airtime');
 
 // claim_purchase_lock() below only blocks IDENTICAL repeated requests (same
 // signature within a short bucket) — it's not a substitute for a general

@@ -4,6 +4,7 @@ require_once __DIR__ . '/auth.php';
 require_once dirname(__DIR__, 2) . '/user/core/virtual_card.php';
 
 $user = api_auth();
+require_feature_api('virtual_card');
 $uid = (int)$user['id'];
 $method = $_SERVER['REQUEST_METHOD'];
 

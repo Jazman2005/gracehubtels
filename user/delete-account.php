@@ -99,6 +99,7 @@ include __DIR__ . '/includes/sidebar.php';
 </div>
 
 <script>
+const SITE_NAME = <?=json_encode(setting('site_name','Gracehubtels'))?>;
 async function deleteAccount(e) {
     if(e) e.preventDefault();
     
@@ -110,7 +111,7 @@ async function deleteAccount(e) {
     if(!pwd) return Swal.fire('Notice', 'Please enter your password', 'info');
     if(confirmVal !== 'DELETE') return Swal.fire('Notice', 'Please type DELETE to confirm', 'info');
     
-    if(!await showConfirm('FINAL WARNING: Are you absolutely sure you want to permanently delete your Gracehubtels account? This cannot be undone.', 'Confirm Deletion')) return;
+    if(!await showConfirm(`FINAL WARNING: Are you absolutely sure you want to permanently delete your ${SITE_NAME} account? This cannot be undone.`, 'Confirm Deletion')) return;
     
     const ogHtml = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';

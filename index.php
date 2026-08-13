@@ -1,3 +1,4 @@
+<?php require_once __DIR__.'/user/core/db.php'; ?>
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
@@ -5,17 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <!-- Primary SEO Meta Tags -->
-    <title>Gracehubtels | Seamless Payments & Instant Settlements in Nigeria</title>
-    <meta name="description" content="Gracehubtels is a secure, all-in-one payment gateway and digital wallet built for Nigerian businesses, freelancers, and individuals. Accept payments, send instant bank transfers, and pay utility bills at zero cost.">
-    <meta name="keywords" content="Gracehubtels, payment gateway Nigeria, digital wallet Lagos, accept card payments, instant settlement, pay bills Nigeria, secure transactions, BVN verification, fintech Nigeria">
+    <title><?=htmlspecialchars(setting('site_name','Gracehubtels'))?> | Seamless Payments & Instant Settlements in Nigeria</title>
+    <meta name="description" content="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?> is a secure, all-in-one payment gateway and digital wallet built for Nigerian businesses, freelancers, and individuals. Accept payments, send instant bank transfers, and pay utility bills at zero cost.">
+    <meta name="keywords" content="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?>, payment gateway Nigeria, digital wallet Lagos, accept card payments, instant settlement, pay bills Nigeria, secure transactions, BVN verification, fintech Nigeria">
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://gracehubtels.com/">
-    <meta property="og:title" content="Gracehubtels | Seamless Payments & Instant Settlements in Nigeria">
-    <meta property="og:description" content="Accept card deposits, send instant bank transfers, and pay bills at zero cost with Gracehubtels. The smarter payment gateway for Nigeria.">
+    <meta property="og:url" content="<?=htmlspecialchars(site_url())?>">
+    <meta property="og:title" content="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?> | Seamless Payments & Instant Settlements in Nigeria">
+    <meta property="og:description" content="Accept card deposits, send instant bank transfers, and pay bills at zero cost with <?=htmlspecialchars(setting('site_name','Gracehubtels'))?>. The smarter payment gateway for Nigeria.">
     <meta property="og:image" content="assets/IMG_3901.PNG">
-    <link rel="icon" type="image/png" href="assets/images/gracehubtels-favicon.png">
+    <link rel="icon" type="image/png" href="assets/images/favicon.png">
 
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -92,9 +93,9 @@
                 <!-- Logo -->
                 <a href="index.php" class="flex items-center gap-2 group">
                     <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-primary to-brand-primaryDark flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/30 group-hover:scale-105 transition-transform">
-                        <img src="assets/IMG_3899.PNG" alt="Gracehubtels Logo" class="w-full h-full object-contain p-1" onerror="this.style.display='none'; this.parentNode.innerHTML='G'">
+                        <img src="assets/IMG_3899.PNG" alt="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Logo" class="w-full h-full object-contain p-1" onerror="this.style.display='none'; this.parentNode.innerHTML='G'">
                     </div>
-                    <span class="font-heading font-bold text-xl text-brand-navy tracking-tight">Gracehub<span class="text-brand-primary">tels</span></span>
+                    <span class="font-heading font-bold text-xl text-brand-navy tracking-tight"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></span>
                 </a>
 
                 <!-- Desktop Menu -->
@@ -161,6 +162,27 @@
                     <div class="mt-10 flex items-center justify-center lg:justify-start gap-6 text-sm font-medium text-slate-500">
                         <div class="flex items-center gap-2"><i class="fas fa-check-circle text-brand-gold"></i> CBN Licensed</div>
                         <div class="flex items-center gap-2"><i class="fas fa-shield-alt text-brand-gold"></i> 256-bit Secure</div>
+                    </div>
+
+                    <!-- App Store Badges -->
+                    <div class="mt-8">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">Mobile app coming soon</p>
+                        <div class="flex flex-wrap items-center justify-center lg:justify-start gap-3">
+                            <a href="#" onclick="showComingSoon(event, 'Google Play')" class="app-badge flex items-center gap-3 bg-brand-navy hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-lg">
+                                <i class="fab fa-google-play text-2xl"></i>
+                                <span class="text-left leading-tight">
+                                    <span class="block text-[10px] text-slate-300">GET IT ON</span>
+                                    <span class="block text-sm font-semibold">Google Play</span>
+                                </span>
+                            </a>
+                            <a href="#" onclick="showComingSoon(event, 'App Store')" class="app-badge flex items-center gap-3 bg-brand-navy hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl transition-all hover:-translate-y-0.5 hover:shadow-lg">
+                                <i class="fab fa-apple text-2xl"></i>
+                                <span class="text-left leading-tight">
+                                    <span class="block text-[10px] text-slate-300">Download on the</span>
+                                    <span class="block text-sm font-semibold">App Store</span>
+                                </span>
+                            </a>
+                        </div>
                     </div>
                 </div>
 
@@ -265,6 +287,7 @@
     <section id="services" class="py-24 bg-slate-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center max-w-3xl mx-auto mb-16">
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-semibold uppercase tracking-wider text-brand-primary mb-4">Our Services</span>
                 <h2 class="font-heading text-3xl md:text-4xl font-bold text-brand-navy mb-4">Everything you need, in one place.</h2>
                 <p class="text-lg text-slate-600">From everyday bills to business transfers, experience a comprehensive suite of financial services designed for speed and reliability.</p>
             </div>
@@ -311,6 +334,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="grid lg:grid-cols-2 gap-16 items-center">
                 <div>
+                    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-xs font-semibold uppercase tracking-wider text-brand-primary mb-4">Why Choose Us</span>
                     <h2 class="font-heading text-3xl md:text-4xl font-bold text-brand-navy mb-6">Built for modern commercial growth</h2>
                     <p class="text-lg text-slate-600 mb-8">We build enterprise-grade payment solutions that give you the security, routing speed, and reliability your finances deserve.</p>
                     
@@ -330,7 +354,7 @@
                             </div>
                             <div>
                                 <h4 class="font-bold text-brand-navy text-lg mb-2">Instant Settlements</h4>
-                                <p class="text-slate-600">Keep your cash flow fluid. Gracehubtels routes and settles your transaction payouts directly to any Nigerian bank account instantly.</p>
+                                <p class="text-slate-600">Keep your cash flow fluid. <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> routes and settles your transaction payouts directly to any Nigerian bank account instantly.</p>
                             </div>
                         </div>
                         <div class="flex gap-4">
@@ -369,6 +393,7 @@
         
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div class="text-center max-w-3xl mx-auto mb-16">
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 text-xs font-semibold uppercase tracking-wider text-white/80 mb-4">Getting Started</span>
                 <h2 class="font-heading text-3xl md:text-4xl font-bold mb-4">Get Started in 3 Simple Steps</h2>
                 <p class="text-lg text-slate-400">No paperwork, no branch visits. Our onboarding is designed to get you processing live payments in under 10 minutes.</p>
             </div>
@@ -378,7 +403,7 @@
                 <div class="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors">
                     <div class="w-14 h-14 rounded-full bg-brand-primary/20 text-brand-primaryLight flex items-center justify-center text-2xl font-bold mb-6 font-heading">1</div>
                     <h3 class="font-bold text-xl mb-3">Create an Account</h3>
-                    <p class="text-slate-400 leading-relaxed">Sign up on gracehubtels.com in minutes. Verify your identity seamlessly with your BVN/NIN for total security.</p>
+                    <p class="text-slate-400 leading-relaxed">Sign up on <?=htmlspecialchars(site_domain())?> in minutes. Verify your identity seamlessly with your BVN/NIN for total security.</p>
                 </div>
                 <!-- Step 2 -->
                 <div class="bg-white/5 border border-white/10 rounded-2xl p-8 hover:bg-white/10 transition-colors">
@@ -400,14 +425,18 @@
     <section class="py-24 bg-slate-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="text-center max-w-3xl mx-auto mb-16">
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-semibold uppercase tracking-wider text-brand-primary mb-4">Testimonials</span>
                 <h2 class="font-heading text-3xl md:text-4xl font-bold text-brand-navy mb-4">Loved by Thousands across Nigeria</h2>
             </div>
-            
+
             <div class="max-w-4xl mx-auto">
                 <div class="bg-white rounded-3xl p-8 md:p-12 shadow-xl shadow-slate-200/50 border border-slate-100 text-center relative">
                     <i class="fas fa-quote-left text-4xl text-brand-primary/20 absolute top-8 left-8"></i>
+                    <div class="flex items-center justify-center gap-1 text-brand-gold mb-6 relative z-10">
+                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                    </div>
                     <p class="text-xl md:text-2xl text-slate-700 font-medium leading-relaxed mb-8 relative z-10">
-                        "Integrating Gracehubtels took our sales to the next level. Settlements are actually instant, and checkout drop-offs are a thing of the past! Highly recommended for any serious business."
+                        "Integrating <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> took our sales to the next level. Settlements are actually instant, and checkout drop-offs are a thing of the past! Highly recommended for any serious business."
                     </p>
                     <div class="flex items-center justify-center gap-4">
                         <div class="w-14 h-14 rounded-full bg-gradient-to-br from-brand-gold to-brand-goldHover text-white flex items-center justify-center font-bold text-lg shadow-md">AO</div>
@@ -440,14 +469,14 @@
     <!-- Footer -->
     <footer class="bg-slate-900 text-slate-400 py-16 border-t border-slate-800">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-4 gap-12 mb-12 border-b border-slate-800 pb-12">
+            <div class="grid md:grid-cols-5 gap-12 mb-12 border-b border-slate-800 pb-12">
                 <div class="md:col-span-2">
                     <a href="index.php" class="flex items-center gap-2 mb-6">
-                        <img src="assets/IMG_3901.PNG" alt="Gracehubtels Footer Logo" class="h-8" onerror="this.style.display='none'">
-                        <span class="font-heading font-bold text-xl text-white tracking-tight">Gracehub<span class="text-brand-primary">tels</span></span>
+                        <img src="assets/IMG_3901.PNG" alt="<?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Footer Logo" class="h-8" onerror="this.style.display='none'">
+                        <span class="font-heading font-bold text-xl text-white tracking-tight"><?=htmlspecialchars(setting('site_name','Gracehubtels'))?></span>
                     </a>
                     <p class="text-slate-400 leading-relaxed max-w-md">
-                        Gracehubtels Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.
+                        <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Technologies Limited is a licensed financial services platform enabling secure and instant payment operations across Nigeria.
                     </p>
                 </div>
                 <div>
@@ -466,16 +495,52 @@
                         <a href="#" class="w-10 h-10 rounded-full bg-slate-800 hover:bg-brand-accent flex items-center justify-center text-white transition-colors"><i class="fab fa-instagram"></i></a>
                     </div>
                 </div>
+                <div>
+                    <h4 class="text-white font-bold mb-6">Get the App</h4>
+                    <div class="flex flex-col gap-3">
+                        <a href="#" onclick="showComingSoon(event, 'Google Play')" class="app-badge flex items-center gap-2.5 bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-2 rounded-lg transition-colors">
+                            <i class="fab fa-google-play text-lg"></i>
+                            <span class="text-left leading-tight">
+                                <span class="block text-[9px] text-slate-400">GET IT ON</span>
+                                <span class="block text-xs font-semibold">Google Play</span>
+                            </span>
+                        </a>
+                        <a href="#" onclick="showComingSoon(event, 'App Store')" class="app-badge flex items-center gap-2.5 bg-slate-800 hover:bg-slate-700 text-white px-3.5 py-2 rounded-lg transition-colors">
+                            <i class="fab fa-apple text-lg"></i>
+                            <span class="text-left leading-tight">
+                                <span class="block text-[9px] text-slate-400">Download on the</span>
+                                <span class="block text-xs font-semibold">App Store</span>
+                            </span>
+                        </a>
+                    </div>
+                </div>
             </div>
             <div class="text-sm text-slate-500 flex flex-col md:flex-row justify-between items-center gap-4">
-                <p>&copy; 2026 Gracehubtels. All rights reserved.</p>
+                <p>&copy; 2026 <?=htmlspecialchars(setting('site_name','Gracehubtels'))?>. All rights reserved.</p>
                 <p>Registered in Nigeria.</p>
             </div>
         </div>
     </footer>
 
+    <!-- Coming Soon Toast -->
+    <div id="coming-soon-toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-brand-navy text-white px-6 py-3.5 rounded-full shadow-2xl flex items-center gap-3 opacity-0 pointer-events-none transition-all duration-300 translate-y-4">
+        <i class="fas fa-rocket text-brand-gold"></i>
+        <span id="coming-soon-toast-text" class="text-sm font-medium">Coming soon!</span>
+    </div>
+
     <!-- Mobile Menu Script -->
     <script>
+        function showComingSoon(e, appName) {
+            e.preventDefault();
+            const toast = document.getElementById('coming-soon-toast');
+            document.getElementById('coming-soon-toast-text').textContent = appName + ' app is launching soon — stay tuned!';
+            toast.classList.remove('opacity-0', 'translate-y-4', 'pointer-events-none');
+            clearTimeout(window._comingSoonTimer);
+            window._comingSoonTimer = setTimeout(function() {
+                toast.classList.add('opacity-0', 'translate-y-4', 'pointer-events-none');
+            }, 3000);
+        }
+
         document.getElementById('mobile-menu-btn').addEventListener('click', function() {
             const menu = document.getElementById('mobile-menu');
             if(menu.classList.contains('hidden')) {

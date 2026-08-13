@@ -5,12 +5,13 @@ auth_admin();
 // event received — restrict to the same technical-logs permission as
 // api-logs.php rather than any logged-in admin.
 require_permission('view_apilogs');
+require_feature_admin('admin_webhook_logs');
 $page=max(1,(int)($_GET['page']??1));$per=30;$offset=($page-1)*$per;
 $total=(int)db()->query("SELECT COUNT(*) FROM webhook_logs")->fetchColumn();
 $logs=db()->prepare("SELECT * FROM webhook_logs ORDER BY created_at DESC LIMIT ? OFFSET ?");$logs->execute([$per,$offset]);$logs=$logs->fetchAll();
 $pages=(int)ceil($total/$per);
 ?><!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Webhook Logs — Gracehubtels Admin</title><link rel="icon" type="image/png" href="/assets/images/gracehubtels-favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Webhook Logs — <?=htmlspecialchars(setting('site_name','Gracehubtels'))?> Admin</title><link rel="icon" type="image/png" href="/assets/images/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="<?= ADMIN_URL ?>/css/admin.css"></head>
 <body>
 <?php include __DIR__.'/partials/sidebar.php';?>
 <div class="main-wrap">
