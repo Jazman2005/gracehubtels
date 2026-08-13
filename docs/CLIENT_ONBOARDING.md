@@ -6,8 +6,9 @@ hosting account, database, and secrets — only the source code is shared.
 
 ## 0. One-time setup (do this once, not per client)
 
-- [ ] Keep `origin` (`github.com/Jazman2005/payweb`) **private**. Clients never get
+- [ ] Keep the Gracehubtels repo's `origin` **private**. Clients never get
       GitHub access — only their own server pulls from it, and only you push to it.
+      (Not the same repo as the `msj` mobile app — keep the two separate.)
 - [ ] Confirm the client's cPanel host supports one of:
   - **cPanel "Git Version Control"** feature (most common — a UI button, no
     terminal needed), or
@@ -20,8 +21,8 @@ hosting account, database, and secrets — only the source code is shared.
 **Create hosting + repo access**
 - [ ] Client (or you, on their behalf) sets up their cPanel hosting + domain.
 - [ ] Generate a GitHub deploy key or use an HTTPS token with **read-only**
-      access to `payweb` for that server — don't reuse your own personal push
-      credentials on a client's box.
+      access to the Gracehubtels repo for that server — don't reuse your own
+      personal push credentials on a client's box.
 
 **Clone the code**
 - [ ] Via cPanel → Git Version Control → "Create" → paste the repo URL, target
