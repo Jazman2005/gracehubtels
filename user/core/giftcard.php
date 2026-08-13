@@ -164,12 +164,69 @@ function process_giftcard_buy_purchase(int $uid, array $post): array {
 // cash. Rate/brand config reuses service_pricing the same way
 // airtime_to_cash already does (network=<brand>, discount_percent=payout
 // rate %, is_active=bool) — no cost/selling price needed here.
-// process_giftcard_sell_submission() doesn't touch the wallet either;
-// nothing is credited until a real review/payout flow replaces it.
+// Manual review, not automated: unlike every purchase flow in this
+// codebase, nothing touches the wallet at submission time — there's no
+// provider API that can verify a gift card code/value the way Reteller
+// verifies a buy-side product, so a human has to check the card is real
+// and unredeemed before any payout. Wallet crediting happens only in
+// grace-hub-tels/giftcard-sell-review.php's approve action.
+try { db()->exec("CREATE TABLE IF NOT EXISTS giftcard_sell_submissions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    brand VARCHAR(100) NOT NULL,
+    card_value DECIMAL(12,2) NOT NULL,
+    payout_rate DECIMAL(5,2) NOT NULL,
+    payout_amount DECIMAL(12,2) NOT NULL,
+    card_code TEXT NOT NULL,
+    status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    admin_note TEXT DEFAULT NULL,
+    reviewed_by INT DEFAULT NULL,
+    reviewed_at DATETIME DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY user_id (user_id), KEY status (status)
+)"); } catch (\Throwable $e) {}
+
 function get_giftcard_sell_brands(): array {
     $stmt = db()->query("SELECT network, discount_percent FROM service_pricing WHERE service='giftcard_sell' AND is_active=1 ORDER BY network");
     return $stmt->fetchAll();
 }
+
+function get_giftcard_sell_submissions(int $uid): array {
+    $s = db()->prepare("SELECT id,brand,card_value,payout_amount,status,admin_note,created_at FROM giftcard_sell_submissions WHERE user_id=? ORDER BY created_at DESC LIMIT 50");
+    $s->execute([$uid]);
+    return $s->fetchAll();
+}
+
 function process_giftcard_sell_submission(int $uid, array $post): array {
-    return service_not_live_yet('Gift Card selling');
+    if (detect_tamper($post)) return ['success' => false, 'message' => 'Invalid input detected'];
+    $brand = sanitize(trim($post['brand'] ?? ''), 100);
+    $card_value = (float)($post['card_value'] ?? 0);
+    $card_code = sanitize(trim($post['card_code'] ?? ''), 2000);
+
+    if ($brand === '') return ['success' => false, 'message' => 'Select a brand'];
+    if ($card_value <= 0) return ['success' => false, 'message' => 'Enter a valid card value'];
+    if ($card_code === '') return ['success' => false, 'message' => 'Enter the card code'];
+
+    $b = db()->prepare("SELECT discount_percent FROM service_pricing WHERE service='giftcard_sell' AND network=? AND is_active=1 LIMIT 1");
+    $b->execute([$brand]);
+    $rate = $b->fetchColumn();
+    if ($rate === false) return ['success' => false, 'message' => 'This brand is not currently being accepted'];
+    $rate = (float)$rate;
+    if ($rate <= 0) return ['success' => false, 'message' => 'This brand is not currently accepting submissions'];
+
+    if (!rate_limit('giftcard_sell_submit_' . $uid, 10, 3600)) {
+        return ['success' => false, 'message' => 'Too many submissions. Please try again later.'];
+    }
+
+    $payout = round($card_value * $rate / 100, 2);
+
+    db()->prepare("INSERT INTO giftcard_sell_submissions (user_id,brand,card_value,payout_rate,payout_amount,card_code,status) VALUES (?,?,?,?,?,?,'pending')")
+        ->execute([$uid, $brand, $card_value, $rate, $payout, $card_code]);
+    $id = (int)db()->lastInsertId();
+
+    notify_user($uid, 'Gift Card Submitted', "Your {$brand} gift card (₦" . number_format($card_value, 2) . " value) has been submitted for review. Estimated payout: ₦" . number_format($payout, 2) . ". You'll be notified once it's processed.", 'info');
+    notify_admin('New Gift Card Sell Submission', "Submission #{$id}: user #{$uid} submitted a {$brand} gift card worth ₦" . number_format($card_value, 2) . " (est. payout ₦" . number_format($payout, 2) . "). Review it in the admin panel.");
+
+    return ['success' => true, 'message' => "Card submitted for review. Estimated payout: ₦" . number_format($payout, 2) . ". You'll be notified once it's processed."];
 }

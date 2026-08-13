@@ -4,6 +4,10 @@ $admin=get_admin();
 $pending_a2c=(int)db()->query("SELECT COUNT(*) FROM airtime_to_cash WHERE status='pending'")->fetchColumn();
 $pending_withdrawals=(int)db()->query("SELECT COUNT(*) FROM transactions WHERE category='bank_transfer' AND status='pending'")->fetchColumn();
 $pending_deposits=(int)db()->query("SELECT COUNT(*) FROM manual_funding_requests WHERE status='pending'")->fetchColumn();
+// giftcard_sell_submissions is lazily created by user/core/giftcard.php on
+// first use, not part of the base schema — this page is included on every
+// admin load, so a missing table must not fatal it out.
+try { $pending_giftcard_sell=(int)db()->query("SELECT COUNT(*) FROM giftcard_sell_submissions WHERE status='pending'")->fetchColumn(); } catch (\Throwable $e) { $pending_giftcard_sell=0; }
 $_admin_perms=[];if(($_SESSION['admin_role']??'')!=='superadmin'){$_aps=db()->prepare("SELECT permissions FROM admin WHERE id=?");$_aps->execute([$_SESSION['admin_id']??0]);$_raw=$_aps->fetchColumn();if($_raw)$_admin_perms=json_decode($_raw,true)??[];}
 function _has_perm(string $p):bool{global$_admin_perms;return($_SESSION['admin_role']??'')==='superadmin'||in_array($p,$_admin_perms);}
 function _has_any(array $perms):bool{foreach($perms as$p){if(_has_perm($p))return true;}return false;}
@@ -64,6 +68,11 @@ $uinitial=strtoupper(substr($admin['username']??'A',0,1));
       <span class="nav-icon"><i class="fas fa-money-bill-transfer"></i></span>
       <span class="nav-text">Withdrawals</span>
       <?php if(!feature_enabled('bank_transfer')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php elseif($pending_withdrawals>0):?><span class="nav-badge"><?=$pending_withdrawals?></span><?php endif;?>
+    </a>
+    <a href="<?= ADMIN_URL ?>/giftcard-sell-review.php" class="nav-item <?=$cur==='giftcard-sell-review.php'?'active':''?>">
+      <span class="nav-icon"><i class="fas fa-gift"></i></span>
+      <span class="nav-text">Gift Card Sell Review</span>
+      <?php if(!feature_enabled('giftcard_sell')):?><span class="badge badge-warning" style="font-size:9px;padding:1px 6px;margin-left:auto;">Premium</span><?php elseif($pending_giftcard_sell>0):?><span class="nav-badge"><?=$pending_giftcard_sell?></span><?php endif;?>
     </a>
     <?php endif;?>
     <?php if(_has_perm('manage_deposits')):?>

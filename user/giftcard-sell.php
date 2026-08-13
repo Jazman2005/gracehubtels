@@ -14,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
 $csrf = csrf_token();
 $brands = get_giftcard_sell_brands();
+$submissions = get_giftcard_sell_submissions($uid);
 
 $page_title = 'Sell Gift Cards';
 include __DIR__ . '/includes/header.php';
@@ -36,9 +37,9 @@ include __DIR__ . '/includes/sidebar.php';
         </div>
     </div>
 
-    <div class="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-4 mb-4 sm:mb-6 flex items-start gap-3">
+    <div class="bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-xl p-4 mb-4 sm:mb-6 flex items-start gap-3">
         <i class="fas fa-circle-info mt-0.5"></i>
-        <span>Gift card selling isn't live yet — submissions are disabled until this goes live.</span>
+        <span>Submissions are reviewed manually before payout — you'll be notified once yours is processed, usually within a few hours.</span>
     </div>
 
     <div class="bg-white rounded-xl sm:rounded-2xl border border-slate-200 card-shadow p-4 sm:p-5 mb-4 sm:mb-6">
@@ -82,6 +83,25 @@ include __DIR__ . '/includes/sidebar.php';
         </button>
         <?php endif; ?>
     </div>
+
+    <?php if (!empty($submissions)): ?>
+    <div class="bg-white rounded-xl sm:rounded-2xl border border-slate-200 card-shadow p-4 sm:p-5">
+        <h2 class="text-sm font-bold text-slate-700 mb-3">Recent Submissions</h2>
+        <div class="space-y-2">
+            <?php foreach ($submissions as $s):
+                $badge = $s['status']==='approved' ? 'bg-green-100 text-green-700' : ($s['status']==='rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700');
+            ?>
+            <div class="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                <div>
+                    <div class="text-sm font-semibold text-slate-800"><?=htmlspecialchars($s['brand'])?> — ₦<?=number_format($s['card_value'],2)?></div>
+                    <div class="text-xs text-slate-400"><?=date('d M Y, H:i',strtotime($s['created_at']))?><?php if($s['status']==='rejected' && $s['admin_note']):?> — <?=htmlspecialchars($s['admin_note'])?><?php endif;?></div>
+                </div>
+                <span class="text-xs font-bold px-2.5 py-1 rounded-full <?=$badge?>"><?=strtoupper($s['status'])?></span>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php endif; ?>
 </div>
 
 <script>
@@ -110,7 +130,10 @@ function submitCard() {
     fd.append('card_code', code);
     fetch('', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
         .then(r => r.json())
-        .then(res => Swal.fire(res.success ? 'Success' : 'Notice', res.message, res.success ? 'success' : 'info'))
+        .then(res => {
+            Swal.fire(res.success ? 'Success' : 'Notice', res.message, res.success ? 'success' : 'info')
+                .then(() => { if (res.success) window.location.reload(); });
+        })
         .catch(err => Swal.fire('Server Error', String(err), 'error'));
 }
 </script>

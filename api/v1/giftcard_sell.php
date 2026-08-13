@@ -6,9 +6,19 @@ require_once dirname(__DIR__, 2) . '/user/core/giftcard.php';
 $user = api_auth();
 require_feature_api('giftcard_sell');
 
+// GET — accepted brands + this user's own submission history
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    echo json_encode([
+        'status' => 'success', 'success' => true,
+        'brands' => get_giftcard_sell_brands(),
+        'submissions' => get_giftcard_sell_submissions((int)$user['id']),
+    ]);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['status' => 'error', 'message' => 'Method Not Allowed. Use POST.']);
+    echo json_encode(['status' => 'error', 'message' => 'Method Not Allowed. Use GET or POST.']);
     exit;
 }
 
