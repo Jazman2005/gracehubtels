@@ -128,7 +128,7 @@ class AirtimeService {
                 if (!empty($prov['api_pin'])) { $api_payload['pin'] = $prov['api_pin']; $api_payload['account_pin'] = $prov['api_pin']; }
             }
             $res=$this->api_call($prov, $api_payload);
-            if($res&&in_array($res['_http_code']??0,[200,201])&&!is_api_response_failure($res)&&!is_api_response_pending($res)){ $success=true; break; }
+            if($res&&in_array($res['_http_code']??0,[200,201])&&!is_api_response_failure($res)&&!is_api_response_pending($res)){ $success=true; $last_res=$res; break; }
             if($res&&in_array($res['_http_code']??0,[200,201])&&is_api_response_pending($res)&&!$success){ $has_pending=true; $last_res=$res; continue; }
             $last_res = $res;
         }

@@ -57,7 +57,7 @@ class RechargeCardService {
             }
             if (!empty($prov['api_pin'])) $payload['pin'] = $prov['api_pin'];
             $res=$this->api_post($url, $prov['api_key'] ?? $prov['api_token'], $payload);
-            if($res&&in_array($res['_http_code']??0,[200,201])&&!is_api_response_failure($res)&&!is_api_response_pending($res)){ $success=true; break; }
+            if($res&&in_array($res['_http_code']??0,[200,201])&&!is_api_response_failure($res)&&!is_api_response_pending($res)){ $success=true; $last_res=$res; break; }
             if($res&&in_array($res['_http_code']??0,[200,201])&&is_api_response_pending($res)&&!$success){ $has_pending=true; $last_res=$res; continue; }
             $last_res = $res;
         }
