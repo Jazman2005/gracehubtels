@@ -299,9 +299,14 @@ function is_api_response_failure(?array $res): bool {
   // this can't misfire against some other provider's unrelated falsy value.
   if ($status === false) return true;
 
-  // Nested status checks (e.g. AutoSyncNG data.transaction.status)
+  // Nested status checks (e.g. AutoSyncNG data.transaction.status).
+  // 'cancelled' added for PayVessel, whose order lifecycle status sits at
+  // data.status (its top-level "status" is a boolean call-succeeded flag,
+  // already handled above) — without this, a cancelled PayVessel order
+  // matches neither failure nor pending here and falls through to being
+  // treated as a success by every calling loop's default branch.
   $txStatus = $res['data']['transaction']['status'] ?? $res['data']['status'] ?? '';
-  if ($txStatus && in_array(strtolower((string)$txStatus), ['failed', 'error', 'fail', 'reversed'])) return true;
+  if ($txStatus && in_array(strtolower((string)$txStatus), ['failed', 'error', 'fail', 'reversed', 'cancelled'])) return true;
 
   // AutoSyncNG-style insufficient balance code
   if (isset($res['code']) && (string)$res['code'] === '101') return true;
@@ -419,7 +424,7 @@ function get_plan_bindings(string $service, int $plan_id, ?string $meter_type = 
 // only providers listed here can ever be resolved automatically; everything
 // else requires a human to check and resolve manually via
 // transaction-details.php).
-const VERIFIABLE_PROVIDERS = ['autosyncng', 'msjdatasubs', 'telecomabode', 'reteller'];
+const VERIFIABLE_PROVIDERS = ['autosyncng', 'msjdatasubs', 'telecomabode', 'reteller', 'payvessel'];
 
 function provider_is_verifiable(string $provider_name): bool {
     $pname = strtolower($provider_name);
@@ -573,6 +578,46 @@ function query_provider_status(array $provider_config, array $tx): ?array {
             return ['success' => false, 'failed' => true, 'token' => '', 'message' => $data['message'] ?? 'Provider declined/reversed', 'provider_ref' => ''];
         }
         return null; // still pending
+    }
+
+    // PayVessel: verify-by-reference, but the path differs by product family
+    // (gift-cards vs biller-reseller both expose /orders/verify/{reference};
+    // there's no equivalent for other categories yet, so this only covers
+    // what's actually wired up so far). Same known limitation as Reteller's
+    // branch above: this generic shape has no slot for a gift card's
+    // redeem_code, so an order that only resolves via this cron path (never
+    // came back immediately-successful at purchase time) won't have its
+    // code captured here — consistent with Reteller's existing behavior for
+    // the same case, not a new gap introduced for PayVessel specifically.
+    if (stripos($pname, 'payvessel') !== false) {
+        $pv_headers = ['Content-Type: application/json'];
+        if (!empty($provider_config['api_key'])) $pv_headers[] = 'api-key: ' . $provider_config['api_key'];
+        if (!empty($provider_config['secret_key'])) $pv_headers[] = 'api-secret: ' . $provider_config['secret_key'];
+
+        $verifyPath = $category === 'giftcard_buy' ? '/vaas/api/v1/gift-cards/orders/verify/' : '/vaas/api/v1/biller-reseller/orders/verify/';
+        $url = $base . $verifyPath . urlencode($ref);
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $pv_headers,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2
+        ]);
+        $res = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $data = $res ? json_decode($res, true) : null;
+        if (!$data || !in_array($code, [200, 201])) return null;
+
+        $s = strtolower((string)($data['data']['status'] ?? ''));
+        if ($s === 'completed') {
+            return ['success' => true, 'failed' => false, 'token' => '', 'message' => $data['message'] ?? '', 'provider_ref' => $data['data']['order_reference'] ?? $data['data']['id'] ?? ''];
+        }
+        if ($s === 'failed' || $s === 'cancelled') {
+            return ['success' => false, 'failed' => true, 'token' => '', 'message' => $data['data']['error_message'] ?? $data['message'] ?? 'Provider declined', 'provider_ref' => ''];
+        }
+        return null; // still pending/processing
     }
 
     // Unknown provider - cannot check status

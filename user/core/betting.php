@@ -43,6 +43,11 @@ class BettingService {
         $pname = strtolower($prov['provider_name'] ?? '');
         if (strpos($pname, 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (strpos($pname, 'payvessel') !== false) {
+            // PayVessel needs both headers simultaneously, not an either/or
+            // auth scheme like every other branch here.
+            if (!empty($prov['api_key'])) $headers[] = 'api-key: ' . $prov['api_key'];
+            if (!empty($prov['secret_key'])) $headers[] = 'api-secret: ' . $prov['secret_key'];
         } elseif (!empty($prov['api_token'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['api_token'];
         } elseif (!empty($prov['api_key'])) {
@@ -194,6 +199,22 @@ class BettingService {
                     'variation_code' => (string)$vcode,
                     'recipient' => (string)$customerId,
                     'amount' => $amount,
+                ];
+            } elseif (stripos($pname, 'payvessel') !== false) {
+                // PayVessel needs two opaque IDs (biller_id + item_id), but
+                // plan_api_bindings only has one product_code column — same
+                // "biller_id|item_id" encoding used for airtime/data, parsed
+                // back out here, set via Plan ID Mapping.
+                $pvcode = $prov['product_code'] ?? '';
+                if (!$pvcode || strpos($pvcode, '|') === false) { $last_res = ['message' => 'No PayVessel biller_id|item_id mapped for this platform — set it under Plan ID Mapping.']; continue; }
+                [$billerId, $itemId] = explode('|', $pvcode, 2);
+                $url = rtrim($prov['api_base_url'], '/') . '/vaas/api/v1/biller-reseller/orders';
+                $api_payload = [
+                    'biller_id' => $billerId,
+                    'item_id' => $itemId,
+                    'recharge_account' => (string)$customerId,
+                    'amount' => (int)$amount,
+                    'reference' => $debit['ref'],
                 ];
             } else {
                 // Generic fallback structure

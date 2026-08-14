@@ -12,6 +12,8 @@ class DataService {
             // Reteller's docs: one shared /purchase endpoint for every local
             // service (airtime/data/cable/electricity/betting) — no per-service path.
             $url = rtrim($prov['api_base_url'], '/') . '/purchase';
+        } elseif (strpos($pname, 'payvessel') !== false) {
+            $url = rtrim($prov['api_base_url'], '/') . '/vaas/api/v1/biller-reseller/orders';
         } else {
             $url = rtrim($prov['api_base_url'], '/') . '/api/data/';
         }
@@ -19,6 +21,9 @@ class DataService {
         $headers = ['Content-Type: application/json'];
         if (strpos($pname, 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (strpos($pname, 'payvessel') !== false) {
+            if (!empty($prov['api_key'])) $headers[] = 'api-key: ' . $prov['api_key'];
+            if (!empty($prov['secret_key'])) $headers[] = 'api-secret: ' . $prov['secret_key'];
         } elseif (!empty($prov['api_key'])) {
             $headers[] = (strpos(strtolower($prov['provider_name'] ?? ''), 'autopilot') !== false) ? 'Authorization: Bearer ' . $prov['api_key'] : 'Authorization: Token ' . $prov['api_key'];
         } elseif (!empty($prov['api_token'])) {
@@ -182,8 +187,17 @@ class DataService {
                 // only for manual-amount services (airtime/electricity/betting);
                 // data-gifting is priced entirely by variation_code.
                 $api_payload = ['variation_code' => (string)$plan_code, 'recipient' => (string)$phone];
+            } elseif (strpos($pname, 'payvessel') !== false) {
+                // Same biller_id|item_id encoding used everywhere PayVessel
+                // needs two opaque IDs but plan_api_bindings only has one
+                // product_code column. amount is the plan's own selling
+                // price — PayVessel's biller-reseller items are catalog
+                // products, not variable amounts like betting.
+                if (strpos($plan_code, '|') === false) { $last_res = ['message' => 'No PayVessel biller_id|item_id mapped for this plan — set it under Plan ID Mapping.']; continue; }
+                [$billerId, $itemId] = explode('|', $plan_code, 2);
+                $api_payload = ['biller_id' => $billerId, 'item_id' => $itemId, 'recharge_account' => (string)$phone, 'amount' => (int)$price, 'reference' => $debit['ref']];
             }
-            if (!empty($prov['api_pin']) && strpos($pname, 'reteller') === false) { $api_payload['pin'] = $prov['api_pin']; if (strpos($pname, 'autosyncng') === false && strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }
+            if (!empty($prov['api_pin']) && strpos($pname, 'reteller') === false && strpos($pname, 'payvessel') === false) { $api_payload['pin'] = $prov['api_pin']; if (strpos($pname, 'autosyncng') === false && strpos($pname, 'autopilot') === false) $api_payload['account_pin'] = $prov['api_pin']; }
             
             $res=$this->api_call($prov, $api_payload);
             $is_timeout = !$res || !empty($res['_curl_errno']);

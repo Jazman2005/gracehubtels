@@ -19,6 +19,8 @@ class AirtimeService {
             // Reteller's docs: one shared /purchase endpoint for every local
             // service (airtime/data/cable/electricity/betting) — no per-service path.
             $url = rtrim($prov['api_base_url'], '/') . '/purchase';
+        } elseif (strpos($pname, 'payvessel') !== false) {
+            $url = rtrim($prov['api_base_url'], '/') . '/vaas/api/v1/biller-reseller/orders';
         } else {
             $url = $prov['api_base_url'];
         }
@@ -26,6 +28,9 @@ class AirtimeService {
         $headers = ['Content-Type: application/json'];
         if (strpos($pname, 'reteller') !== false && !empty($prov['public_key']) && !empty($prov['secret_key'])) {
             $headers[] = 'Authorization: Bearer ' . $prov['public_key'] . ':' . $prov['secret_key'];
+        } elseif (strpos($pname, 'payvessel') !== false) {
+            if (!empty($prov['api_key'])) $headers[] = 'api-key: ' . $prov['api_key'];
+            if (!empty($prov['secret_key'])) $headers[] = 'api-secret: ' . $prov['secret_key'];
         } elseif (!empty($prov['api_key'])) {
             $headers[] = (strpos(strtolower($prov['provider_name'] ?? ''), 'autopilot') !== false) ? 'Authorization: Bearer ' . $prov['api_key'] : 'Authorization: Token ' . $prov['api_key'];
         } elseif (!empty($prov['api_token'])) {
@@ -114,6 +119,15 @@ class AirtimeService {
                 $variation_code = $net_map[$network] ?? null;
                 if (!$variation_code) { $last_res = ['message' => "No Reteller variation_code configured for {$network} — set it in this route's Network ID Map."]; continue; }
                 $api_payload = ['variation_code' => (string)$variation_code, 'recipient' => (string)$phone, 'amount' => $amount];
+            } elseif (strpos($pname, 'payvessel') !== false) {
+                // Same "opaque code per network, no numeric default" situation
+                // Reteller is in — reuses the same network_id_map extensibility
+                // point with a biller_id|item_id encoding (set in this route's
+                // Network ID Map), rather than a separate mechanism.
+                $pvcode = $net_map[$network] ?? null;
+                if (!$pvcode || strpos($pvcode, '|') === false) { $last_res = ['message' => "No PayVessel biller_id|item_id configured for {$network} — set it in this route's Network ID Map."]; continue; }
+                [$billerId, $itemId] = explode('|', $pvcode, 2);
+                $api_payload = ['biller_id' => $billerId, 'item_id' => $itemId, 'recharge_account' => (string)$phone, 'amount' => (int)$amount, 'reference' => (string)$debit['ref']];
             } else {
                 $api_payload = ['network' => $net_map[$network]??$network, 'amount' => $amount, 'mobile_number' => $phone, 'Ported_number' => true, 'airtime_type' => 'VTU', 'ref' => $debit['ref']];
                 // Confirmed via Gladtidings' own Postman docs that its real

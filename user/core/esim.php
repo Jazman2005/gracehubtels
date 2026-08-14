@@ -2,6 +2,9 @@
 require_once __DIR__.'/db.php';
 require_once __DIR__.'/auth.php';
 require_once __DIR__.'/api_router.php';
+// get_live_ngn_rate() lives in virtual_card.php — needed for PayVessel's
+// USD-denominated eSIM package pricing (see payvessel_fetch_esim_packages()).
+require_once __DIR__.'/virtual_card.php';
 
 // Auto-migrate esim_orders table
 try { db()->exec("CREATE TABLE IF NOT EXISTS esim_orders (
@@ -107,9 +110,90 @@ function reteller_esim_status(array $prov, string $reference): ?array {
     return $d;
 }
 
+// PayVessel-specific catalog fetch/purchase/status. Its package prices are
+// USD-only (no NGN field, unlike Reteller/gift-cards which give ngn
+// directly) — converted here via the same live-rate helper virtual cards
+// already use (get_live_ngn_rate(), NOT get_exchange_rate(), since that
+// applies virtual-card-specific markup settings that have nothing to do
+// with eSIM pricing; esim_markup_percent is applied uniformly afterward,
+// same as every other provider here).
+function payvessel_fetch_esim_packages(array $prov, string $region): array {
+    $pname = strtolower($prov['provider_name'] ?? '');
+    if (strpos($pname, 'payvessel') === false) return [];
+    $headers = ['Content-Type: application/json'];
+    if (!empty($prov['api_key'])) $headers[] = 'api-key: ' . $prov['api_key'];
+    if (!empty($prov['secret_key'])) $headers[] = 'api-secret: ' . $prov['secret_key'];
+    $url = rtrim($prov['api_base_url'], '/') . '/vaas/api/v1/esim/packages?location_code=' . urlencode($region);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$headers, CURLOPT_TIMEOUT=>15, CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2]);
+    $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
+    $data = $res ? json_decode($res, true) : null;
+    log_api($prov['provider_name'] ?? 'api_payvessel', 'esim/packages', ['location_code'=>$region], $data, in_array($code,[200,201]));
+    if (!$data || !in_array($code, [200,201]) || empty($data['status'])) return [];
+
+    $rate = get_live_ngn_rate();
+    if ($rate <= 0) $rate = 1500;
+
+    $out = [];
+    foreach ($data['data'] ?? [] as $pkg) {
+        $usd = (float)($pkg['retail_price_usd'] ?? $pkg['price_usd'] ?? 0);
+        if ($usd <= 0) continue;
+        $out[] = [
+            'package_code' => (string)($pkg['package_code'] ?? ''),
+            'package_name' => $pkg['name'] ?? '',
+            'data_size' => isset($pkg['volume_bytes']) ? round(((float)$pkg['volume_bytes']) / 1073741824, 2) . 'GB' : '',
+            'days' => (int)($pkg['duration'] ?? 0),
+            'ngn_price' => round($usd * $rate, 2),
+        ];
+    }
+    return $out;
+}
+
+function payvessel_purchase_esim(array $prov, string $reference, string $package_code): ?array {
+    $headers = ['Content-Type: application/json'];
+    if (!empty($prov['api_key'])) $headers[] = 'api-key: ' . $prov['api_key'];
+    if (!empty($prov['secret_key'])) $headers[] = 'api-secret: ' . $prov['secret_key'];
+    $url = rtrim($prov['api_base_url'], '/') . '/vaas/api/v1/esim/orders';
+    $payload = ['reference'=>$reference, 'package_code'=>$package_code, 'quantity'=>1];
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>json_encode($payload), CURLOPT_HTTPHEADER=>$headers, CURLOPT_TIMEOUT=>30, CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2]);
+    $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
+    $d = $res ? json_decode($res, true) : null;
+    if ($res === false) $d = ['_http_code'=>500, '_network_error'=>true, 'message'=>"cURL Error: $err"];
+    if ($d) $d['_http_code'] = $code;
+    log_api($prov['provider_name'] ?? 'api_payvessel', 'esim/orders', $payload, $d, in_array($code,[200,201]));
+    return $d;
+}
+
+// Status is checked by PayVessel's OWN order id (returned at purchase time),
+// not by our merchant reference — unlike Reteller's /esim/status/{reference}
+// endpoint. $order_id is what gets stored in esim_orders.provider_ref for a
+// PayVessel-sourced order.
+function payvessel_esim_status(array $prov, string $order_id): ?array {
+    $headers = ['Content-Type: application/json'];
+    if (!empty($prov['api_key'])) $headers[] = 'api-key: ' . $prov['api_key'];
+    if (!empty($prov['secret_key'])) $headers[] = 'api-secret: ' . $prov['secret_key'];
+    $url = rtrim($prov['api_base_url'], '/') . '/vaas/api/v1/esim/orders/' . urlencode($order_id);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>$headers, CURLOPT_TIMEOUT=>15, CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2]);
+    $res = curl_exec($ch); $code = curl_getinfo($ch, CURLINFO_HTTP_CODE); $err = curl_error($ch); curl_close($ch);
+    $d = $res ? json_decode($res, true) : null;
+    if ($res === false) $d = ['_http_code'=>500, '_network_error'=>true, 'message'=>"cURL Error: $err"];
+    if ($d) $d['_http_code'] = $code;
+    log_api($prov['provider_name'] ?? 'api_payvessel', 'esim/orders/get', ['order_id'=>$order_id], $d, in_array($code,[200,201]));
+    return $d;
+}
+
+function esim_fetch_dispatch(array $prov, string $region): array {
+    $pname = strtolower($prov['provider_name'] ?? '');
+    if (strpos($pname, 'reteller') !== false) return reteller_fetch_esim_packages($prov, $region);
+    if (strpos($pname, 'payvessel') !== false) return payvessel_fetch_esim_packages($prov, $region);
+    return [];
+}
+
 function fetch_esim_catalog(string $region): array {
     return aggregate_provider_catalog('esim', $region, function(array $prov, string $r) {
-        return reteller_fetch_esim_packages($prov, $r);
+        return esim_fetch_dispatch($prov, $r);
     });
 }
 
@@ -132,7 +216,7 @@ function process_esim_purchase(int $uid, array $post): array {
         $sig = purchase_signature('esim', [$region, $package_code, $email]);
 
         $item = relocate_catalog_item('esim', $region, $api_registry_id, 'package_code', $package_code,
-            fn($prov, $r) => reteller_fetch_esim_packages($prov, $r));
+            fn($prov, $r) => esim_fetch_dispatch($prov, $r));
         if (!$item) return ['success'=>false,'message'=>'This package is no longer available. Please refresh and try again.'];
 
         $markup = (float)setting('esim_markup_percent', '0');
@@ -146,36 +230,54 @@ function process_esim_purchase(int $uid, array $post): array {
         db()->prepare("INSERT INTO esim_orders (user_id,transaction_ref,api_registry_id,provider_name,region,package_code,package_name,email,amount_ngn,status) VALUES (?,?,?,?,?,?,?,?,?,'pending')")
             ->execute([$uid, $debit['ref'], $api_registry_id, $prov['provider_name'], $region, $package_code, $item['package_name'], $email, $total]);
 
-        $res = reteller_purchase_esim($prov, $package_code, $email);
+        $pname = strtolower($prov['provider_name'] ?? '');
+        $is_payvessel = strpos($pname, 'payvessel') !== false;
+        $res = $is_payvessel
+            ? payvessel_purchase_esim($prov, $debit['ref'], $package_code)
+            : reteller_purchase_esim($prov, $package_code, $email);
         db()->prepare("UPDATE transactions SET provider=? WHERE transaction_ref=?")->execute([$prov['provider_name'], $debit['ref']]);
 
-        // Reteller can accept and charge the purchase (status:true) but still
-        // leave the actual eSIM profile not-ready (data.esim.status ===
-        // "PROCESSING") — a third, non-decline outcome distinct from both
-        // "confirmed success" and "genuine network uncertainty". Modeled
-        // directly on virtual_card.php's Cashwyre create-card flow: never
-        // refund a charge the provider has already confirmed, only escalate
-        // and let it be resolved later via resolve_esim_order().
-        $has_iccid = !empty($res['data']['esim']['iccid'] ?? null);
+        // Both providers can accept and charge the purchase but still leave
+        // the actual eSIM profile not-ready — a third, non-decline outcome
+        // distinct from both "confirmed success" and "genuine network
+        // uncertainty". Modeled directly on virtual_card.php's Cashwyre
+        // create-card flow: never refund a charge the provider has already
+        // confirmed, only escalate and let it be resolved later via
+        // resolve_esim_order(). Response shapes differ enough between the
+        // two that extraction is normalized here rather than shared.
+        if ($is_payvessel) {
+            $profile = $res['data']['profiles'][0] ?? [];
+            $iccid = $profile['iccid'] ?? null;
+            $activation_code = $profile['ac'] ?? null;
+            $qr_image = $profile['qr_code_url'] ?? null;
+            $smdp = $profile['apn'] ?? null;
+            $provider_ref = $res['data']['id'] ?? '';
+        } else {
+            $e = $res['data']['esim'] ?? [];
+            $iccid = $e['iccid'] ?? null;
+            $activation_code = $e['activation_code'] ?? null;
+            $qr_image = $e['qr_image'] ?? null;
+            $smdp = $e['smdp'] ?? null;
+            $provider_ref = $res['data']['reference'] ?? '';
+        }
+        $has_iccid = !empty($iccid);
 
         if ($res && in_array($res['_http_code']??0,[200,201]) && !is_api_response_failure($res)) {
             if ($has_iccid) {
                 update_tx_status($debit['ref'], 'success');
-                $e = $res['data']['esim'];
                 db()->prepare("UPDATE esim_orders SET status='success', provider_ref=?, iccid=?, activation_code=?, qr_image=?, smdp=? WHERE transaction_ref=?")
-                    ->execute([$res['data']['reference'] ?? '', $e['iccid'] ?? null, $e['activation_code'] ?? null, $e['qr_image'] ?? null, $e['smdp'] ?? null, $debit['ref']]);
+                    ->execute([$provider_ref, $iccid, $activation_code, $qr_image, $smdp, $debit['ref']]);
                 save_tx_response($debit['ref'], provider_response_text($res));
                 notify_user($uid, 'eSIM Ready', "Your {$item['package_name']} eSIM is ready — scan the QR code to install.", 'success', null, $debit['balance_before'], $debit['balance_after']);
                 return ['success'=>true,'message'=>'eSIM purchased successfully','ref'=>$debit['ref']];
             }
-            // Reteller accepted/charged this (not a decline) but the profile
-            // isn't ready yet — data.esim.status "PROCESSING", or the
-            // top-level data.status is still "pending", or no iccid at all.
-            // Never refund a charge the provider has already confirmed;
-            // escalate and let it be resolved later via resolve_esim_order().
+            // Accepted/charged (not a decline) but the profile isn't ready
+            // yet. Never refund a charge the provider has already
+            // confirmed; escalate and let it be resolved later via
+            // resolve_esim_order().
             update_tx_status($debit['ref'], 'processing');
             db()->prepare("UPDATE esim_orders SET status='processing', provider_ref=? WHERE transaction_ref=?")
-                ->execute([$res['data']['reference'] ?? '', $debit['ref']]);
+                ->execute([$provider_ref, $debit['ref']]);
             save_tx_response($debit['ref'], provider_response_text($res));
             notify_admin('eSIM Provisioning', "eSIM order for user #$uid (ref: {$debit['ref']}) was charged and accepted by {$prov['provider_name']} but the profile isn't ready yet. Use \"Check Status\" to resolve once it is — do not refund.");
             notify_user($uid, 'eSIM Provisioning', 'Your eSIM is being provisioned — check back shortly or use Refresh Status.', 'info', null, $debit['balance_before'], $debit['balance_after']);
@@ -232,20 +334,36 @@ function resolve_esim_order(string $transaction_ref): array {
     }
     if (!$prov) return ['success'=>false,'message'=>'The provider for this order is no longer active'];
 
-    $res = reteller_esim_status($prov, $order['provider_ref']);
+    $pname = strtolower($prov['provider_name'] ?? '');
+    $is_payvessel = strpos($pname, 'payvessel') !== false;
+    $res = $is_payvessel
+        ? payvessel_esim_status($prov, $order['provider_ref'])
+        : reteller_esim_status($prov, $order['provider_ref']);
     if (!$res || !in_array($res['_http_code']??0,[200,201])) return ['success'=>false,'message'=>'Could not reach the provider — try again shortly'];
 
     $status = strtolower((string)($res['data']['status'] ?? ''));
-    $esim = $res['data']['esim'] ?? [];
-    if (!empty($esim['iccid'])) {
+    if ($is_payvessel) {
+        $profile = $res['data']['profiles'][0] ?? [];
+        $iccid = $profile['iccid'] ?? null;
+        $activation_code = $profile['ac'] ?? null;
+        $qr_image = $profile['qr_code_url'] ?? null;
+        $smdp = $profile['apn'] ?? null;
+    } else {
+        $esim = $res['data']['esim'] ?? [];
+        $iccid = $esim['iccid'] ?? null;
+        $activation_code = $esim['activation_code'] ?? null;
+        $qr_image = $esim['qr_image'] ?? null;
+        $smdp = $esim['smdp'] ?? null;
+    }
+    if (!empty($iccid)) {
         update_tx_status($order['transaction_ref'], 'success');
         db()->prepare("UPDATE esim_orders SET status='success', iccid=?, activation_code=?, qr_image=?, smdp=? WHERE transaction_ref=?")
-            ->execute([$esim['iccid'] ?? null, $esim['activation_code'] ?? null, $esim['qr_image'] ?? null, $esim['smdp'] ?? null, $order['transaction_ref']]);
+            ->execute([$iccid, $activation_code, $qr_image, $smdp, $order['transaction_ref']]);
         save_tx_response($order['transaction_ref'], provider_response_text($res));
         notify_user((int)$order['user_id'], 'eSIM Ready', "Your {$order['package_name']} eSIM is ready — scan the QR code to install.", 'success');
         return ['success'=>true,'message'=>'eSIM is now ready','ready'=>true];
     }
-    if ($status === 'reversed') {
+    if (in_array($status, ['reversed', 'failed', 'cancelled'])) {
         refund_failed_transaction($order['transaction_ref'], (int)$order['user_id'], (float)$order['amount_ngn'], 'Provider confirmed not delivered');
         db()->prepare("UPDATE esim_orders SET status='failed' WHERE transaction_ref=?")->execute([$order['transaction_ref']]);
         return ['success'=>true,'message'=>'Provider confirmed this order failed — refunded'];
