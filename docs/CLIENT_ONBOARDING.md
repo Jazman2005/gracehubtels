@@ -44,10 +44,16 @@ hosting account, database, and secrets — only the source code is shared.
       when they hit a locked premium feature).
 
 **Build the database**
-- [ ] Import the base schema: `database/msjpay.sql`
-- [ ] Apply every `database/migration_vNN.sql` **in numeric order**, currently
-      up through `migration_v31.sql` — there's no migration runner, so check
-      the `database/` folder for anything newer than this doc before you start.
+- [ ] Import the base schema: `database/msjpay.sql` — as of 2026-08-14 this
+      already includes everything through `migration_v31.sql` (it's a fresh
+      structure-only export of the live schema, not a from-scratch install
+      script — see the file's own header comment for confirmation).
+- [ ] Apply only `database/migration_vNN.sql` files numbered **higher than
+      what `msjpay.sql`'s header says it already includes** — there's no
+      migration runner, so check both the file's header comment and the
+      `database/` folder for anything newer before you start. Applying an
+      already-included migration will fail with "duplicate column" errors —
+      that's expected, not a sign of a bad import; just skip it.
 - [ ] Do **not** import any `*.sql.bak` or `msjdkjef_api.sql`-style file — those
       are local data snapshots, not schema, and are gitignored on purpose.
 
