@@ -57,6 +57,16 @@ hosting account, database, and secrets — only the source code is shared.
 - [ ] Do **not** import any `*.sql.bak` or `msjdkjef_api.sql`-style file — those
       are local data snapshots, not schema, and are gitignored on purpose.
 
+**Create the first admin account**
+- [ ] `msjpay.sql` ships with a genuinely empty `admin` table, and there is
+      deliberately no public admin-signup page — the only way in is
+      `https://clientdomain.com/grace-hub-tels/setup-admin.php?key=<their VENDOR_ACCESS_KEY>`.
+- [ ] Fill in a username/email/password there once — this creates a
+      `superadmin` account and the page **permanently disables itself** the
+      moment one admin account exists (re-visiting it after just 404s, same
+      as a wrong `vendor-access.php` key).
+- [ ] Log in at `/grace-hub-tels/login.php` with that account to confirm it worked.
+
 **Lock the install down for this client**
 - [ ] Visit `https://clientdomain.com/grace-hub-tels/vendor-access.php?key=<their VENDOR_ACCESS_KEY>`
 - [ ] Set Customer Services / Admin Tools / Provider Access toggles per what
